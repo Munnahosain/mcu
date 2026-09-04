@@ -154,18 +154,16 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {hasSupabaseConfig() && (
-            <>
-              <div className="flex items-center gap-3 text-[10px] font-bold text-primary/40 uppercase tracking-widest">
-                <span className="h-px flex-1 bg-primary/10" />
-                or
-                <span className="h-px flex-1 bg-primary/10" />
-              </div>
-              <button type="button" onClick={handleGoogleLogin} disabled={isLoading} className="w-full py-2.5 border border-primary/20 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center justify-center gap-2">
-                <span className="text-base font-extrabold">G</span> Continue with Google
-              </button>
-            </>
-          )}
+          <>
+            <div className="flex items-center gap-3 text-[10px] font-bold text-primary/40 uppercase tracking-widest">
+              <span className="h-px flex-1 bg-primary/10" />
+              or
+              <span className="h-px flex-1 bg-primary/10" />
+            </div>
+            <button type="button" onClick={handleGoogleLogin} disabled={isLoading} className="w-full py-2.5 border border-primary/20 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center justify-center gap-2">
+              <span className="text-base font-extrabold">G</span> Continue with Google
+            </button>
+          </>
 
           <p className="text-center text-xs font-bold text-primary/60">
             Don&apos;t have an account?{" "}
