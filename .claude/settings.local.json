@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm list *)",
+      "Bash(npm show *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000)",
+      "mcp__ide__getDiagnostics",
+      "Bash(node -e ' *)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(curl *)"
+    ]
+  }
+}
