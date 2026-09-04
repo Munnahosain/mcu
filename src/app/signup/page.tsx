@@ -169,7 +169,7 @@ export default function SignupPage() {
             </button>
           </form>
 
-          {getDatabaseProvider() === "supabase" && hasSupabaseConfig() && (
+          {hasSupabaseConfig() && (
             <>
               <div className="flex items-center gap-3 text-[10px] font-bold text-primary/40 uppercase tracking-widest">
                 <span className="h-px flex-1 bg-primary/10" />

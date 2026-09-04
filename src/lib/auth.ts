@@ -101,7 +101,7 @@ export async function signUpWithSupabase(name: string, email: string, password: 
 }
 
 export async function signInWithGoogle(): Promise<void> {
-  if (getDatabaseProvider() !== "supabase" || !hasSupabaseConfig()) {
+  if (!hasSupabaseConfig()) {
     throw new Error("Google sign-in requires Supabase authentication to be configured.");
   }
 
@@ -115,7 +115,7 @@ export async function signInWithGoogle(): Promise<void> {
 }
 
 export async function completeSupabaseAuth(): Promise<AuthUser | null> {
-  if (getDatabaseProvider() !== "supabase" || !hasSupabaseConfig()) return null;
+  if (!hasSupabaseConfig()) return null;
 
   const code = new URLSearchParams(window.location.search).get("code");
   if (code) {
