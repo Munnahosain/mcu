@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, DownloadCloud, Heart, Sparkles, MapPin, Tag, Plus, X, Globe, Image as ImageIcon, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAllEvents, CalendarEvent, EventCategory } from "@/data/events2026";
-import { getProviderKeys } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels } from "@/lib/ai-settings";
 
 export default function EventCalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Default for SSR
@@ -179,10 +179,12 @@ export default function EventCalendarPage() {
       setIsGeneratingIdea(true);
 
       try {
-         const groqKeyObj = getProviderKeys().find((k) => k.provider === 'Groq');
+         const activeProvider = getActiveProvider();
+         const activeKeyObj = getProviderKeys().find((k) => k.provider === activeProvider);
+         const activeModel = getProviderModels()[activeProvider] || '';
          
-         if (!groqKeyObj?.key) {
-             throw new Error("🚨 Groq API Key required! Please add one in the Generator tool's 'API Keys' button first.");
+         if (!activeKeyObj?.key) {
+             throw new Error(`API key required for ${activeProvider}. Please add one in the Generator tool's API Keys panel first.`);
          }
 
          const response = await fetch('/api/generate-event-ideas', {
@@ -191,7 +193,9 @@ export default function EventCalendarPage() {
                 eventTitle: event.title,
                 eventCategory: event.category,
                 eventDate: event.date,
-                apiKey: groqKeyObj.key
+                apiKey: activeKeyObj.key,
+                provider: activeProvider,
+                model: activeModel
             })
          });
 
@@ -261,7 +265,7 @@ export default function EventCalendarPage() {
         <div className="event-panels-grid w-full grid grid-cols-1 min-[760px]:grid-cols-2 gap-6 lg:gap-8 items-stretch">
 
             {/* LEFTSIDE: Calendar Card */}
-            <div className="event-calendar-card dashboard-liquid-card glass-light-track bg-white dark:bg-[#1a1814] rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-white/10 w-full lg:flex-1 flex flex-col shrink-0 min-[760px]:h-[640px] lg:sticky lg:top-4 z-10">
+            <div className="event-calendar-card dashboard-liquid-card glass-light-track bg-white dark:bg-[#1a1814] rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-white/10 w-full lg:flex-1 flex flex-col shrink-0 min-[760px]:h-[640px] z-10">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4 sm:mb-6 shrink-0">
                     <button onClick={handlePrevMonth} className="dashboard-liquid-ghost p-2 rounded-full text-gray-600 dark:text-gray-300 hover:text-[#ED5F2B]">

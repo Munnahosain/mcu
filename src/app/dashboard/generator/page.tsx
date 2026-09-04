@@ -3,45 +3,50 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   UploadCloud,
-  FileImage,
   Zap,
   Download,
-  Trash2,
   Lock,
   Wrench,
   X,
   Copy,
   RefreshCw,
-  Search,
   ImagePlus,
   Layers,
-  Type
+  Type,
+  Pencil,
+  Plus,
+  Check,
+  FileJson,
+  ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAuthUser, AuthUser } from "@/lib/auth";
 import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
 import PremiumSlider from "@/components/PremiumSlider";
-import { getProviderKeys, getProviderModels, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
 
 type ImageFile = GeneratorImageFile;
 
-interface HistoryItem {
-  _id: string;
-  filename: string;
-  title: string;
-  description: string;
-  keywords: string[];
-  category: string;
-  createdAt: string;
-}
+const PROVIDER_KEY_URLS: Record<string, string> = {
+  Groq: 'https://console.groq.com/keys',
+  'Google Gemini': 'https://aistudio.google.com/app/apikey',
+  OpenAI: 'https://platform.openai.com/api-keys',
+  'Mistral AI': 'https://console.mistral.ai/api-keys/',
+  OpenRouter: 'https://openrouter.ai/settings/keys',
+};
 
 export default function GeneratorPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [activeTab, setActiveTab] = useState<"Metadata" | "Prompt">("Metadata");
   const [platform, setPlatform] = useState("General");
   const [titleLength, setTitleLength] = useState(200);
+  const [descriptionLength, setDescriptionLength] = useState(150);
   const [keywordsCount, setKeywordsCount] = useState(30);
+  const [additionalKeywords, setAdditionalKeywords] = useState('');
+  const [negativeTitleWords, setNegativeTitleWords] = useState('');
+  const [negativeKeywords, setNegativeKeywords] = useState('');
+  const [autoCsvDownload, setAutoCsvDownload] = useState(false);
 
   // Prompt States
   const [whiteBg, setWhiteBg] = useState(false);
@@ -59,8 +64,10 @@ export default function GeneratorPage() {
   const [activeProvider, setActiveProvider] = useState("Groq");
   const [apiKeys, setApiKeys] = useState<{ id: string; key: string; provider: string }[]>([]);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [batchMode, setBatchMode] = useState(false);
+  const keyCursorRef = useRef(0);
 
-  const platforms = ["General", "Adobe Stock", "Shutterstock", "FreePik", "Vecteezy"];
+  const platforms = ["General", "Adobe Stock", "Shutterstock", "FreePik", "Vecteezy", "Pond5"];
   const [selectedModels, setSelectedModels] = useState<Record<string, string>>(AI_DEFAULT_MODELS);
   const activeModel = selectedModels[activeProvider] ?? AI_DEFAULT_MODELS[activeProvider] ?? '';
 
@@ -69,39 +76,20 @@ export default function GeneratorPage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // History States
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [historySearch, setHistorySearch] = useState("");
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [keywordDrafts, setKeywordDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setUser(getAuthUser());
     setApiKeys(getProviderKeys());
     setSelectedModels(getProviderModels());
+    setActiveProvider(getActiveProvider());
   }, [setImages]);
-
-  const fetchHistory = useCallback(async (userId: string) => {
-    setIsLoadingHistory(true);
-    try {
-      const res = await fetch(`/api/history/list?userId=${userId}`);
-      const data = await res.json();
-      if (data.success) setHistory(data.history || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      fetchHistory(user.id);
-    }
-  }, [user, fetchHistory]);
 
   const saveKey = () => {
     if (!apiKeyInput.trim()) return;
-    const newKeys = [...apiKeys.filter(k => k.provider !== activeProvider), {
+    const newKeys = [...apiKeys, {
       id: crypto.randomUUID(),
       key: apiKeyInput.trim(),
       provider: activeProvider
@@ -119,16 +107,41 @@ export default function GeneratorPage() {
 
   const activeProviderKeyObj = apiKeys.find(k => k.provider === activeProvider);
 
+  const updateMetadata = (id: string, update: Partial<NonNullable<ImageFile['metadata']>>) => {
+    setImages(prev => prev.map(image => image.id === id && image.metadata
+      ? { ...image, metadata: { ...image.metadata, ...update } }
+      : image));
+  };
+
+  const addKeyword = (image: ImageFile) => {
+    const value = (keywordDrafts[image.id] || '').trim().toLowerCase();
+    if (!value || !image.metadata || image.metadata.keywords.includes(value)) return;
+    updateMetadata(image.id, { keywords: [...image.metadata.keywords, value] });
+    setKeywordDrafts(prev => ({ ...prev, [image.id]: '' }));
+  };
+
+  const downloadMetadataJson = (image: ImageFile) => {
+    if (!image.metadata) return;
+    const blob = new Blob([JSON.stringify({ filename: image.file.name, ...image.metadata }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${image.file.name.replace(/\.[^.]+$/, '')}-metadata.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    const newImages = Array.from(files).filter(f => f.type.startsWith('image/')).map(file => ({
+    const remainingSlots = Math.max(500 - images.length, 0);
+    const newImages = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, remainingSlots).map(file => ({
       id: crypto.randomUUID(),
       file,
       preview: URL.createObjectURL(file),
       status: 'pending' as const,
     }));
     setImages(prev => [...prev, ...newImages]);
-  }, []);
+  }, [images.length, setImages]);
 
   const removeImage = (id: string) => {
     setImages(prev => {
@@ -146,13 +159,15 @@ export default function GeneratorPage() {
   };
 
   const generateSingle = async (img: ImageFile) => {
-    const keyToUse = activeProviderKeyObj?.key;
+    const providerKeys = apiKeys.filter(key => key.provider === activeProvider);
+    const keyIndex = providerKeys.length ? keyCursorRef.current++ % providerKeys.length : 0;
+    const keyToUse = providerKeys[keyIndex]?.key;
     if (!keyToUse) {
       alert(`Please set an API key for ${activeProvider}`);
       return;
     }
 
-    setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'generating' } : i));
+    setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'generating', error: undefined } : i));
 
     try {
       const fd = new FormData();
@@ -164,7 +179,12 @@ export default function GeneratorPage() {
       let endpoint = '/api/generate';
       if (activeTab === 'Metadata') {
         fd.append('titleLength', titleLength.toString());
+        fd.append('descriptionLength', descriptionLength.toString());
         fd.append('keywordsCount', keywordsCount.toString());
+        fd.append('platform', platform);
+        fd.append('additionalKeywords', additionalKeywords);
+        fd.append('negativeTitleWords', negativeTitleWords);
+        fd.append('negativeKeywords', negativeKeywords);
       } else {
         endpoint = '/api/generate-prompt';
         fd.append('promptLength', promptLength.toString());
@@ -181,10 +201,14 @@ export default function GeneratorPage() {
         fd.append('instructions', instr);
       }
 
-      const res = await fetch(endpoint, { method: 'POST', body: fd });
-      const data = await res.json();
+      const controller = new AbortController();
+      const requestTimeout = window.setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(endpoint, { method: 'POST', body: fd, signal: controller.signal }).finally(() => {
+        window.clearTimeout(requestTimeout);
+      });
+      const data = await res.json().catch(() => ({ success: false, error: `Generation service returned HTTP ${res.status}` }));
 
-      if (!data.success) {
+      if (!res.ok || !data.success) {
         throw new Error(data.error || 'Generation failed');
       }
 
@@ -210,7 +234,6 @@ export default function GeneratorPage() {
                 category: data.metadata.category,
               }),
             });
-            fetchHistory(user.id);
           } catch (e) {
             console.error("Failed to save generation to history database:", e);
           }
@@ -225,7 +248,10 @@ export default function GeneratorPage() {
 
     } catch (err: unknown) {
       console.error(err);
-      setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error' } : i));
+      const message = err instanceof DOMException && err.name === 'AbortError'
+        ? 'Generation timed out after 35 seconds. Check the provider, model, and API key, then retry.'
+        : err instanceof Error ? err.message : 'Generation failed';
+      setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: message } : i));
     }
   };
 
@@ -235,29 +261,17 @@ export default function GeneratorPage() {
       return;
     }
     setIsGenerating(true);
-    const targets = images.filter(i => i.status !== 'done');
-    const CONCURRENCY = 2;
+    const targets = images.filter(i => i.status !== 'done').slice(0, 500);
+    const providerKeyCount = apiKeys.filter(key => key.provider === activeProvider).length;
+    const CONCURRENCY = activeProvider === 'Google Gemini'
+      ? (batchMode ? 2 : 1)
+      : Math.min(Math.max(providerKeyCount, 1) * (batchMode ? 2 : 1), batchMode ? 8 : 3);
     for (let i = 0; i < targets.length; i += CONCURRENCY) {
       const batch = targets.slice(i, i + CONCURRENCY);
       await Promise.all(batch.map(img => generateSingle(img)));
     }
     setIsGenerating(false);
-  };
-
-  const deleteHistoryItem = async (id: string) => {
-    try {
-      const res = await fetch('/api/history/delete', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      const data = await res.json();
-      if (data.success && user) {
-        fetchHistory(user.id);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    if (autoCsvDownload) exportCSV();
   };
 
   const exportCSV = () => {
@@ -293,11 +307,6 @@ export default function GeneratorPage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
-
-  const filteredHistory = history.filter(item => 
-    item.filename.toLowerCase().includes(historySearch.toLowerCase()) ||
-    item.title.toLowerCase().includes(historySearch.toLowerCase())
-  );
 
   return (
     <div className="grid grid-cols-1 gap-5 pb-20 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -357,7 +366,10 @@ export default function GeneratorPage() {
               <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">AI Provider</label>
               <select
                 value={activeProvider}
-                onChange={e => setActiveProvider(e.target.value)}
+                onChange={e => {
+                  setActiveProvider(e.target.value);
+                  saveActiveProvider(e.target.value);
+                }}
                 className="w-full text-xs font-semibold bg-background border border-primary/20 rounded-xl px-3 py-2 text-primary outline-none"
               >
                 {AI_PROVIDER_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -408,7 +420,20 @@ export default function GeneratorPage() {
               </div>
 
               <PremiumSlider label="TITLE LENGTH" value={titleLength} min={10} max={200} suffix=" CHARS" onChange={setTitleLength} />
+              <PremiumSlider label="DESCRIPTION LENGTH" value={descriptionLength} min={50} max={300} suffix=" CHARS" onChange={setDescriptionLength} />
               <PremiumSlider label="KEYWORDS COUNT" value={keywordsCount} min={5} max={50} suffix=" KEYS" onChange={setKeywordsCount} />
+              <div className="space-y-2 border-t border-primary/10 pt-4">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-primary/60">Additional keywords</label>
+                <input value={additionalKeywords} onChange={e => setAdditionalKeywords(e.target.value)} placeholder="e.g. sustainable, editorial, premium" className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-primary/60">Negative title words</label>
+                <input value={negativeTitleWords} onChange={e => setNegativeTitleWords(e.target.value)} placeholder="e.g. best, beautiful, amazing" className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-primary/60">Negative keywords</label>
+                <input value={negativeKeywords} onChange={e => setNegativeKeywords(e.target.value)} placeholder="e.g. logo, watermark, blurry" className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
+                <label className="flex items-center justify-between pt-2 text-xs font-semibold text-primary">
+                  Auto CSV download
+                  <input type="checkbox" checked={autoCsvDownload} onChange={e => setAutoCsvDownload(e.target.checked)} className="h-4 w-4 accent-primary" />
+                </label>
+              </div>
             </div>
           ) : (
             <div className="space-y-5 pt-4 border-t border-primary/10 text-xs text-primary font-semibold">
@@ -518,22 +543,37 @@ export default function GeneratorPage() {
               <button onClick={exportCSV} disabled={images.filter(i => i.status === 'done').length === 0} className="px-4 py-2 bg-transparent border border-primary/30 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center gap-1.5">
                 <Download className="w-3.5 h-3.5" /> Export CSV
               </button>
+              <label className="inline-flex items-center gap-2 text-xs font-bold text-primary">
+                <input type="checkbox" checked={batchMode} onChange={e => setBatchMode(e.target.checked)} className="h-4 w-4 accent-primary" />
+                Batch mode (up to 500)
+              </label>
               <button 
                  onClick={generateAll}
                  disabled={isGenerating || images.length === 0}
                  className="px-5 py-2 bg-primary text-background rounded-xl text-xs font-bold hover:bg-primary-hover disabled:opacity-40 transition-all flex items-center gap-1.5"
                >
                 <Zap className="w-3.5 h-3.5" />
-                {isGenerating ? 'Processing...' : 'Generate All'}
+                {isGenerating ? 'Processing batch...' : batchMode ? 'Generate batch' : 'Generate All'}
               </button>
             </div>
           </div>
         )}
 
         {/* Queue Outputs Display */}
-        <div className="space-y-4">
-          {images.map(img => (
-            <div key={img.id} className="border border-[var(--card-border)] rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row gap-5 bg-[var(--card-bg)]">
+        {images.length > 0 && (
+          <section className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-[0_18px_45px_rgba(0,0,0,.08)] sm:p-5">
+            <div className="mb-4 flex items-center justify-between border-b border-primary/10 pb-4">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Generated Results</h3>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">{images.length} image{images.length === 1 ? '' : 's'} in this batch</p>
+              </div>
+              <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[10px] font-bold text-primary">
+                {images.filter(image => image.status === 'done').length}/{images.length} ready
+              </span>
+            </div>
+            <div className="max-h-[calc(100vh-190px)] space-y-4 overflow-y-auto pr-1 sm:max-h-[calc(100vh-210px)]">
+              {images.map(img => (
+                <div key={img.id} className="border border-[var(--card-border)] rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row gap-5 bg-[var(--input-bg)]">
               <div className="w-full md:w-48 shrink-0 flex flex-col gap-2">
                 <div className="relative aspect-video md:h-32 bg-primary/5 rounded-xl border border-primary/15 overflow-hidden flex items-center justify-center">
                   <img src={img.preview} alt="preview" className="object-contain w-full h-full p-1.5" />
@@ -548,9 +588,9 @@ export default function GeneratorPage() {
               </div>
 
               <div className="flex-1 min-w-0 flex flex-col justify-center">
-                {img.status === 'pending' && (
+                {(img.status === 'pending' || img.status === 'error') && (
                   <button onClick={() => generateSingle(img)} className="self-start px-4 py-2 border border-primary/25 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 transition-colors">
-                    Process Individually
+                    <RefreshCw className="mr-1.5 inline h-3.5 w-3.5" /> {img.status === 'error' ? 'Retry generation' : 'Process individually'}
                   </button>
                 )}
 
@@ -562,8 +602,8 @@ export default function GeneratorPage() {
                 )}
 
                 {img.status === 'error' && (
-                  <p className="text-xs font-bold text-primary border border-dashed border-primary/30 p-3 rounded-xl">
-                    ⚠️ Generation failed. Verify API Key settings.
+                  <p className="mt-3 text-xs font-bold text-red-400 border border-dashed border-red-400/30 p-3 rounded-xl">
+                    {img.error || 'Generation failed. Verify API key and provider settings.'}
                   </p>
                 )}
 
@@ -572,9 +612,30 @@ export default function GeneratorPage() {
                     <div>
                       <div className="flex items-center justify-between text-[10px] font-bold text-primary/60 uppercase mb-1">
                         <span>Title</span>
-                        <button onClick={() => navigator.clipboard.writeText(img.metadata!.title)} className="hover:underline flex items-center gap-1"><Copy className="w-3 h-3" /> Copy</button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => { setEditingTitleId(img.id); setTitleDraft(img.metadata!.title); }} className="hover:underline flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit</button>
+                          <button onClick={() => navigator.clipboard.writeText(img.metadata!.title)} className="hover:underline flex items-center gap-1"><Copy className="w-3 h-3" /> Copy</button>
+                        </div>
                       </div>
-                      <div className="bg-primary/5 border border-primary/10 rounded-xl p-3 text-primary font-medium">{img.metadata.title}</div>
+                      {editingTitleId === img.id ? (
+                        <div className="flex gap-2">
+                          <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-primary/20 bg-background p-3 text-primary outline-none" />
+                          <button onClick={() => { updateMetadata(img.id, { title: titleDraft.trim() || img.metadata!.title }); setEditingTitleId(null); }} className="rounded-xl bg-primary px-3 text-background" title="Save title"><Check className="h-4 w-4" /></button>
+                        </div>
+                      ) : <div className="rounded-xl border border-primary/10 bg-primary/5 p-3 font-medium text-primary">{img.metadata.title}</div>}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <span className="mb-1 block text-[10px] font-bold uppercase text-primary/60">Category</span>
+                        <div className="rounded-xl border border-primary/10 bg-primary/5 p-3 font-medium text-primary">{img.metadata.category || 'General'}</div>
+                      </div>
+                      <div>
+                        <span className="mb-1 block text-[10px] font-bold uppercase text-primary/60">Actions</span>
+                        <button onClick={() => generateSingle(img)} className="inline-flex items-center gap-1.5 rounded-xl border border-primary/25 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5">
+                          <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -590,11 +651,21 @@ export default function GeneratorPage() {
                         <span>Keywords ({img.metadata.keywords.length})</span>
                         <button onClick={() => navigator.clipboard.writeText(img.metadata!.keywords.join(", "))} className="hover:underline flex items-center gap-1"><Copy className="w-3 h-3" /> Copy CSV</button>
                       </div>
-                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto border border-primary/10 p-2.5 rounded-xl bg-primary/5">
+                      <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-xl border border-primary/10 bg-primary/5 p-2.5">
                         {img.metadata.keywords.map((k, idx) => (
-                          <span key={idx} className="bg-background border border-primary/15 px-2.5 py-1 rounded-full text-[10px] font-bold text-primary">{k}</span>
+                          <button key={`${k}-${idx}`} onClick={() => updateMetadata(img.id, { keywords: img.metadata!.keywords.filter((_, keywordIndex) => keywordIndex !== idx) })} className="group rounded-full border border-primary/15 bg-background px-2.5 py-1 text-[10px] font-bold text-primary" title="Remove keyword">
+                            {k} <span className="ml-1 text-primary/40 group-hover:text-red-400">x</span>
+                          </button>
                         ))}
                       </div>
+                      <div className="mt-2 flex gap-2">
+                        <input value={keywordDrafts[img.id] || ''} onChange={e => setKeywordDrafts(prev => ({ ...prev, [img.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') addKeyword(img); }} placeholder="Add keyword..." className="min-w-0 flex-1 rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
+                        <button onClick={() => addKeyword(img)} className="rounded-xl border border-primary/25 px-3 text-primary" title="Add keyword"><Plus className="h-4 w-4" /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border-t border-primary/10 pt-3">
+                      <button onClick={() => navigator.clipboard.writeText(`${img.metadata!.title}\n\n${img.metadata!.description}\n\n${img.metadata!.keywords.join(', ')}`)} className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 px-3 py-2 text-[10px] font-bold text-primary hover:bg-primary/5"><Copy className="h-3 w-3" /> Copy all</button>
+                      <button onClick={() => downloadMetadataJson(img)} className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 px-3 py-2 text-[10px] font-bold text-primary hover:bg-primary/5"><FileJson className="h-3 w-3" /> JSON</button>
                     </div>
                   </div>
                 )}
@@ -609,67 +680,11 @@ export default function GeneratorPage() {
                   </div>
                 )}
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* MongoDB History Log Panel */}
-        <div className="border-t border-[var(--divider)] pt-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary/15 pb-4">
-            <div className="flex items-center gap-2">
-              <FileImage className="w-5 h-5 text-primary" />
-              <h3 className="font-bold text-sm text-foreground">Recent Generations</h3>
-            </div>
-            <div className="relative w-full sm:w-60">
-              <input
-                type="text"
-                value={historySearch}
-                onChange={e => setHistorySearch(e.target.value)}
-                placeholder="Search history..."
-                className="w-full text-xs bg-background border border-primary/25 rounded-xl pl-8 pr-3 py-2 text-primary placeholder-primary/40 outline-none"
-              />
-              <Search className="w-3.5 h-3.5 text-primary/40 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            </div>
-          </div>
-
-          {isLoadingHistory ? (
-            <div className="py-10 text-center text-xs font-bold text-primary flex items-center justify-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Fetching history from database...
-            </div>
-          ) : filteredHistory.length === 0 ? (
-            <div className="border border-dashed border-[var(--card-border)] rounded-xl py-10 text-center"><p className="text-sm font-semibold text-foreground/75">No generations yet</p><p className="mt-1 text-xs text-[var(--text-muted)]">Your generated metadata will appear here.</p></div>
-          ) : (
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-              {filteredHistory.map(item => (
-                <div key={item._id} className="border border-primary/10 rounded-xl p-3 bg-primary/5 space-y-2 relative text-xs text-primary">
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 pr-10">
-                      <p className="font-bold truncate">{item.filename}</p>
-                      <p className="text-[10px] text-primary/70 mt-0.5">Category: {item.category || "General"} · {new Date(item.createdAt).toLocaleDateString()}</p>
-                    </div>
-                    <button
-                      onClick={() => deleteHistoryItem(item._id)}
-                      className="text-primary/70 hover:text-primary border border-primary/20 p-1.5 rounded-lg transition-all absolute top-2 right-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-1.5 pt-1.5 border-t border-primary/5">
-                    <p className="font-semibold"><span className="text-primary/60 uppercase text-[9px] font-bold">Title:</span> {item.title}</p>
-                    <p className="text-primary/95 leading-relaxed"><span className="text-primary/60 uppercase text-[9px] font-bold">Desc:</span> {item.description}</p>
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {item.keywords.slice(0, 10).map((k, idx) => (
-                        <span key={idx} className="bg-background border border-primary/15 px-2 py-0.5 rounded text-[10px] font-medium">{k}</span>
-                      ))}
-                      {item.keywords.length > 10 && <span className="text-[10px] text-primary/70 font-bold px-1">+{item.keywords.length - 10}</span>}
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </section>
+        )}
 
       </div>
 
@@ -685,18 +700,52 @@ export default function GeneratorPage() {
               </div>
 
               <div className="space-y-3 text-xs text-primary">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {AI_PROVIDER_NAMES.map(provider => {
+                    const connected = apiKeys.some(key => key.provider === provider);
+                    return (
+                      <button
+                        key={provider}
+                        type="button"
+                        onClick={() => {
+                          setActiveProvider(provider);
+                          saveActiveProvider(provider);
+                        }}
+                        className={`rounded-xl border p-2 text-left transition-colors ${activeProvider === provider ? 'border-primary bg-primary/15' : 'border-primary/10 bg-primary/5 hover:border-primary/30'}`}
+                      >
+                        <span className="block truncate text-[10px] font-bold">{provider}</span>
+                        <span className={`mt-1 block text-[9px] font-semibold ${connected ? 'text-primary' : 'text-amber-500'}`}>
+                          {connected ? 'Connected' : 'Add key'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
                 <div>
                   <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-wider mb-1">Select Provider</label>
                   <select
                     value={activeProvider}
-                    onChange={e => setActiveProvider(e.target.value)}
+                    onChange={e => {
+                      setActiveProvider(e.target.value);
+                      saveActiveProvider(e.target.value);
+                    }}
                     className="w-full text-xs font-semibold bg-background border border-primary/20 rounded-xl px-3 py-2 outline-none text-primary"
                   >
                     {AI_PROVIDER_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-wider">Configure API Key</label>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-wider">Configure API Key</label>
+                    <a
+                      href={PROVIDER_KEY_URLS[activeProvider]}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex shrink-0 items-center gap-1 text-[10px] font-bold text-primary hover:underline"
+                    >
+                      Get API Key <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
                   <div className="flex gap-2">
                     <input
                       type="password"
@@ -708,13 +757,29 @@ export default function GeneratorPage() {
                     <button onClick={saveKey} className="px-4 py-2 bg-primary text-background rounded-xl font-bold hover:bg-primary-hover transition-colors">Save</button>
                   </div>
                 </div>
+                <div className="rounded-xl border border-primary/10 bg-primary/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary/60">Active model</span>
+                    <span className="text-[10px] font-bold text-primary">{activeProviderKeyObj ? 'Ready' : 'Needs API key'}</span>
+                  </div>
+                  <select
+                    value={activeModel}
+                    onChange={e => {
+                      setSelectedModels(prev => ({ ...prev, [activeProvider]: e.target.value }));
+                      saveProviderModel(activeProvider, e.target.value);
+                    }}
+                    className="mt-2 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs font-semibold text-primary outline-none"
+                  >
+                    {(AI_PROVIDERS[activeProvider] || []).map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+                  </select>
+                </div>
 
                 {apiKeys.length > 0 && (
                   <div className="pt-3 border-t border-primary/10 space-y-1.5">
                     <p className="text-[10px] font-bold text-primary/60 uppercase">Configured Keys:</p>
-                    {apiKeys.map(k => (
+                    {apiKeys.filter(key => key.provider === activeProvider).map((k, index) => (
                       <div key={k.id} className="flex items-center justify-between text-xs border border-primary/10 rounded-xl p-2 bg-primary/5">
-                        <span className="font-bold text-primary">{k.provider}</span>
+                        <span className="font-bold text-primary">{k.provider} key {index + 1}</span>
                         <button onClick={() => removeKey(k.id)} className="text-[10px] font-bold text-primary hover:underline">Remove</button>
                       </div>
                     ))}

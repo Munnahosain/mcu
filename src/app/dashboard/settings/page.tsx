@@ -1,35 +1,41 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { User, Key, Bell, Moon, Shield, ExternalLink, Plus, X } from "lucide-react";
-import { AI_PROVIDERS, AI_DEFAULT_MODELS } from "@/lib/ai-models";
-import { getProviderKeys, getProviderModels, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
+import { AI_PROVIDERS, AI_DEFAULT_MODELS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
+import { getActiveProvider, getProviderKeys, getProviderModels, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
+
+const PROVIDER_KEY_URLS: Record<string, string> = {
+  Groq: "https://console.groq.com/keys",
+  "Google Gemini": "https://aistudio.google.com/app/apikey",
+  OpenAI: "https://platform.openai.com/api-keys",
+  "Mistral AI": "https://console.mistral.ai/api-keys/",
+  OpenRouter: "https://openrouter.ai/settings/keys",
+};
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("api");
 
   // API Key Management State
-  const [apiKeys, setApiKeys] = useState<string[]>([]);
+  const [activeProvider, setActiveProvider] = useState(() => getActiveProvider());
+  const [apiKeys, setApiKeys] = useState<{ id: string; key: string; provider: string }[]>(() => {
+    const provider = getActiveProvider();
+    return getProviderKeys().filter((item) => item.provider === provider);
+  });
   const [newApiKey, setNewApiKey] = useState("");
   
   // Model Selection State
-  const [selectedModel, setSelectedModel] = useState(AI_DEFAULT_MODELS.Groq);
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const provider = getActiveProvider();
+    return getProviderModels()[provider] || AI_DEFAULT_MODELS[provider];
+  });
   
   // Theme State
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  // Load saved settings on mount
-  useEffect(() => {
-    setApiKeys(getProviderKeys().filter((item) => item.provider === "Groq").map((item) => item.key));
-    setSelectedModel(getProviderModels().Groq);
-
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "dark";
     const savedTheme = localStorage.getItem('mcustock_theme') as "dark" | "light" | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else if (document.documentElement.classList.contains("light")) {
-      setTheme("light");
-    }
-  }, []);
+    return savedTheme || (document.documentElement.classList.contains("light") ? "light" : "dark");
+  });
 
   // Theme Switcher
   const updateTheme = (newTheme: "dark" | "light") => {
@@ -40,14 +46,15 @@ export default function SettingsPage() {
   };
 
   // Save keys
-  const saveKeys = (keys: string[]) => {
+  const saveKeys = (keys: { id: string; key: string; provider: string }[]) => {
     setApiKeys(keys);
-    saveProviderKeys(keys.map((key, index) => ({ id: `groq-${index}`, key, provider: "Groq" })));
+    const otherProviderKeys = getProviderKeys().filter((item) => item.provider !== activeProvider);
+    saveProviderKeys([...otherProviderKeys, ...keys]);
   };
 
   const addKey = () => {
-    if (!newApiKey.trim() || apiKeys.includes(newApiKey.trim())) return;
-    saveKeys([...apiKeys, newApiKey.trim()]);
+    if (!newApiKey.trim() || apiKeys.some((item) => item.key === newApiKey.trim())) return;
+    saveKeys([...apiKeys, { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider }]);
     setNewApiKey("");
   };
 
@@ -59,7 +66,7 @@ export default function SettingsPage() {
   // Save Model
   const saveModel = (model: string) => {
     setSelectedModel(model);
-    saveProviderModel("Groq", model);
+    saveProviderModel(activeProvider, model);
   };
 
   return (
@@ -132,14 +139,31 @@ export default function SettingsPage() {
            {activeTab === "api" && (
              <div className="space-y-6 max-w-xl">
                <div>
-                 <h3 className="text-lg font-semibold mb-1">Groq API Configuration</h3>
-                 <p className="text-sm text-gray-400">Manage your API keys and models for metadata generation.</p>
+                 <h3 className="text-lg font-semibold mb-1">{activeProvider} API Configuration</h3>
+                 <p className="text-sm text-gray-400">Manage the active provider, API keys, and model for AI generation.</p>
+               </div>
+
+               <div className="bg-black/40 border border-white/10 rounded-xl p-5 space-y-3">
+                 <label className="text-sm font-semibold text-white">Active AI Provider</label>
+                 <select
+                   value={activeProvider}
+                   onChange={(e) => {
+                     const provider = e.target.value;
+                     setActiveProvider(provider);
+                     setApiKeys(getProviderKeys().filter((item) => item.provider === provider));
+                     setSelectedModel(getProviderModels()[provider] || AI_DEFAULT_MODELS[provider]);
+                     saveActiveProvider(provider);
+                   }}
+                   className="w-full bg-black border border-white/20 text-sm rounded-lg px-4 py-3 focus:outline-none focus:border-primary text-white"
+                 >
+                   {AI_PROVIDER_NAMES.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                 </select>
                </div>
                
                {/* Vision Model Selection */}
                <div className="bg-black/40 border border-white/10 rounded-xl p-5 space-y-3">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-semibold text-white">Groq Vision Model</label>
+                    <label className="text-sm font-semibold text-white">{activeProvider} Model</label>
                   </div>
                   <p className="text-xs text-gray-400">Select the AI model used for image analysis. Ensure your Groq account has access to the chosen model.</p>
                   
@@ -148,7 +172,7 @@ export default function SettingsPage() {
                     onChange={(e) => saveModel(e.target.value)}
                     className="w-full bg-black border border-white/20 text-sm rounded-lg px-4 py-3 focus:outline-none focus:border-primary text-white"
                   >
-                    {AI_PROVIDERS.Groq.map((model) => (
+                    {(AI_PROVIDERS[activeProvider] || []).map((model) => (
                       <option key={model.id} value={model.id}>{model.label}{model.badge ? ` - ${model.badge}` : ""}</option>
                     ))}
                   </select>
@@ -158,17 +182,17 @@ export default function SettingsPage() {
                <div className="bg-black/40 border border-white/10 rounded-xl p-5 space-y-4">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-semibold text-white">API Keys Rotation List</label>
-                    <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
-                      Get Groq API key <ExternalLink className="w-3 h-3" />
+                    <a href={PROVIDER_KEY_URLS[activeProvider]} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+                      Configure {activeProvider} key <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
 
                   <p className="text-xs text-gray-400">Add multiple keys to automatically failover if one hits a rate limit.</p>
                   
                   <div className="flex items-center gap-2">
-                    <input 
+                      <input
                       type="password"
-                      placeholder="gsk_..."
+                      placeholder={`${activeProvider} API key...`}
                       value={newApiKey}
                       onChange={(e) => setNewApiKey(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && addKey()}
@@ -188,7 +212,7 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-3">
                           <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
                           <span className="font-mono text-gray-200">
-                             {k.substring(0, 8)}••••••••••••••••••••••••{k.slice(-4)}
+                             {k.key.substring(0, 8)}••••••••••••••••••••••••{k.key.slice(-4)}
                           </span>
                         </div>
                         <button onClick={() => removeKey(i)} className="text-gray-500 hover:text-red-400 p-1 bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity">

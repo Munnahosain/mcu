@@ -4462,6 +4462,52 @@ html.dark [class*="border-l"] {
   min-width: 0;
 }
 
+.sidebar-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 18px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sidebar-user-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  overflow: visible;
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sidebar-user-status {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--sidebar-bg);
+  border-radius: 999px;
+  background: #24ca90;
+}
+
+.sidebar-user-footer.is-collapsed .sidebar-user-profile {
+  justify-content: center;
+  padding: 3px;
+  border-color: transparent;
+  background: transparent;
+}
+
 .sidebar-bottom-controls:not(.is-collapsed) {
   margin: 0 10px;
   padding: 4px 6px !important;
@@ -5305,8 +5351,9 @@ html.dark .liquid-wordmark {
 
 @media (min-width: 1024px) {
   .bento-workspace-row {
-    flex: 0 0 calc(100vh - 8rem) !important;
-    height: calc(100vh - 8rem) !important;
+    flex: 1 1 auto !important;
+    height: calc(100vh - 2rem) !important;
+    min-height: calc(100vh - 2rem) !important;
   }
 
   .bento-settings-panel {
@@ -5317,6 +5364,12 @@ html.dark .liquid-wordmark {
   .bento-settings-scroll {
     height: 100% !important;
     min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .bento-workspace-row > .bento-settings-panel {
+    flex: 0 0 360px !important;
   }
 }
 

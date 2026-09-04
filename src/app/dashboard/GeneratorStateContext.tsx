@@ -7,6 +7,7 @@ export interface GeneratorImageFile {
   file: File;
   preview: string;
   status: "pending" | "generating" | "done" | "error";
+  error?: string;
   metadata?: {
     title: string;
     description: string;

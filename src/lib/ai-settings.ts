@@ -1,4 +1,4 @@
-import { AI_DEFAULT_MODELS } from "@/lib/ai-models";
+import { AI_DEFAULT_MODELS, AI_PROVIDERS } from "@/lib/ai-models";
 
 export type StoredProviderKey = {
   id: string;
@@ -10,11 +10,40 @@ const KEYS_STORAGE = "mcustock_provider_keys";
 const LEGACY_KEYS_STORAGE = "generator_api_keys";
 const OLD_KEYS_STORAGE = "promptgen_keys";
 const MODELS_STORAGE = "mcustock_provider_models";
+const ACTIVE_PROVIDER_STORAGE = "mcustock_active_provider";
+
+function getStorageScope() {
+  if (typeof window === "undefined") return "guest";
+  try {
+    const user = JSON.parse(localStorage.getItem("mcustock_user") || "null") as { id?: string; email?: string } | null;
+    return user?.id || user?.email?.toLowerCase().trim() || "guest";
+  } catch {
+    return "guest";
+  }
+}
+
+function getScopedKey(key: string) {
+  return `${key}:${encodeURIComponent(getStorageScope())}`;
+}
+
+function getScopedValue(key: string) {
+  const scopedKey = getScopedKey(key);
+  const scopedValue = localStorage.getItem(scopedKey);
+  if (scopedValue !== null) return scopedValue;
+
+  const legacyValue = localStorage.getItem(key);
+  if (legacyValue !== null && getStorageScope() !== "guest") {
+    localStorage.setItem(scopedKey, legacyValue);
+    localStorage.removeItem(key);
+    return legacyValue;
+  }
+  return null;
+}
 
 export function getProviderKeys(): StoredProviderKey[] {
   if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(KEYS_STORAGE) || localStorage.getItem(LEGACY_KEYS_STORAGE);
-  const oldRaw = localStorage.getItem(OLD_KEYS_STORAGE);
+  const raw = getScopedValue(KEYS_STORAGE) || getScopedValue(LEGACY_KEYS_STORAGE);
+  const oldRaw = getScopedValue(OLD_KEYS_STORAGE);
   const parsed: unknown[] = raw ? JSON.parse(raw) : [];
   const oldParsed: unknown[] = oldRaw ? JSON.parse(oldRaw) : [];
   const keys = [...parsed, ...oldParsed];
@@ -29,19 +58,24 @@ export function getProviderKeys(): StoredProviderKey[] {
     }
     return [];
   });
-  return normalized.filter((item, index, list) => list.findIndex((candidate) => candidate.provider === item.provider) === index);
+  return normalized;
 }
 
 export function saveProviderKeys(keys: StoredProviderKey[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(KEYS_STORAGE, JSON.stringify(keys));
-  localStorage.setItem(LEGACY_KEYS_STORAGE, JSON.stringify(keys));
+  localStorage.setItem(getScopedKey(KEYS_STORAGE), JSON.stringify(keys));
+  localStorage.setItem(getScopedKey(LEGACY_KEYS_STORAGE), JSON.stringify(keys));
 }
 
 export function getProviderModels(): Record<string, string> {
   if (typeof window === "undefined") return AI_DEFAULT_MODELS;
   try {
-    return { ...AI_DEFAULT_MODELS, ...JSON.parse(localStorage.getItem(MODELS_STORAGE) || "{}") };
+    const stored = JSON.parse(getScopedValue(MODELS_STORAGE) || "{}") as Record<string, string>;
+    return Object.fromEntries(Object.entries(AI_DEFAULT_MODELS).map(([provider, fallback]) => {
+      const selected = stored[provider];
+      const valid = AI_PROVIDERS[provider]?.some(model => model.id === selected);
+      return [provider, valid ? selected : fallback];
+    }));
   } catch {
     return AI_DEFAULT_MODELS;
   }
@@ -49,5 +83,15 @@ export function getProviderModels(): Record<string, string> {
 
 export function saveProviderModel(provider: string, model: string) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(MODELS_STORAGE, JSON.stringify({ ...getProviderModels(), [provider]: model }));
+  localStorage.setItem(getScopedKey(MODELS_STORAGE), JSON.stringify({ ...getProviderModels(), [provider]: model }));
+}
+
+export function getActiveProvider(): string {
+  if (typeof window === "undefined") return "Groq";
+  return getScopedValue(ACTIVE_PROVIDER_STORAGE) || "Groq";
+}
+
+export function saveActiveProvider(provider: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(getScopedKey(ACTIVE_PROVIDER_STORAGE), provider);
 }

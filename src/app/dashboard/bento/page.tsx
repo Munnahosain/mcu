@@ -563,9 +563,9 @@ ${rectangles}
   }, [widgets, hoveredId, selectedId, mergeSourceId, isEditing, settings, rowHeight, getGridCoords, isExporting]);
 
   return (
-    <div className="dashboard-liquid-page flex flex-col h-full min-h-0 bg-background text-primary sm:-m-6 lg:-m-10 overflow-hidden font-sans">
+    <div className="dashboard-liquid-page flex h-full min-h-0 flex-col overflow-hidden bg-background font-sans text-primary sm:-m-6 lg:-m-10">
       
-      <div className="bento-actions flex w-full items-center justify-end gap-2 sm:gap-3 px-4 sm:px-8 py-3 shrink-0 z-50 lg:fixed lg:top-2 lg:right-64 lg:w-auto lg:p-0">
+      <div className="bento-actions flex w-full shrink-0 items-center justify-end gap-2 px-4 py-3 sm:px-8 lg:absolute lg:right-0 lg:top-0 lg:z-50 lg:w-[360px] lg:px-6">
         <div className="flex w-full sm:w-auto items-center justify-end gap-2 sm:gap-3">
              <div className="relative group">
               <div className="dashboard-liquid-ghost flex items-center gap-0 text-primary rounded-[10px] overflow-hidden shadow-sm shadow-primary/5">
@@ -587,7 +587,7 @@ ${rectangles}
         </div>
 
       <div className="bento-workspace-row flex flex-1 min-h-0 lg:flex-row flex-col overflow-hidden overscroll-none">
-        <div ref={workspaceRef} className="flex-1 min-w-0 min-h-[360px] lg:flex-[0_0_calc(100%_-_360px)] overflow-visible overscroll-none bg-background relative flex items-center justify-center p-6 h-full">
+        <div ref={workspaceRef} className="relative flex min-h-[360px] min-w-0 flex-1 items-center justify-center overflow-auto overscroll-none bg-background p-6 lg:flex-[0_0_calc(100%_-_360px)]">
           <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: isExporting ? 'none' : 'transform 0.2s cubic-bezier(0.19, 1, 0.22, 1)' }} className="flex items-center justify-center">
             <div ref={gridRef} onContextMenu={(e) => e.preventDefault()} onClick={() => setSelectedId(null)} className="dashboard-liquid-card bg-background border border-primary/20 shadow-[0_40px_100px_rgba(0,0,0,0.08)] rounded-[12px] overflow-hidden relative select-none touch-none"
               style={{ width: `${settings.canvasWidth}px`, height: `${settings.canvasHeight}px`, transition: 'all 0.4s cubic-bezier(0.19, 1, 0.22, 1)' }}>
@@ -644,10 +644,12 @@ ${rectangles}
           </div>
         </div>
 
-        <aside className="bento-settings-panel bento-settings-solid dashboard-liquid-panel lg:w-[360px] w-full min-h-0 bg-background border-t lg:border-t-0 lg:border-l border-primary/20 overflow-hidden overscroll-none flex flex-col shrink-0 max-h-[45vh] lg:max-h-none lg:h-full rounded-none" style={{ background: 'var(--background)', backgroundImage: 'none', backdropFilter: 'none' }}>
+        <aside className="bento-settings-panel bento-settings-solid dashboard-liquid-panel w-full shrink-0 min-h-0 max-h-[45vh] flex flex-col overflow-hidden rounded-none border-t border-primary/20 bg-background overscroll-none lg:h-full lg:max-h-none lg:w-[360px] lg:border-l lg:border-t-0" style={{ background: 'var(--background)', backgroundImage: 'none', backdropFilter: 'none' }}>
           <div onWheel={(e) => e.stopPropagation()} className="bento-settings-scroll flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll overscroll-contain custom-scrollbar">
           <div className="px-6 py-8 space-y-2">
-            <h2 className="text-[20px] font-bold text-primary">Settings</h2>
+            <div className="flex items-center justify-between gap-3 pr-24 lg:pr-28">
+              <h2 className="text-[20px] font-bold text-primary">Settings</h2>
+            </div>
             <p className="text-[13px] text-primary/60">Drag to paint and fill the grid</p>
           </div>
 

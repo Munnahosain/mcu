@@ -5,6 +5,7 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
+  avatarUrl?: string;
   signedInAt: number;
 };
 
@@ -61,6 +62,7 @@ export async function signInWithSupabase(email: string, password: string): Promi
     id: data.user.id,
     email: data.user.email ?? email,
     name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || "User",
+    avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
     signedInAt: Date.now(),
   };
 
@@ -91,6 +93,44 @@ export async function signUpWithSupabase(name: string, email: string, password: 
     id: data.user.id,
     email: data.user.email ?? email,
     name: data.user.user_metadata?.full_name || name,
+    signedInAt: Date.now(),
+  };
+
+  setAuthUser(authUser);
+  return authUser;
+}
+
+export async function signInWithGoogle(): Promise<void> {
+  if (getDatabaseProvider() !== "supabase" || !hasSupabaseConfig()) {
+    throw new Error("Google sign-in requires Supabase authentication to be configured.");
+  }
+
+  const redirectTo = `${window.location.origin}/auth/callback`;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+
+  if (error) throw new Error(error.message || "Google sign-in failed");
+}
+
+export async function completeSupabaseAuth(): Promise<AuthUser | null> {
+  if (getDatabaseProvider() !== "supabase" || !hasSupabaseConfig()) return null;
+
+  const code = new URLSearchParams(window.location.search).get("code");
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw new Error(error.message || "Google sign-in session could not be created");
+  }
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+
+  const authUser: AuthUser = {
+    id: data.user.id,
+    email: data.user.email ?? "",
+    name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || "User",
+    avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
     signedInAt: Date.now(),
   };
 

@@ -3,10 +3,10 @@ import sharp from 'sharp';
 
 export const maxDuration = 60;
 
-const MAX_IMAGE_SIZE = 768;
-const JPEG_QUALITY = 75;
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 2000;
+const MAX_IMAGE_SIZE = 512;
+const JPEG_QUALITY = 65;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 800;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,7 +31,7 @@ function isRetryableProviderError(error: unknown): boolean {
   return (
     status === 429 || status === 500 || status === 502 || status === 503 || status === 504 ||
     message.includes('capacity') || message.includes('overloaded') ||
-    message.includes('unavailable') || message.includes('timeout') ||
+    message.includes('unavailable') ||
     message.includes('rate limit')
   );
 }
@@ -71,7 +71,7 @@ function detectProvider(apiKey: string, selectedProvider: string): string {
   return 'Groq';
 }
 
-async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs = 50000): Promise<Response> {
+async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs = 55000): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -92,7 +92,7 @@ async function prepareImage(imageBuffer: Buffer): Promise<{ base64: string; data
   return { base64, dataUrl };
 }
 
-function buildPrompt(titleLength: number, keywordsCount: number): string {
+function buildPrompt(titleLength: number, descriptionLength: number, keywordsCount: number, platform: string, additionalKeywords: string, negativeTitleWords: string, negativeKeywords: string): string {
   return `You are an expert stock photography SEO metadata generator.
 
 Analyze the image and return ONLY a valid JSON object. No extra text, no markdown fences, no code blocks.
@@ -108,9 +108,12 @@ Return exactly this JSON structure:
 STRICT RULES — FOLLOW EXACTLY:
 1. "title": MUST be between ${Math.max(titleLength - 20, 10)} and ${titleLength} characters. Do NOT exceed ${titleLength} characters.
 2. "keywords": MUST be a JSON array containing EXACTLY ${keywordsCount} unique lowercase strings. Use short, single-word keywords where possible so the complete JSON fits in the response.
-3. "description": approximately 150 characters.
+3. "description": approximately ${descriptionLength} characters and optimized for ${platform}.
 4. "category": single category name only (e.g. "Nature", "Business", "Technology").
-5. Return ONLY the raw JSON object — no backticks, no markdown, no explanation.`;
+${additionalKeywords ? `5. Include these relevant terms where appropriate: ${additionalKeywords}.` : ''}
+${negativeTitleWords ? `6. Do not use these words in the title: ${negativeTitleWords}.` : ''}
+${negativeKeywords ? `7. Do not use these keywords: ${negativeKeywords}.` : ''}
+8. Return ONLY the raw JSON object — no backticks, no markdown, no explanation.`;
 }
 
 export async function POST(req: Request) {
@@ -121,7 +124,12 @@ export async function POST(req: Request) {
     const providerHint = (formData.get('provider') as string) || 'Groq';
     const modelHint = (formData.get('model') as string) || '';
     const titleLength = Math.min(Math.max(parseInt((formData.get('titleLength') as string) || '200'), 10), 500);
+    const descriptionLength = Math.min(Math.max(parseInt((formData.get('descriptionLength') as string) || '150'), 50), 500);
     const keywordsCount = Math.min(Math.max(parseInt((formData.get('keywordsCount') as string) || '30'), 5), 50);
+    const platform = (formData.get('platform') as string) || 'General';
+    const additionalKeywords = ((formData.get('additionalKeywords') as string) || '').trim();
+    const negativeTitleWords = ((formData.get('negativeTitleWords') as string) || '').trim();
+    const negativeKeywords = ((formData.get('negativeKeywords') as string) || '').trim();
 
     if (!image || !apiKey) {
       return NextResponse.json({ success: false, error: 'Missing image or API key.' }, { status: 400 });
@@ -131,11 +139,11 @@ export async function POST(req: Request) {
     const { base64, dataUrl } = await prepareImage(buffer);
 
     const provider = detectProvider(apiKey, providerHint);
-    console.log(`[generate] provider=${provider}, model=${modelHint}, title=${titleLength}, kw=${keywordsCount}`);
+    console.log(`[generate] provider=${provider}, model=${modelHint}, title=${titleLength}, description=${descriptionLength}, kw=${keywordsCount}, platform=${platform}`);
 
-    const prompt = buildPrompt(titleLength, keywordsCount);
+    const prompt = buildPrompt(titleLength, descriptionLength, keywordsCount, platform, additionalKeywords, negativeTitleWords, negativeKeywords);
     // Keep enough headroom for long titles and up to 50 keywords without truncating JSON.
-    const MAX_OUT = 4096;
+    const MAX_OUT = 2048;
 
     let responseText: string | null = null;
     let lastError: unknown = null;
@@ -149,7 +157,7 @@ export async function POST(req: Request) {
             return 'meta-llama/llama-4-scout-17b-16e-instruct';
           })();
 
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -191,28 +199,39 @@ export async function POST(req: Request) {
           responseText = data.choices?.[0]?.message?.content;
 
         } else if (provider === 'Google Gemini') {
-          const geminiModel = modelHint.includes('gemini') ? modelHint : 'gemini-2.0-flash';
-          const res = await fetchWithTimeout(
+          const geminiModel = modelHint.includes('gemini') ? modelHint : 'gemini-2.5-flash-lite';
+          const geminiBody = JSON.stringify({
+            contents: [{
+              parts: [
+                { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+                { text: prompt }
+              ]
+            }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: MAX_OUT,
+              responseMimeType: 'application/json'
+            }
+          });
+          let res = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [
-                    { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-                    { text: prompt }
-                  ]
-                }],
-                generationConfig: {
-                  temperature: 0.1,
-                  maxOutputTokens: MAX_OUT,
-                  // camelCase is correct for Gemini API
-                  responseMimeType: 'application/json'
-                }
-              })
+              body: geminiBody
             }
           );
+          if (!res.ok && (res.status === 400 || res.status === 404 || res.status === 503) && geminiModel !== 'gemini-2.5-flash-lite') {
+            console.warn(`[generate] Gemini model ${geminiModel} is unavailable; using gemini-2.5-flash-lite fallback`);
+            res = await fetchWithTimeout(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: geminiBody
+              }
+            );
+          }
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             const e = new Error(err.error?.message || `Gemini error ${res.status}`);
@@ -227,7 +246,7 @@ export async function POST(req: Request) {
 
         } else if (provider === 'OpenRouter') {
           const orModel = modelHint || 'google/gemini-2.0-flash-exp:free';
-          const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -260,7 +279,7 @@ export async function POST(req: Request) {
 
         } else if (provider === 'OpenAI') {
           const oaiModel = modelHint || 'gpt-4o';
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -292,7 +311,7 @@ export async function POST(req: Request) {
         } else if (provider === 'Mistral AI') {
           // Mistral vision via pixtral models
           const mistralModel = modelHint || 'pixtral-large-latest';
-          const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+          const res = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -371,6 +390,12 @@ export async function POST(req: Request) {
     } else {
       metadata.keywords = [];
     }
+
+    metadata.title = typeof metadata.title === 'string' ? metadata.title.trim() : '';
+    metadata.description = typeof metadata.description === 'string' ? metadata.description.trim() : '';
+    metadata.category = typeof metadata.category === 'string' && metadata.category.trim()
+      ? metadata.category.trim()
+      : 'General';
 
     // ── Enforce title length ───────────────────────────────────────────────
     if (typeof metadata.title === 'string' && (metadata.title as string).length > titleLength) {

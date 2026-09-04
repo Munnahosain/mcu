@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { setAuthUser, signUpWithSupabase } from "@/lib/auth";
+import { setAuthUser, signInWithGoogle, signUpWithSupabase } from "@/lib/auth";
 import { getDatabaseProvider, hasSupabaseConfig } from "@/lib/database-config";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -17,6 +17,17 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleGoogleSignup = async () => {
+    setError("");
+    setIsLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+      setIsLoading(false);
+    }
+  };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -157,6 +168,19 @@ export default function SignupPage() {
               {isLoading ? "Creating Account..." : "Create Account"}
             </button>
           </form>
+
+          {getDatabaseProvider() === "supabase" && hasSupabaseConfig() && (
+            <>
+              <div className="flex items-center gap-3 text-[10px] font-bold text-primary/40 uppercase tracking-widest">
+                <span className="h-px flex-1 bg-primary/10" />
+                or
+                <span className="h-px flex-1 bg-primary/10" />
+              </div>
+              <button type="button" onClick={handleGoogleSignup} disabled={isLoading} className="w-full py-2.5 border border-primary/20 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center justify-center gap-2">
+                <span className="text-base font-extrabold">G</span> Continue with Google
+              </button>
+            </>
+          )}
 
           <p className="text-center text-xs font-bold text-primary/60">
             Already have an account?{" "}

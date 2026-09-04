@@ -21,7 +21,7 @@ import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import ThemeToggle from "@/components/ThemeToggle";
 
-type MaterialKind = "glass" | "glossy" | "frosted" | "metallic" | "iridescent";
+type MaterialKind = "glass" | "plastic" | "glossy" | "frosted" | "metallic" | "iridescent";
 type Resolution = "1K" | "2K" | "4K";
 type ArtboardMode = "fit" | "custom";
 type ExportFormat = "png" | "webp";
@@ -83,6 +83,7 @@ const presetColors = [
 
 const materialLabels: Record<MaterialKind, string> = {
   glass: "Liquid Glass",
+  plastic: "3D Plastic",
   glossy: "Glossy",
   frosted: "Frosted",
   metallic: "Metallic",
@@ -126,20 +127,30 @@ function makeMaterial(controls: StudioControls) {
   if (controls.material === "glass") {
     return new THREE.MeshPhysicalMaterial({
       color,
-      roughness,
+      roughness: Math.max(0.08, roughness * 0.72),
       metalness: 0,
-      transmission: 0.72,
+      transmission: 0.86,
       transparent: true,
-      opacity: 0.76,
-      thickness: 2.4,
+      opacity: 0.84,
+      thickness: 1.6,
       ior: 1.45,
       clearcoat: 1,
-      clearcoatRoughness: Math.min(0.32, roughness),
+      clearcoatRoughness: Math.min(0.18, roughness),
     });
   }
 
   if (controls.material === "metallic") {
     return new THREE.MeshStandardMaterial({ color, roughness: Math.min(0.32, roughness), metalness: 0.92 });
+  }
+
+  if (controls.material === "plastic") {
+    return new THREE.MeshPhysicalMaterial({
+      color,
+      roughness: Math.max(0.28, roughness),
+      metalness: 0,
+      clearcoat: 0.38,
+      clearcoatRoughness: 0.18,
+    });
   }
 
   if (controls.material === "frosted") {
@@ -179,9 +190,9 @@ function disposeObject(object: THREE.Object3D) {
   });
 }
 
-function createIconGroup(svgText: string, controls: StudioControls) {
+async function createIconGroup(asset: IconAsset, controls: StudioControls) {
   const loader = new SVGLoader();
-  const data = loader.parse(svgText);
+  const data = loader.parse(asset.text);
   const material = makeMaterial(controls);
   const group = new THREE.Group();
   let shapeCount = 0;
@@ -236,7 +247,6 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
     const controlsRef = useRef<OrbitControls | null>(null);
     const iconRef = useRef<THREE.Group | null>(null);
     const frameRef = useRef<number | null>(null);
-    const dragRef = useRef<{ x: number; y: number } | null>(null);
 
     const clearIcon = useCallback(() => {
       if (!sceneRef.current || !iconRef.current) return;
@@ -245,10 +255,10 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
       iconRef.current = null;
     }, []);
 
-    const loadIcon = useCallback((svgText: string, nextControls: StudioControls) => {
+      const loadIcon = useCallback(async (nextAsset: IconAsset, nextControls: StudioControls) => {
       if (!sceneRef.current) return;
       clearIcon();
-      const group = createIconGroup(svgText, nextControls);
+        const group = await createIconGroup(nextAsset, nextControls);
       sceneRef.current.add(group);
       iconRef.current = group;
       onError("");
@@ -287,6 +297,9 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
       orbit.enableDamping = true;
       orbit.dampingFactor = 0.08;
       orbit.enablePan = true;
+      orbit.enableZoom = true;
+      orbit.mouseButtons.LEFT = THREE.MOUSE.PAN;
+      orbit.mouseButtons.RIGHT = THREE.MOUSE.PAN;
       orbit.minDistance = 3;
       orbit.maxDistance = 14;
 
@@ -295,29 +308,8 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
       rendererRef.current = renderer;
       controlsRef.current = orbit;
 
-      const handlePointerDown = (event: PointerEvent) => {
-        if (event.button !== 0 || !iconRef.current) return;
-        dragRef.current = { x: event.clientX, y: event.clientY };
-        orbit.enabled = false;
-        renderer.domElement.setPointerCapture(event.pointerId);
-      };
-      const handlePointerMove = (event: PointerEvent) => {
-        if (!dragRef.current || !iconRef.current) return;
-        const rect = mount.getBoundingClientRect();
-        const scale = camera.position.z / Math.max(rect.width, rect.height);
-        iconRef.current.position.x += (event.clientX - dragRef.current.x) * scale * 0.012;
-        iconRef.current.position.y -= (event.clientY - dragRef.current.y) * scale * 0.012;
-        dragRef.current = { x: event.clientX, y: event.clientY };
-      };
-      const handlePointerUp = (event: PointerEvent) => {
-        if (!dragRef.current) return;
-        dragRef.current = null;
-        orbit.enabled = true;
-        if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
-      };
-      renderer.domElement.addEventListener("pointerdown", handlePointerDown);
-      renderer.domElement.addEventListener("pointermove", handlePointerMove);
-      renderer.domElement.addEventListener("pointerup", handlePointerUp);
+      const handleContextMenu = (event: MouseEvent) => event.preventDefault();
+      renderer.domElement.addEventListener("contextmenu", handleContextMenu);
 
       const resize = () => {
         const rect = mount.getBoundingClientRect();
@@ -342,9 +334,7 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
         observer.disconnect();
         clearIcon();
         orbit.dispose();
-        renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
-        renderer.domElement.removeEventListener("pointermove", handlePointerMove);
-        renderer.domElement.removeEventListener("pointerup", handlePointerUp);
+        renderer.domElement.removeEventListener("contextmenu", handleContextMenu);
         renderer.dispose();
         renderer.domElement.remove();
       };
@@ -355,11 +345,9 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
         clearIcon();
         return;
       }
-      try {
-        loadIcon(asset.text, controls);
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "Unable to load SVG.");
-      }
+      void loadIcon(asset, controls).catch((error: unknown) => {
+        onError(error instanceof Error ? error.message : "Unable to load asset.");
+      });
     }, [asset, controls, clearIcon, loadIcon, onError]);
 
     useImperativeHandle(ref, () => ({
@@ -379,7 +367,7 @@ const IconPreview = forwardRef<PreviewHandle, { asset?: IconAsset; controls: Stu
         const previousPixelRatio = renderer.getPixelRatio();
         const oldIcon = iconRef.current;
         if (oldIcon) scene.remove(oldIcon);
-        const exportGroup = createIconGroup(targetAsset.text, controls);
+        const exportGroup = await createIconGroup(targetAsset, controls);
         scene.add(exportGroup);
 
         const size = resolutionSize[resolution];
@@ -422,6 +410,8 @@ function Slider({ label, value, min, max, step = 1, suffix = "", onChange }: {
   suffix?: string;
   onChange: (value: number) => void;
 }) {
+  const progress = `${Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))}%`;
+
   return (
     <label className="block space-y-2">
       <span className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
@@ -436,6 +426,7 @@ function Slider({ label, value, min, max, step = 1, suffix = "", onChange }: {
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
         className="w-full accent-primary"
+        style={{ "--range-progress": progress } as React.CSSProperties}
         aria-label={label}
       />
     </label>
@@ -466,7 +457,8 @@ export default function IconStudio() {
     const incoming = Array.from(files).slice(0, Math.max(0, MAX_FILES - assets.length));
     const parsed: IconAsset[] = [];
     for (const file of incoming) {
-      if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
+      const isSvg = file.name.toLowerCase().endsWith(".svg") || file.type === "image/svg+xml";
+      if (!isSvg) {
         setError(`${file.name} is not an SVG file.`);
         continue;
       }
@@ -582,7 +574,7 @@ export default function IconStudio() {
       </div>
 
       <div className="grid min-h-[calc(100vh-12rem)] grid-cols-1 gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <aside className="order-2 space-y-4 xl:order-1">
+        <aside className="order-2 space-y-4 xl:order-1 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-2 custom-scrollbar">
           <section className="rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -690,7 +682,7 @@ export default function IconStudio() {
           </section>
         </aside>
 
-        <main className="order-1 flex min-h-[620px] flex-col rounded-[28px] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-2xl xl:order-2">
+        <main className="order-1 flex min-h-[620px] flex-col rounded-[28px] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-2xl xl:sticky xl:top-4 xl:order-2 xl:h-[calc(100vh-7rem)]">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--input-bg)] text-primary"><Box className="h-5 w-5" /></span>

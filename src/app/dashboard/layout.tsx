@@ -83,6 +83,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.replace("/login");
   };
 
+  if (!isHydrated || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--main-bg)] text-primary">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+      </div>
+    );
+  }
+
   return (
     <GeneratorStateProvider>
       <div className="relative flex h-screen overflow-hidden bg-[var(--main-bg)] text-foreground">
@@ -149,13 +157,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   href={link.href}
                   aria-current={isActive ? "page" : undefined}
                   onClick={() => { if (isMobile) setSidebarOpen(false); }}
-                  className={`flex items-center text-base font-bold transition-all w-full ${isSidebarOpen
-                      ? `gap-3.5 px-4 py-3.5 rounded-2xl ${isActive ? "border bg-primary text-background border-primary shadow-lg shadow-primary/10" : "text-primary/80 hover:bg-primary/5 hover:text-primary"}`
-                      : `justify-center h-[52px] w-[52px] ${isActive ? "rounded-2xl bg-primary text-background border border-primary shadow-lg shadow-primary/10" : "text-primary hover:bg-primary/5"}`
+                  className={`group flex items-center text-base font-bold transition-all w-full ${isSidebarOpen
+                      ? `gap-3.5 px-4 py-3.5 rounded-2xl ${isActive ? "border bg-primary text-background border-primary shadow-lg shadow-primary/10" : "text-[#EAFFF6] hover:bg-primary/5 hover:text-primary"}`
+                      : `justify-center h-[52px] w-[52px] ${isActive ? "rounded-2xl bg-primary text-background border border-primary shadow-lg shadow-primary/10" : "text-[#EAFFF6] hover:bg-primary/5 hover:text-primary"}`
                     }`}
                   title={!isSidebarOpen ? link.name : undefined}
                 >
-                  <Icon className="w-5 h-5 shrink-0" />
+                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-background" : "text-[#EAFFF6] group-hover:text-primary"}`} />
                   <AnimatePresence initial={false}>
                     {isSidebarOpen && (
                       <motion.span
@@ -190,7 +198,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           {/* User Signout footer in sidebar */}
-          <div className={`p-4 border-t border-[var(--sidebar-border)] shrink-0 flex flex-col gap-3 relative z-10 ${!isSidebarOpen ? 'items-center' : ''}`}>
+          <div className={`sidebar-user-footer p-4 border-t border-[var(--sidebar-border)] shrink-0 flex flex-col gap-3 relative z-10 ${!isSidebarOpen ? 'is-collapsed items-center' : ''}`}>
+            <div className={`sidebar-user-profile ${isSidebarOpen ? "w-full px-3" : "h-12 w-12"}`} title={user.email}>
+              <span className="sidebar-user-avatar">
+                {user.avatarUrl ? (
+                  <Image src={user.avatarUrl} alt={`${user.name} profile`} width={40} height={40} className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  user.name[0] || user.email[0] || "M"
+                )}
+                <span className="sidebar-user-status" />
+              </span>
+              {isSidebarOpen && (
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-bold text-primary">{user.name}</span>
+                  <span className="block truncate text-[10px] font-semibold text-primary/55">{user.email}</span>
+                </span>
+              )}
+            </div>
             <button
               onClick={handleSignOut}
               className={`flex items-center text-base font-bold text-primary border border-primary/20 hover:bg-primary/10 ${isSidebarOpen ? "gap-3.5 px-4 py-3.5 w-full rounded-2xl" : "justify-center h-[52px] w-[52px] rounded-2xl"
@@ -205,37 +229,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Main Content Pane */}
         <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-hidden">
-          {/* Top Header */}
-          <header className="sticky top-0 z-30 h-18 shrink-0 border-b border-[var(--divider)] px-4 backdrop-blur-2xl sm:px-6 flex items-center justify-between bg-[var(--header-bg)]">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSidebarOpen(!isSidebarOpen)}
-                className="lg:hidden p-2 border border-primary/20 rounded-xl text-primary hover:bg-primary/5 transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-              <div>
-                <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-primary/60">Workspace</p>
-                <h1 className="dashboard-workspace-title font-bold text-sm sm:text-base text-primary truncate leading-tight">
-                  {sidebarLinks.find(l => l.href === pathname)?.name || "Dashboard"}
-                </h1>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 border border-primary/25 bg-primary/5 rounded-full text-[10px] font-bold text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                Workspace Active
-              </div>
-
-              {user && (
-                <div className="h-10 w-10 border border-primary/30 rounded-xl flex items-center justify-center bg-primary/5 font-bold text-xs text-primary uppercase">
-                  {user.name[0] || user.email[0] || "M"}
-                </div>
-              )}
-            </div>
-          </header>
-
           {/* Page Content area */}
           <div className={`flex-1 custom-scrollbar ${pathname === "/dashboard/bento" ? "overflow-hidden" : "overflow-y-auto"}`}>
             <AnimatePresence mode="wait" initial={false}>
