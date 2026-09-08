@@ -676,12 +676,18 @@ export default function IconStudio() {
     setError("");
   };
 
-  const removeAsset = (id: string) => {
-    setAssets((current) => current.filter((asset) => asset.id !== id));
-    if (selectedId === id) {
-      const next = assets.find((asset) => asset.id !== id);
-      setSelectedId(next?.id || "");
+  const removeAsset = (id: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
     }
+    setAssets((current) => {
+      const remaining = current.filter((asset) => asset.id !== id);
+      if (selectedId === id) {
+        setSelectedId(remaining.length > 0 ? remaining[0].id : "");
+      }
+      return remaining;
+    });
   };
 
   const updateControl = <K extends keyof StudioControls>(key: K, value: StudioControls[K]) => {
@@ -738,14 +744,6 @@ export default function IconStudio() {
     event.preventDefault();
     void addAssets(event.dataTransfer.files);
   };
-
-  // Automatically load the cursor sample on initial mount if assets list is empty
-  useEffect(() => {
-    if (assets.length === 0) {
-      loadSamplePreset("cursor");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="min-h-full text-foreground font-sans">
@@ -835,17 +833,30 @@ export default function IconStudio() {
             {assets.length > 0 && (
               <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
                 {assets.map((asset) => (
-                  <button key={asset.id} onClick={() => setSelectedId(asset.id)} className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all ${asset.id === selectedId ? "border-primary bg-primary/10 shadow-sm" : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary/30"}`}>
+                  <div
+                    key={asset.id}
+                    onClick={() => setSelectedId(asset.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all cursor-pointer select-none ${
+                      asset.id === selectedId
+                        ? "border-primary bg-primary/10 shadow-sm"
+                        : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary/30"
+                    }`}
+                  >
                     <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/90 p-1.5 shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={asset.preview} alt="" className="max-h-full max-w-full" />
+                      <img src={asset.preview} alt="" className="max-h-full max-w-full object-contain" />
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs font-bold">{asset.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-bold text-foreground">{asset.name}</span>
                     {asset.id === selectedId && <Check className="h-4 w-4 text-primary shrink-0" />}
-                    <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); removeAsset(asset.id); }} className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-400" aria-label={`Remove ${asset.name}`}>
+                    <button
+                      type="button"
+                      onClick={(event) => removeAsset(asset.id, event)}
+                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
+                      aria-label={`Remove ${asset.name}`}
+                    >
                       <X className="h-3.5 w-3.5" />
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
