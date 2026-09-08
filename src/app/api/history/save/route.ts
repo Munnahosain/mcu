@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createHistoryItem, getDatabaseProvider, hasMongoDbConfig, hasSupabaseConfig, normalizeHistoryItem } from '@/lib/database';
+import { createHistoryItem, hasMongoDbConfig, normalizeHistoryItem } from '@/lib/database';
 
 export async function POST(req: Request) {
   try {
@@ -12,17 +12,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const provider = getDatabaseProvider();
-    if (provider === 'mongodb' && !hasMongoDbConfig()) {
+    if (!hasMongoDbConfig()) {
       return NextResponse.json(
-        { success: false, error: 'MongoDB is not configured. Set MONGODB_URI or switch DATABASE_PROVIDER=supabase.' },
-        { status: 500 }
-      );
-    }
-
-    if (provider === 'supabase' && !hasSupabaseConfig()) {
-      return NextResponse.json(
-        { success: false, error: 'Supabase is not configured for history storage. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
+        { success: false, error: 'MongoDB is not configured. Set MONGODB_URI.' },
         { status: 500 }
       );
     }

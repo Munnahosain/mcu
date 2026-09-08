@@ -1,6 +1,11 @@
-import mongoose, { Schema, model, models } from 'mongoose';
+import { Schema, model, models } from 'mongoose';
 
 const MetadataHistorySchema = new Schema({
+  legacyId: {
+    type: String,
+    index: true,
+    sparse: true,
+  },
   userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',

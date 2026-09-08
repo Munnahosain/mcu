@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createUser, findUserByEmail, getDatabaseProvider, hasMongoDbConfig, hasSupabaseConfig, tryDevSignup } from '@/lib/database';
+import { createUser, findUserByEmail, hasMongoDbConfig, tryDevSignup } from '@/lib/database';
 import { hashPassword } from '@/lib/hash';
+import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/lib/jwt';
 
 export async function POST(req: Request) {
   try {
@@ -15,21 +16,16 @@ export async function POST(req: Request) {
 
     const emailLower = email.toLowerCase().trim();
     const hashedPassword = hashPassword(password);
-    const provider = getDatabaseProvider();
-
-    if (provider === 'mongodb' && !hasMongoDbConfig()) {
+    if (!hasMongoDbConfig()) {
       const devUser = await tryDevSignup(name, emailLower, hashedPassword);
       if (!devUser) {
         return NextResponse.json({ success: false, error: 'Email already registered' }, { status: 400 });
       }
-      return NextResponse.json({ success: true, user: devUser });
-    }
-
-    if (provider === 'supabase' && !hasSupabaseConfig()) {
-      return NextResponse.json(
-        { success: false, error: 'Supabase is not configured for auth. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
-        { status: 500 }
-      );
+      const accessToken = await createAccessToken(devUser.id);
+      const refreshToken = await createRefreshToken(devUser.id);
+      const response = NextResponse.json({ success: true, user: devUser, accessToken });
+      response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+      return response;
     }
 
     const existingUser = await findUserByEmail(emailLower);
@@ -52,7 +48,11 @@ export async function POST(req: Request) {
       email: user?.email,
     };
 
-    return NextResponse.json({ success: true, user: normalizedUser });
+    const accessToken = await createAccessToken(normalizedUser.id);
+    const refreshToken = await createRefreshToken(normalizedUser.id);
+    const response = NextResponse.json({ success: true, user: normalizedUser, accessToken });
+    response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+    return response;
   } catch (error: unknown) {
     console.error('Signup error:', error);
     const message = error instanceof Error ? error.message : 'Something went wrong during signup';

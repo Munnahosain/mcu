@@ -1,6 +1,11 @@
-import mongoose, { Schema, model, models } from 'mongoose';
+import { Schema, model, models } from 'mongoose';
 
 const UserSchema = new Schema({
+  legacyId: {
+    type: String,
+    index: true,
+    sparse: true,
+  },
   name: {
     type: String,
     required: [true, 'Please provide a name'],

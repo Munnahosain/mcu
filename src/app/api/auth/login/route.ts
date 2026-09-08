@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { findUserByEmail, getDatabaseProvider, hasMongoDbConfig, hasSupabaseConfig, tryDevLogin } from '@/lib/database';
+import { findUserByEmail, hasMongoDbConfig, tryDevLogin } from '@/lib/database';
 import { verifyPassword } from '@/lib/hash';
+import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/lib/jwt';
 
 export async function POST(req: Request) {
   try {
@@ -14,21 +15,16 @@ export async function POST(req: Request) {
     }
 
     const emailLower = email.toLowerCase().trim();
-    const provider = getDatabaseProvider();
-
-    if (provider === 'mongodb' && !hasMongoDbConfig()) {
+    if (!hasMongoDbConfig()) {
       const devUser = await tryDevLogin(emailLower, password);
       if (!devUser) {
         return NextResponse.json({ success: false, error: 'Invalid email or password' }, { status: 401 });
       }
-      return NextResponse.json({ success: true, user: devUser });
-    }
-
-    if (provider === 'supabase' && !hasSupabaseConfig()) {
-      return NextResponse.json(
-        { success: false, error: 'Supabase is not configured for auth. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' },
-        { status: 500 }
-      );
+      const accessToken = await createAccessToken(devUser.id);
+      const refreshToken = await createRefreshToken(devUser.id);
+      const response = NextResponse.json({ success: true, user: devUser, accessToken });
+      response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+      return response;
     }
 
     const user = await findUserByEmail(emailLower);
@@ -54,7 +50,11 @@ export async function POST(req: Request) {
       email: user.email,
     };
 
-    return NextResponse.json({ success: true, user: normalizedUser });
+    const accessToken = await createAccessToken(normalizedUser.id);
+    const refreshToken = await createRefreshToken(normalizedUser.id);
+    const response = NextResponse.json({ success: true, user: normalizedUser, accessToken });
+    response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+    return response;
   } catch (error: unknown) {
     console.error('Login error:', error);
     const message = error instanceof Error ? error.message : 'Something went wrong during login';

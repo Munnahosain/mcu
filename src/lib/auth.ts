@@ -1,6 +1,3 @@
-import { supabase } from "./supabase";
-import { getDatabaseProvider, hasSupabaseConfig } from "./database-config";
-
 export type AuthUser = {
   id: string;
   email: string;
@@ -10,6 +7,17 @@ export type AuthUser = {
 };
 
 const USER_KEY = "mcustock_user";
+let accessToken: string | null = null;
+
+export const getAccessToken = () => accessToken;
+
+export const setAccessToken = (token: string) => {
+  accessToken = token;
+};
+
+export const clearAccessToken = () => {
+  accessToken = null;
+};
 
 export const getAuthUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
@@ -37,10 +45,7 @@ export const setAuthUser = (user: AuthUser): boolean => {
 export const clearAuthUser = () => {
   if (typeof window === "undefined") return;
   localStorage.removeItem(USER_KEY);
-
-  if (getDatabaseProvider() === "supabase" && hasSupabaseConfig()) {
-    void supabase.auth.signOut();
-  }
+  clearAccessToken();
 };
 
 export const getDownloadsKey = (email?: string | null) => {
@@ -48,92 +53,6 @@ export const getDownloadsKey = (email?: string | null) => {
   return `mcustock_downloads_${safeEmail}`;
 };
 
-export async function signInWithSupabase(email: string, password: string): Promise<AuthUser | null> {
-  if (getDatabaseProvider() !== "supabase" || !hasSupabaseConfig()) {
-    return null;
-  }
-
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error || !data.user) {
-    throw new Error(error?.message || "Invalid email or password");
-  }
-
-  const authUser: AuthUser = {
-    id: data.user.id,
-    email: data.user.email ?? email,
-    name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || "User",
-    avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
-    signedInAt: Date.now(),
-  };
-
-  setAuthUser(authUser);
-  return authUser;
-}
-
-export async function signUpWithSupabase(name: string, email: string, password: string): Promise<AuthUser | null> {
-  if (getDatabaseProvider() !== "supabase" || !hasSupabaseConfig()) {
-    return null;
-  }
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: name,
-      },
-    },
-  });
-
-  if (error || !data.user) {
-    throw new Error(error?.message || "Failed to create account");
-  }
-
-  const authUser: AuthUser = {
-    id: data.user.id,
-    email: data.user.email ?? email,
-    name: data.user.user_metadata?.full_name || name,
-    signedInAt: Date.now(),
-  };
-
-  setAuthUser(authUser);
-  return authUser;
-}
-
 export async function signInWithGoogle(): Promise<void> {
-  if (!hasSupabaseConfig()) {
-    throw new Error("Google sign-in requires Supabase authentication to be configured.");
-  }
-
-  const redirectTo = `${window.location.origin}/auth/callback`;
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo },
-  });
-
-  if (error) throw new Error(error.message || "Google sign-in failed");
-}
-
-export async function completeSupabaseAuth(): Promise<AuthUser | null> {
-  if (!hasSupabaseConfig()) return null;
-
-  const code = new URLSearchParams(window.location.search).get("code");
-  if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw new Error(error.message || "Google sign-in session could not be created");
-  }
-
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return null;
-
-  const authUser: AuthUser = {
-    id: data.user.id,
-    email: data.user.email ?? "",
-    name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || "User",
-    avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
-    signedInAt: Date.now(),
-  };
-
-  setAuthUser(authUser);
-  return authUser;
+  throw new Error("Google sign-in is not enabled for MongoDB authentication.");
 }

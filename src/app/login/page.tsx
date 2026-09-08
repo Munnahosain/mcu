@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { setAuthUser, signInWithGoogle, signInWithSupabase } from "@/lib/auth";
-import { getDatabaseProvider, hasSupabaseConfig } from "@/lib/database-config";
+import { setAccessToken, setAuthUser } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 
 export default function LoginPage() {
@@ -16,17 +15,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const handleGoogleLogin = async () => {
-    setError("");
-    setIsLoading(true);
-    try {
-      await signInWithGoogle();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Google sign-in failed");
-      setIsLoading(false);
-    }
-  };
 
   const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -42,28 +30,25 @@ export default function LoginPage() {
     try {
       let user = null;
 
-      if (getDatabaseProvider() === "supabase" && hasSupabaseConfig()) {
-        user = await signInWithSupabase(email.trim(), password.trim());
-      } else {
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim(), password: password.trim() }),
-        });
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+      });
 
-        const data = await res.json();
+      const data = await res.json();
 
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "Login failed");
-        }
-
-        user = {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          signedInAt: Date.now(),
-        };
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Login failed");
       }
+
+      user = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        signedInAt: Date.now(),
+      };
+      if (typeof data.accessToken === "string") setAccessToken(data.accessToken);
 
       const success = user ? setAuthUser(user) : false;
 
@@ -132,13 +117,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full text-xs bg-background border border-primary/20 rounded-xl px-3.5 py-2.5 text-primary placeholder-primary/35 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/25 transition-all"
+                  className="w-full text-xs bg-background border border-primary/20 rounded-xl px-3.5 py-2.5 pr-11 text-primary placeholder-primary/35 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/25 transition-all"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-primary/40 hover:text-primary transition-colors"
+                  className="absolute inset-y-0 right-0 z-10 flex items-center pr-3 text-primary/40 hover:text-primary transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -153,17 +138,6 @@ export default function LoginPage() {
               {isLoading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
-          <>
-            <div className="flex items-center gap-3 text-[10px] font-bold text-primary/40 uppercase tracking-widest">
-              <span className="h-px flex-1 bg-primary/10" />
-              or
-              <span className="h-px flex-1 bg-primary/10" />
-            </div>
-            <button type="button" onClick={handleGoogleLogin} disabled={isLoading} className="w-full py-2.5 border border-primary/20 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center justify-center gap-2">
-              <span className="text-base font-extrabold">G</span> Continue with Google
-            </button>
-          </>
 
           <p className="text-center text-xs font-bold text-primary/60">
             Don&apos;t have an account?{" "}

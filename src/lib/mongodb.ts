@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import mongoose from 'mongoose';
 
 export const MONGODB_URI = process.env.MONGODB_URI;
@@ -32,6 +33,15 @@ export async function connectToDatabase() {
   }
 
   if (!cached!.promise) {
+    const dnsServers = process.env.MONGODB_DNS_SERVERS
+      ?.split(',')
+      .map((server) => server.trim())
+      .filter(Boolean);
+
+    if (dnsServers && dnsServers.length > 0) {
+      dns.setServers(dnsServers);
+    }
+
     const opts = {
       bufferCommands: false,
       serverSelectionTimeoutMS: 5000,
