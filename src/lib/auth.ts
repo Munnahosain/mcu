@@ -19,6 +19,21 @@ export const clearAccessToken = () => {
   accessToken = null;
 };
 
+export async function ensureAccessToken() {
+  if (accessToken) return accessToken;
+  try {
+    const response = await fetch('/api/auth/refresh', { method: 'POST' });
+    const data = await response.json() as { accessToken?: string };
+    if (response.ok && data.accessToken) {
+      accessToken = data.accessToken;
+      return accessToken;
+    }
+  } catch {
+    // The user may be logged out or the refresh cookie may be expired.
+  }
+  return null;
+}
+
 export const getAuthUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
 

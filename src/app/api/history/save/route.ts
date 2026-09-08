@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createHistoryItem, hasMongoDbConfig, normalizeHistoryItem } from '@/lib/database';
+import { getAuthenticatedUserId } from '@/lib/request-auth';
 
 export async function POST(req: Request) {
   try {
-    const { userId, filename, title, description, keywords, category } = await req.json();
+    const { filename, title, description, keywords, category } = await req.json();
+    const userId = await getAuthenticatedUserId(req);
 
     if (!userId || !filename || !title) {
       return NextResponse.json(
-        { success: false, error: 'Missing userId, filename, or title' },
+        { success: false, error: 'Authentication, filename, and title are required' },
         { status: 400 }
       );
     }

@@ -1,10 +1,9 @@
-import { randomUUID } from 'crypto';
 import { connectToDatabase } from './mongodb';
 import { User } from './models/User';
 import { MetadataHistory } from './models/MetadataHistory';
 import { createDevUser, findDevUser } from './dev-auth';
 import { verifyPassword } from './hash';
-import { getDatabaseProvider, hasMongoDbConfig } from './database-config';
+import { hasMongoDbConfig } from './database-config';
 
 export { getDatabaseProvider, hasMongoDbConfig } from './database-config';
 export type { DatabaseProvider } from './database-config';
@@ -80,11 +79,18 @@ export async function createHistoryItem(input: {
   });
 }
 
-export async function deleteHistoryItem(id: string) {
+export async function deleteHistoryItem(id: string, userId: string) {
   if (!hasMongoDbConfig()) return false;
   await connectToDatabase();
-  const result = await MetadataHistory.findByIdAndDelete(id);
+  const result = await MetadataHistory.findOneAndDelete({ _id: id, userId });
   return Boolean(result);
+}
+
+export async function clearUserHistory(userId: string) {
+  if (!hasMongoDbConfig()) return 0;
+  await connectToDatabase();
+  const result = await MetadataHistory.deleteMany({ userId });
+  return result.deletedCount ?? 0;
 }
 
 export function normalizeUserRecord(user: Record<string, unknown> | null) {

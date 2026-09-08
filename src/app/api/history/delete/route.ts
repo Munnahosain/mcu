@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
-import { deleteHistoryItem, hasMongoDbConfig } from '@/lib/database';
+import { clearUserHistory, deleteHistoryItem, hasMongoDbConfig } from '@/lib/database';
+import { getAuthenticatedUserId } from '@/lib/request-auth';
 
 export async function DELETE(req: Request) {
   try {
-    const { id } = await req.json();
+    const { id } = await req.json().catch(() => ({ id: undefined }));
+    const userId = await getAuthenticatedUserId(req);
 
-    if (!id) {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'Missing history item id to delete' },
-        { status: 400 }
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
@@ -19,12 +21,14 @@ export async function DELETE(req: Request) {
       );
     }
 
-    const deleted = await deleteHistoryItem(id);
+    const deleted = id
+      ? await deleteHistoryItem(id, userId)
+      : await clearUserHistory(userId);
 
     return NextResponse.json({
       success: true,
       deleted,
-      message: 'History item deleted successfully',
+      message: id ? 'History item deleted successfully' : 'History cleared successfully',
     });
   } catch (error: unknown) {
     console.error('History deletion error:', error);

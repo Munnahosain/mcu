@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon, Plus, X, ExternalLink, Wand2, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getProviderKeys, getProviderModels } from "@/lib/ai-settings";
+import { getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
 
 interface ImageFile {
   id: string;
@@ -35,7 +35,9 @@ export default function PromptsPage() {
   
   const generatePrompts = async () => {
     // Read from global settings
-    const providerKeys = getProviderKeys();
+    const remoteKeys = await loadRemoteProviderKeys();
+    if (remoteKeys) saveProviderKeys(remoteKeys);
+    const providerKeys = remoteKeys || getProviderKeys();
     const apiKeys = providerKeys.map((item) => item.key);
     const provider = providerKeys[0]?.provider || 'Groq';
     const model = getProviderModels()[provider] || 'meta-llama/llama-4-scout-17b-16e-instruct';

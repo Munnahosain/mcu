@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { hasMongoDbConfig, listUserHistory, normalizeHistoryItem } from '@/lib/database';
+import { getAuthenticatedUserId } from '@/lib/request-auth';
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
+    const userId = await getAuthenticatedUserId(req);
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'Please provide a userId query parameter' },
+        { success: false, error: 'Unauthorized' },
         { status: 400 }
       );
     }

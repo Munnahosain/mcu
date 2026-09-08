@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, DownloadCloud, Heart, Sparkles, MapPin, Tag, Plus, X, Globe, Image as ImageIcon, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAllEvents, CalendarEvent, EventCategory } from "@/data/events2026";
-import { getActiveProvider, getProviderKeys, getProviderModels } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
 
 export default function EventCalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Default for SSR
@@ -180,7 +180,9 @@ export default function EventCalendarPage() {
 
       try {
          const activeProvider = getActiveProvider();
-         const activeKeyObj = getProviderKeys().find((k) => k.provider === activeProvider);
+         const remoteKeys = await loadRemoteProviderKeys();
+         if (remoteKeys) saveProviderKeys(remoteKeys);
+         const activeKeyObj = (remoteKeys || getProviderKeys()).find((k) => k.provider === activeProvider);
          const activeModel = getProviderModels()[activeProvider] || '';
          
          if (!activeKeyObj?.key) {

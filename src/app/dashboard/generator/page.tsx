@@ -20,10 +20,10 @@ import {
   ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getAuthUser, AuthUser } from "@/lib/auth";
+import { ensureAccessToken, getAuthUser, AuthUser } from "@/lib/auth";
 import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
 import PremiumSlider from "@/components/PremiumSlider";
-import { getActiveProvider, getProviderKeys, getProviderModels, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
 
 type ImageFile = GeneratorImageFile;
@@ -85,6 +85,12 @@ export default function GeneratorPage() {
     setApiKeys(getProviderKeys());
     setSelectedModels(getProviderModels());
     setActiveProvider(getActiveProvider());
+    void loadRemoteProviderKeys().then((remoteKeys) => {
+      if (remoteKeys) {
+        saveProviderKeys(remoteKeys);
+        setApiKeys(remoteKeys);
+      }
+    });
   }, [setImages]);
 
   const saveKey = () => {
@@ -222,11 +228,14 @@ export default function GeneratorPage() {
         // Save to MongoDB history
         if (user) {
           try {
+            const accessToken = await ensureAccessToken();
             await fetch('/api/history/save', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+              },
               body: JSON.stringify({
-                userId: user.id,
                 filename: img.file.name,
                 title: data.metadata.title,
                 description: data.metadata.description,

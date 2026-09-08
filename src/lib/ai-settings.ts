@@ -1,4 +1,5 @@
 import { AI_DEFAULT_MODELS, AI_PROVIDERS } from "@/lib/ai-models";
+import { ensureAccessToken } from "@/lib/auth";
 
 export type StoredProviderKey = {
   id: string;
@@ -65,6 +66,37 @@ export function saveProviderKeys(keys: StoredProviderKey[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(getScopedKey(KEYS_STORAGE), JSON.stringify(keys));
   localStorage.setItem(getScopedKey(LEGACY_KEYS_STORAGE), JSON.stringify(keys));
+}
+
+export async function loadRemoteProviderKeys(): Promise<StoredProviderKey[] | null> {
+  const token = await ensureAccessToken();
+  if (!token) return null;
+  const response = await fetch('/api/settings/keys', { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) return null;
+  const data = await response.json() as { keys?: StoredProviderKey[] };
+  return Array.isArray(data.keys) ? data.keys : null;
+}
+
+export async function saveRemoteProviderKey(key: StoredProviderKey) {
+  const token = await ensureAccessToken();
+  if (!token) return null;
+  const response = await fetch('/api/settings/keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ provider: key.provider, key: key.key }),
+  });
+  return response.ok;
+}
+
+export async function deleteRemoteProviderKey(id: string) {
+  const token = await ensureAccessToken();
+  if (!token) return false;
+  const response = await fetch('/api/settings/keys', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id }),
+  });
+  return response.ok;
 }
 
 export function getProviderModels(): Record<string, string> {

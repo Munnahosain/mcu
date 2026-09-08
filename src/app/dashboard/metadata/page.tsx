@@ -4,7 +4,7 @@ import { useState } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAuthUser, getDownloadsKey } from "@/lib/auth";
-import { getProviderKeys, getProviderModels } from "@/lib/ai-settings";
+import { getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
 
 type DownloadRecord = {
   id: string;
@@ -49,7 +49,9 @@ export default function MetadataGeneratorPage() {
   };
 
   const generateMetadata = async (imgId?: string) => {
-    const providerKeys = getProviderKeys();
+    const remoteKeys = await loadRemoteProviderKeys();
+    if (remoteKeys) saveProviderKeys(remoteKeys);
+    const providerKeys = remoteKeys || getProviderKeys();
     const apiKeys = providerKeys.map((item) => item.key);
     const provider = providerKeys[0]?.provider || 'Groq';
     const model = getProviderModels()[provider] || 'meta-llama/llama-4-scout-17b-16e-instruct';

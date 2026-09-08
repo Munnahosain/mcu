@@ -5,6 +5,7 @@ export const maxDuration = 60;
 
 const MAX_IMAGE_SIZE = 512;
 const JPEG_QUALITY = 65;
+const MAX_PROVIDER_IMAGE_BYTES = 900_000;
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 800;
 
@@ -50,6 +51,9 @@ function getFriendlyProviderMessage(error: unknown): string {
   if (status === 429 || message.includes('rate limit') || message.includes('quota')) {
     return 'Rate limit reached. Please retry in a moment or add another API key.';
   }
+  if (status === 413 || message.includes('too large') || message.includes('payload')) {
+    return 'The image request was too large for this AI provider. The image was compressed; try a smaller image or another provider.';
+  }
   if (status === 503 || message.includes('capacity') || message.includes('overloaded')) {
     return 'AI provider is temporarily busy. Please retry or switch provider.';
   }
@@ -82,10 +86,21 @@ async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs = 55
 }
 
 async function prepareImage(imageBuffer: Buffer): Promise<{ base64: string; dataUrl: string }> {
-  const resized = await sharp(imageBuffer)
-    .resize(MAX_IMAGE_SIZE, MAX_IMAGE_SIZE, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: JPEG_QUALITY })
+  let size = MAX_IMAGE_SIZE;
+  let quality = JPEG_QUALITY;
+  let resized = await sharp(imageBuffer)
+    .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality })
     .toBuffer();
+
+  while (resized.length > MAX_PROVIDER_IMAGE_BYTES && size > 256) {
+    size = Math.max(Math.floor(size * 0.75), 256);
+    quality = Math.max(quality - 10, 40);
+    resized = await sharp(imageBuffer)
+      .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality })
+      .toBuffer();
+  }
 
   const base64 = resized.toString('base64');
   const dataUrl = `data:image/jpeg;base64,${base64}`;

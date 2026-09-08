@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { User, Key, Bell, Moon, Shield, ExternalLink, Plus, X } from "lucide-react";
 import { AI_PROVIDERS, AI_DEFAULT_MODELS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
-import { getActiveProvider, getProviderKeys, getProviderModels, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 
 const PROVIDER_KEY_URLS: Record<string, string> = {
   Groq: "https://console.groq.com/keys",
@@ -23,6 +23,21 @@ export default function SettingsPage() {
     return getProviderKeys().filter((item) => item.provider === provider);
   });
   const [newApiKey, setNewApiKey] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void loadRemoteProviderKeys().then((remoteKeys) => {
+      if (!active || !remoteKeys) return;
+      const localKeys = getProviderKeys();
+      if (remoteKeys.length === 0 && localKeys.length > 0) {
+        for (const key of localKeys) void saveRemoteProviderKey(key);
+        return;
+      }
+      saveProviderKeys(remoteKeys);
+      setApiKeys(remoteKeys.filter((item) => item.provider === activeProvider));
+    });
+    return () => { active = false; };
+  }, [activeProvider]);
   
   // Model Selection State
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -54,13 +69,17 @@ export default function SettingsPage() {
 
   const addKey = () => {
     if (!newApiKey.trim() || apiKeys.some((item) => item.key === newApiKey.trim())) return;
-    saveKeys([...apiKeys, { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider }]);
+    const newKey = { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider };
+    saveKeys([...apiKeys, newKey]);
+    void saveRemoteProviderKey(newKey);
     setNewApiKey("");
   };
 
   const removeKey = (index: number) => {
+    const removed = apiKeys[index];
     const updated = apiKeys.filter((_, i) => i !== index);
     saveKeys(updated);
+    if (removed) void deleteRemoteProviderKey(removed.id);
   };
 
   // Save Model
