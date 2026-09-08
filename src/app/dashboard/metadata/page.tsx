@@ -5,6 +5,7 @@ import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIc
 import { motion, AnimatePresence } from "framer-motion";
 import { getAuthUser, getDownloadsKey } from "@/lib/auth";
 import { getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
+import { compressImageForUpload } from "@/lib/client-image";
 
 type DownloadRecord = {
   id: string;
@@ -73,7 +74,7 @@ export default function MetadataGeneratorPage() {
 
       try {
         const formData = new FormData();
-        formData.append("image", img.file);
+        formData.append("image", await compressImageForUpload(img.file));
         formData.append("apiKey", apiKeys[keyIdx]);
         formData.append("provider", provider);
         formData.append("model", model);

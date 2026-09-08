@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon, Plus, X, ExternalLink, Wand2, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
+import { compressImageForUpload } from "@/lib/client-image";
 
 interface ImageFile {
   id: string;
@@ -60,7 +61,7 @@ export default function PromptsPage() {
       
       try {
         const formData = new FormData();
-        formData.append("image", img.file);
+        formData.append("image", await compressImageForUpload(img.file));
         formData.append("apiKey", apiKeys[keyIdx]);
         formData.append("provider", provider);
         formData.append("charLength", charLength.toString());

@@ -23,21 +23,26 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const userId = await getAuthenticatedUserId(req);
-  if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  const body = await req.json() as { provider?: string; key?: string; model?: string };
-  const provider = body.provider?.trim();
-  const key = body.key?.trim();
-  if (!provider || !key) return NextResponse.json({ success: false, error: 'Provider and API key are required.' }, { status: 400 });
-  await connectToDatabase();
-  const encryptedKey = encryptSecret(key);
-  const fingerprint = crypto.createHash('sha256').update(key).digest('hex');
-  const saved = await ProviderKey.findOneAndUpdate(
-    { userId, provider, fingerprint },
-    { userId, provider, encryptedKey, fingerprint, lastFour: key.slice(-4), model: body.model || '' },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  ).lean();
-  return NextResponse.json({ success: true, key: { id: String(saved._id), provider: saved.provider, lastFour: saved.lastFour, model: saved.model } });
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json() as { provider?: string; key?: string; model?: string };
+    const provider = body.provider?.trim();
+    const key = body.key?.trim();
+    if (!provider || !key) return NextResponse.json({ success: false, error: 'Provider and API key are required.' }, { status: 400 });
+    await connectToDatabase();
+    const encryptedKey = encryptSecret(key);
+    const fingerprint = crypto.createHash('sha256').update(key).digest('hex');
+    const saved = await ProviderKey.findOneAndUpdate(
+      { userId, provider, fingerprint },
+      { userId, provider, encryptedKey, fingerprint, lastFour: key.slice(-4), model: body.model || '' },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    return NextResponse.json({ success: true, key: { id: String(saved._id), provider: saved.provider, lastFour: saved.lastFour, model: saved.model } });
+  } catch (error) {
+    console.error('Provider key save error:', error);
+    return NextResponse.json({ success: false, error: 'Could not save API key. Check MongoDB and ENCRYPTION_KEY configuration.' }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: Request) {

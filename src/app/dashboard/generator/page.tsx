@@ -25,6 +25,7 @@ import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-mod
 import PremiumSlider from "@/components/PremiumSlider";
 import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
+import { compressImageForUpload } from "@/lib/client-image";
 
 type ImageFile = GeneratorImageFile;
 
@@ -164,11 +165,13 @@ export default function GeneratorPage() {
     });
   };
 
-  const generateSingle = async (img: ImageFile) => {
+  const generateSingle = async (img: ImageFile, attemptedKeyIds = new Set<string>()) => {
     const providerKeys = apiKeys.filter(key => key.provider === activeProvider);
-    const keyIndex = providerKeys.length ? keyCursorRef.current++ % providerKeys.length : 0;
-    const keyToUse = providerKeys[keyIndex]?.key;
-    if (!keyToUse) {
+    const availableKeys = providerKeys.filter(key => !attemptedKeyIds.has(key.id));
+    const keyIndex = availableKeys.length ? keyCursorRef.current++ % availableKeys.length : 0;
+    const keyObject = availableKeys[keyIndex];
+    const keyToUse = keyObject?.key;
+    if (!keyToUse || !keyObject) {
       alert(`Please set an API key for ${activeProvider}`);
       return;
     }
@@ -177,7 +180,8 @@ export default function GeneratorPage() {
 
     try {
       const fd = new FormData();
-      fd.append('image', img.file);
+      const uploadImage = await compressImageForUpload(img.file);
+      fd.append('image', uploadImage);
       fd.append('apiKey', keyToUse);
       fd.append('provider', activeProvider);
       fd.append('model', activeModel);
@@ -257,6 +261,14 @@ export default function GeneratorPage() {
 
     } catch (err: unknown) {
       console.error(err);
+      const errorMessage = err instanceof Error ? err.message : 'Generation failed';
+      const isRateLimited = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota');
+      if (isRateLimited && providerKeys.some(key => key.id !== keyObject.id && !attemptedKeyIds.has(key.id))) {
+        const nextAttempts = new Set(attemptedKeyIds);
+        nextAttempts.add(keyObject.id);
+        await generateSingle(img, nextAttempts);
+        return;
+      }
       const message = err instanceof DOMException && err.name === 'AbortError'
         ? 'Generation timed out after 35 seconds. Check the provider, model, and API key, then retry.'
         : err instanceof Error ? err.message : 'Generation failed';

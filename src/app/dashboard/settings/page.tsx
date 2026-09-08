@@ -23,6 +23,7 @@ export default function SettingsPage() {
     return getProviderKeys().filter((item) => item.provider === provider);
   });
   const [newApiKey, setNewApiKey] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -67,11 +68,16 @@ export default function SettingsPage() {
     saveProviderKeys([...otherProviderKeys, ...keys]);
   };
 
-  const addKey = () => {
+  const addKey = async () => {
     if (!newApiKey.trim() || apiKeys.some((item) => item.key === newApiKey.trim())) return;
+    setSaveError("");
     const newKey = { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider };
-    saveKeys([...apiKeys, newKey]);
-    void saveRemoteProviderKey(newKey);
+    const saved = await saveRemoteProviderKey(newKey);
+    if (!saved) {
+      setSaveError("API key could not be saved to your account. Please check your login session and MongoDB configuration.");
+      return;
+    }
+    saveKeys([...apiKeys, saved]);
     setNewApiKey("");
   };
 
@@ -206,7 +212,8 @@ export default function SettingsPage() {
                     </a>
                   </div>
 
-                  <p className="text-xs text-gray-400">Add multiple keys to automatically failover if one hits a rate limit.</p>
+                    <p className="text-xs text-gray-400">Add multiple keys to automatically failover if one hits a rate limit.</p>
+                    {saveError && <p className="text-xs text-red-400">{saveError}</p>}
                   
                   <div className="flex items-center gap-2">
                       <input

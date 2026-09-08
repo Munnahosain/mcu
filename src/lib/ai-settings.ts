@@ -77,7 +77,7 @@ export async function loadRemoteProviderKeys(): Promise<StoredProviderKey[] | nu
   return Array.isArray(data.keys) ? data.keys : null;
 }
 
-export async function saveRemoteProviderKey(key: StoredProviderKey) {
+export async function saveRemoteProviderKey(key: StoredProviderKey): Promise<StoredProviderKey | null> {
   const token = await ensureAccessToken();
   if (!token) return null;
   const response = await fetch('/api/settings/keys', {
@@ -85,7 +85,11 @@ export async function saveRemoteProviderKey(key: StoredProviderKey) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ provider: key.provider, key: key.key }),
   });
-  return response.ok;
+  if (!response.ok) return null;
+  const data = await response.json() as { key?: Partial<StoredProviderKey> };
+  return data.key?.id
+    ? { ...key, ...data.key, key: key.key }
+    : null;
 }
 
 export async function deleteRemoteProviderKey(id: string) {
