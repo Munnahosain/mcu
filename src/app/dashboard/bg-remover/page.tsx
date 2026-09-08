@@ -97,7 +97,7 @@ export default function BackgroundRemoverPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto pb-20 pt-6 px-4">
+    <div className="w-full max-w-7xl mx-auto pb-20 pt-2 px-1 sm:px-2">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <div className="w-12 h-12 border border-primary/20 bg-primary/5 rounded-2xl flex items-center justify-center shrink-0 shadow-sm text-primary">

@@ -1,11 +1,5 @@
-import DashboardLayout from "@/app/dashboard/layout";
-import IconStudio from "@/components/IconStudio/IconStudio";
+import { redirect } from "next/navigation";
 
-export default function ThreeDIconStudioPage() {
-  return (
-    <DashboardLayout>
-      <IconStudio />
-    </DashboardLayout>
-  );
+export default function ThreeDIconStudioRedirect() {
+  redirect("/dashboard/3d-icon-studio");
 }
-

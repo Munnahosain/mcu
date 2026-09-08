@@ -7,9 +7,10 @@ type ThemeMode = "dark" | "light";
 
 interface ThemeToggleProps {
   className?: string;
+  iconOnly?: boolean;
 }
 
-export default function ThemeToggle({ className = "" }: ThemeToggleProps) {
+export default function ThemeToggle({ className = "", iconOnly = false }: ThemeToggleProps) {
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [mounted, setMounted] = useState(false);
 
@@ -48,6 +49,20 @@ export default function ThemeToggle({ className = "" }: ThemeToggleProps) {
     document.documentElement.classList.remove("dark", "light");
     document.documentElement.classList.add(next);
   };
+
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={toggleTheme}
+        title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--sidebar-border)] bg-foreground/[0.04] text-primary hover:bg-primary/15 transition-all duration-200 ${className}`.trim()}
+      >
+        {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+      </button>
+    );
+  }
 
   return (
     <button

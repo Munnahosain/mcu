@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon, Plus, X, ExternalLink, Wand2, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
+import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { compressImageForUpload } from "@/lib/client-image";
 
 interface ImageFile {
@@ -36,9 +36,7 @@ export default function PromptsPage() {
   
   const generatePrompts = async () => {
     // Read from global settings
-    const remoteKeys = await loadRemoteProviderKeys();
-    if (remoteKeys) saveProviderKeys(remoteKeys);
-    const providerKeys = remoteKeys || getProviderKeys();
+    const providerKeys = await syncProviderKeys();
     const apiKeys = providerKeys.map((item) => item.key);
     const provider = providerKeys[0]?.provider || 'Groq';
     const model = getProviderModels()[provider] || 'meta-llama/llama-4-scout-17b-16e-instruct';
@@ -270,7 +268,7 @@ export default function PromptsPage() {
                   initial={{ opacity: 0, scale: 0.8, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
-                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                   className={`glass-card overflow-hidden flex flex-col group relative ${img.status === 'generating' ? 'border-primary ring-1 ring-primary/50' : ''}`}
                 >
                    <div className="p-3 bg-black/40 border-b border-white/10 flex justify-between items-center text-xs">

@@ -241,7 +241,7 @@ export default function ColorPalettePage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 pt-6 px-4 bg-background text-primary">
+    <div className="w-full max-w-7xl mx-auto pb-20 pt-2 px-1 sm:px-2 bg-background text-primary">
       {/* Hidden canvas for pixel picking */}
       <canvas ref={canvasRef} className="hidden" />
 

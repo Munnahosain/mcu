@@ -1,4 +1,5 @@
 @import "tailwindcss";
+/* MCUSTOCK Theme System */
 @custom-variant dark (&:is(.dark *));
 
 @theme {

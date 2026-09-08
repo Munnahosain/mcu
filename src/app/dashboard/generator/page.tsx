@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken, getAuthUser, AuthUser } from "@/lib/auth";
 import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
 import PremiumSlider from "@/components/PremiumSlider";
-import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
 import { compressImageForUpload } from "@/lib/client-image";
 
@@ -86,30 +86,40 @@ export default function GeneratorPage() {
     setApiKeys(getProviderKeys());
     setSelectedModels(getProviderModels());
     setActiveProvider(getActiveProvider());
-    void loadRemoteProviderKeys().then((remoteKeys) => {
-      if (remoteKeys) {
-        saveProviderKeys(remoteKeys);
-        setApiKeys(remoteKeys);
-      }
+    void syncProviderKeys().then((syncedKeys) => {
+      setApiKeys(syncedKeys);
     });
   }, [setImages]);
 
-  const saveKey = () => {
-    if (!apiKeyInput.trim()) return;
-    const newKeys = [...apiKeys, {
+  const saveKey = async () => {
+    const trimmed = apiKeyInput.trim();
+    if (!trimmed || apiKeys.some(k => k.key === trimmed && k.provider === activeProvider)) return;
+    const newKeyObj = {
       id: crypto.randomUUID(),
-      key: apiKeyInput.trim(),
+      key: trimmed,
       provider: activeProvider
-    }];
+    };
+    const newKeys = [...apiKeys, newKeyObj];
     setApiKeys(newKeys);
     saveProviderKeys(newKeys);
     setApiKeyInput('');
+
+    const res = await saveRemoteProviderKey(newKeyObj);
+    if ('key' in res && res.key?.id) {
+      const updatedKeys = newKeys.map(k => k.id === newKeyObj.id ? { ...k, id: res.key.id } : k);
+      setApiKeys(updatedKeys);
+      saveProviderKeys(updatedKeys);
+    }
   };
 
   const removeKey = (id: string) => {
+    const target = apiKeys.find(k => k.id === id);
     const newKeys = apiKeys.filter(k => k.id !== id);
     setApiKeys(newKeys);
     saveProviderKeys(newKeys);
+    if (target?.id) {
+      void deleteRemoteProviderKey(target.id);
+    }
   };
 
   const activeProviderKeyObj = apiKeys.find(k => k.provider === activeProvider);
@@ -355,7 +365,7 @@ export default function GeneratorPage() {
               layoutId="generator-mode-indicator"
               className="segmented-tabs-indicator"
               animate={{ x: activeTab === "Prompt" ? "100%" : "0%" }}
-              transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.7 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             />
             <button 
               onClick={() => setActiveTab("Metadata")}

@@ -2,12 +2,40 @@
 
 import { useState, Fragment } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Sparkles, Star, Layers, HelpCircle, ChevronDown, Crown } from "lucide-react";
+import {
+  Check,
+  Crown,
+  Sparkles,
+  Star,
+  Zap,
+  Shield,
+  ArrowRight,
+  HelpCircle,
+  Layers,
+  ChevronDown,
+  Box,
+  Eraser,
+  BarChart3,
+  Activity,
+  Type,
+  Grid3X3,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import MarketingChrome from "../../components/MarketingChrome";
-import MarketingFooter from "../../components/MarketingFooter";
 
-const tiers = [
+type PlanTier = {
+  id: string;
+  name: string;
+  badge?: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  description: string;
+  features: string[];
+  cta: string;
+  popular?: boolean;
+  color: string;
+};
+
+const PLANS: PlanTier[] = [
   {
     id: "free",
     name: "Free Starter",
@@ -23,14 +51,14 @@ const tiers = [
       "Smart Grid basic compositions",
       "Community support",
     ],
-    cta: "Start Free",
-    ctaLink: "/signup",
-    popular: false,
-    icon: "Tier 01",
+    cta: "Current Plan",
+    color: "#a1a1aa",
   },
   {
     id: "pro",
     name: "Pro Creator",
+    badge: "MOST POPULAR",
+    popular: true,
     monthlyPrice: 19,
     annualPrice: 15,
     description: "Uncapped power for professional stock artists, 3D designers, and agencies.",
@@ -46,14 +74,13 @@ const tiers = [
       "Commercial Vector SVG & WebP Exports",
       "Priority API speed & Groq/Gemini models",
     ],
-    cta: "Get Pro Access",
-    ctaLink: "/signup?plan=pro",
-    popular: true,
-    icon: "Tier 02",
+    cta: "Upgrade to Pro",
+    color: "#16c784",
   },
   {
     id: "agency",
     name: "Studio Agency",
+    badge: "MAX PERFORMANCE",
     monthlyPrice: 49,
     annualPrice: 39,
     description: "High-volume throughput, custom API keys, and dedicated team workflows.",
@@ -67,10 +94,8 @@ const tiers = [
       "Early beta access to new Studio AI tools",
       "24/7 Dedicated Account Manager & VIP Support",
     ],
-    cta: "Contact Sales",
-    ctaLink: "/signup?plan=agency",
-    popular: false,
-    icon: "Tier 03",
+    cta: "Get Agency Access",
+    color: "#38bdf8",
   },
 ];
 
@@ -113,7 +138,7 @@ const FAQS = [
   },
 ];
 
-export default function PricingPage() {
+export default function DashboardPricingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("annual");
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
@@ -122,25 +147,21 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="liquid-page-shell min-h-screen pt-28 bg-background text-foreground">
-      <MarketingChrome activePath="/pricing" />
-      <main className="mx-auto max-w-7xl space-y-16 px-4 pb-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl space-y-6 text-center">
-          <div className="flex justify-center">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest shadow-sm">
-              <Sparkles className="h-4 w-4" />
-              Annual plans save 20%
-            </div>
+    <div className="w-full max-w-7xl mx-auto space-y-12 pb-20 pt-2 font-sans">
+        {/* Header Hero Banner */}
+        <div className="text-center space-y-4 max-w-3xl mx-auto pt-4">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest shadow-sm">
+            <Crown className="h-4 w-4" /> Transparent Subscription Plans
           </div>
-          <h1 className="liquid-title text-4xl font-extrabold tracking-tight md:text-6xl text-foreground">
-            Simple, Transparent Pricing
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-foreground">
+            Supercharge Your Stock Portfolio with <span className="text-primary">MCUSTOCK AI</span>
           </h1>
-          <p className="liquid-copy text-base md:text-lg text-foreground/70 max-w-2xl mx-auto">
-            Choose the plan that matches your portfolio scale. No hidden fees, just seamless AI workflows and ultra high-res exports.
+          <p className="text-sm sm:text-base text-foreground/60 leading-relaxed font-medium">
+            Unlock unlimited AI metadata, 4K 3D Icon Studio exports, vector trading charts, and high-throughput batch tools.
           </p>
 
           {/* Monthly / Annual Billing Toggle */}
-          <div className="pt-2 flex items-center justify-center gap-3">
+          <div className="pt-4 flex items-center justify-center gap-3">
             <span className={`text-xs font-bold ${billingCycle === "monthly" ? "text-primary font-extrabold" : "text-foreground/60"}`}>
               Monthly
             </span>
@@ -162,76 +183,70 @@ export default function PricingPage() {
         </div>
 
         {/* Pricing Cards Grid */}
-        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 pt-4 md:grid-cols-3 items-stretch">
-          {tiers.map((tier) => {
-            const price = billingCycle === "annual" ? tier.annualPrice : tier.monthlyPrice;
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          {PLANS.map((plan) => {
+            const price = billingCycle === "annual" ? plan.annualPrice : plan.monthlyPrice;
             return (
               <div
-                key={tier.name}
-                className={`liquid-card border rounded-3xl relative flex flex-col justify-between overflow-hidden p-8 transition-all duration-300 ${
-                  tier.popular
-                    ? "z-10 md:scale-105 border-primary bg-primary/[0.04] shadow-[0_0_35px_rgba(22,199,132,0.18)] ring-1 ring-primary/40"
-                    : "border-foreground/10 bg-foreground/[0.02] hover:border-primary/40 shadow-xl"
+                key={plan.id}
+                className={`relative rounded-3xl border p-6 sm:p-8 flex flex-col justify-between transition-all duration-300 ${
+                  plan.popular
+                    ? "border-primary bg-primary/[0.04] shadow-[0_0_35px_rgba(22,199,132,0.18)] scale-[1.02] ring-1 ring-primary/40"
+                    : "border-[var(--card-border)] bg-[var(--card-bg)] hover:border-primary/40 shadow-xl"
                 }`}
               >
-                {tier.popular ? (
-                  <div className="absolute left-1/2 top-0 flex -translate-x-1/2 items-center gap-2 rounded-b-xl bg-primary px-4 py-1.5 text-xs font-bold uppercase tracking-[0.25em] text-background shadow-lg">
-                    <Star className="h-4 w-4 fill-current" />
-                    Most Popular
+                {/* Popular Badge */}
+                {plan.badge && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-primary text-background font-black text-[10px] tracking-widest uppercase shadow-md flex items-center gap-1.5">
+                    <Star className="h-3 w-3 fill-current" /> {plan.badge}
                   </div>
-                ) : null}
+                )}
 
-                <div>
-                  <div className="mb-6 flex items-start justify-between gap-4 pt-2">
-                    <div>
-                      <h2 className="liquid-title mb-2 text-2xl font-black text-foreground">
-                        {tier.name}
-                      </h2>
-                      <p className="liquid-copy text-xs text-foreground/60 min-h-[32px]">{tier.description}</p>
-                    </div>
-                    <span className="rounded-xl border border-primary/20 flex items-center justify-center bg-primary/10 text-primary px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] shrink-0">
-                      {tier.icon}
-                    </span>
+                <div className="space-y-6">
+                  {/* Plan Name & Desc */}
+                  <div>
+                    <h2 className="text-xl font-black text-foreground">{plan.name}</h2>
+                    <p className="mt-1.5 text-xs text-foreground/60 min-h-[36px]">{plan.description}</p>
                   </div>
 
-                  <div className="h-px bg-foreground/10 my-4" />
-
-                  <div className="my-6 flex items-baseline gap-2 text-foreground">
-                    <span className="liquid-title text-5xl font-black tracking-tight">
+                  {/* Price */}
+                  <div className="flex items-baseline gap-1.5 pt-2 border-t border-foreground/10">
+                    <span className="text-4xl sm:text-5xl font-black tracking-tight text-foreground">
                       ${price}
                     </span>
-                    <span className="liquid-copy text-xs font-bold text-foreground/50">
+                    <span className="text-xs font-bold text-foreground/50">
                       / month {billingCycle === "annual" && price > 0 && "(billed yearly)"}
                     </span>
                   </div>
 
+                  {/* CTA Button */}
                   <Link
-                    href={tier.ctaLink}
-                    className={`w-full px-4 py-3 rounded-2xl text-xs font-bold transition-all text-center flex items-center justify-center gap-2 ${
-                      tier.popular
+                    href={plan.id === "free" ? "/dashboard/generator" : `/dashboard/settings?upgrade=${plan.id}`}
+                    className={`w-full py-3 px-4 rounded-2xl text-xs font-bold tracking-wide transition-all flex items-center justify-center gap-2 ${
+                      plan.popular
                         ? "bg-primary text-background hover:bg-primary-hover shadow-lg shadow-primary/25 active:scale-[0.98]"
                         : "border border-primary/30 text-primary hover:bg-primary/10"
                     }`}
                   >
-                    {tier.cta}
-                    <ArrowRight className="h-4 w-4" />
+                    {plan.cta} <ArrowRight className="h-4 w-4" />
                   </Link>
 
-                  <div className="mt-8 space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-primary/70">
-                      What&apos;s included
-                    </p>
-                    {tier.features.map((feature) => (
-                      <div key={feature} className="flex items-start gap-2.5 text-xs font-medium text-foreground/80">
+                  {/* Feature Checklist */}
+                  <div className="space-y-3 pt-4 border-t border-foreground/10">
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-primary/70 block">
+                      Included Features:
+                    </span>
+                    {plan.features.map((feat, i) => (
+                      <div key={i} className="flex items-start gap-2.5 text-xs font-medium text-foreground/80">
                         <Check className="h-4 w-4 text-primary shrink-0 mt-0.5 stroke-[2.5]" />
-                        <span>{feature}</span>
+                        <span>{feat}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div className="pt-6 text-center text-[11px] text-foreground/40 font-medium">
-                  {tier.id === "free" ? "No credit card required" : "14-day money-back guarantee"}
+                  {plan.id === "free" ? "No credit card required" : "14-day money-back guarantee"}
                 </div>
               </div>
             );
@@ -239,7 +254,7 @@ export default function PricingPage() {
         </div>
 
         {/* Feature Comparison Table */}
-        <div className="mx-auto max-w-6xl rounded-3xl border border-foreground/10 bg-foreground/[0.02] p-6 sm:p-8 space-y-6 shadow-xl">
+        <div className="rounded-3xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8 space-y-6 shadow-xl">
           <div className="text-center space-y-1">
             <h2 className="text-xl sm:text-2xl font-black text-foreground flex items-center justify-center gap-2">
               <Layers className="h-5 w-5 text-primary" /> Detailed Feature Comparison
@@ -281,7 +296,7 @@ export default function PricingPage() {
         </div>
 
         {/* FAQ Accordion */}
-        <div className="mx-auto max-w-4xl rounded-3xl border border-foreground/10 bg-foreground/[0.02] p-6 sm:p-8 space-y-6 shadow-xl">
+        <div className="rounded-3xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8 space-y-6 shadow-xl">
           <div className="text-center space-y-1">
             <h2 className="text-xl sm:text-2xl font-black text-foreground flex items-center justify-center gap-2">
               <HelpCircle className="h-5 w-5 text-primary" /> Frequently Asked Questions
@@ -322,8 +337,6 @@ export default function PricingPage() {
             })}
           </div>
         </div>
-      </main>
-      <MarketingFooter />
     </div>
   );
 }

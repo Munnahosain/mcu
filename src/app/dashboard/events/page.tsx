@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, DownloadCloud, Heart, Sparkles, MapPin, Tag, Plus, X, Globe, Image as ImageIcon, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAllEvents, CalendarEvent, EventCategory } from "@/data/events2026";
-import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 
 export default function EventCalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Default for SSR
@@ -180,9 +180,8 @@ export default function EventCalendarPage() {
 
       try {
          const activeProvider = getActiveProvider();
-         const remoteKeys = await loadRemoteProviderKeys();
-         if (remoteKeys) saveProviderKeys(remoteKeys);
-         const activeKeyObj = (remoteKeys || getProviderKeys()).find((k) => k.provider === activeProvider);
+         const providerKeys = await syncProviderKeys();
+         const activeKeyObj = providerKeys.find((k) => k.provider === activeProvider);
          const activeModel = getProviderModels()[activeProvider] || '';
          
          if (!activeKeyObj?.key) {
@@ -430,12 +429,12 @@ export default function EventCalendarPage() {
                         key={month}
                         onClick={() => setMonthDirectly(idx)}
                         whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.97 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                         className={`event-month-button rounded-full px-5 sm:px-6 py-2.5 text-sm font-bold transition-all duration-200 relative min-w-[72px] ${idx === currentMonth ? '!text-[#052716]' : 'text-primary/60 hover:text-primary'}`}
                     >
                         {idx === currentMonth && (
-                            <motion.div layoutId="activeMonthPill" transition={{ type: "spring", stiffness: 420, damping: 30 }} className="absolute inset-0 rounded-full shadow-[0_4px_16px_rgba(22,199,132,0.3)] -z-10 bg-primary" />
+                            <motion.div layoutId="activeMonthPill" transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-0 rounded-full shadow-[0_4px_16px_rgba(22,199,132,0.3)] -z-10 bg-primary" />
                         )}
                         {month}
                     </motion.button>

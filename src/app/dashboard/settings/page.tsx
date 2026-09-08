@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { User, Key, Bell, Moon, Shield, ExternalLink, Plus, X } from "lucide-react";
 import { AI_PROVIDERS, AI_DEFAULT_MODELS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
-import { getActiveProvider, getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 
 const PROVIDER_KEY_URLS: Record<string, string> = {
   Groq: "https://console.groq.com/keys",
@@ -27,15 +28,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let active = true;
-    void loadRemoteProviderKeys().then((remoteKeys) => {
-      if (!active || !remoteKeys) return;
-      const localKeys = getProviderKeys();
-      if (remoteKeys.length === 0 && localKeys.length > 0) {
-        for (const key of localKeys) void saveRemoteProviderKey(key);
-        return;
-      }
-      saveProviderKeys(remoteKeys);
-      setApiKeys(remoteKeys.filter((item) => item.provider === activeProvider));
+    void syncProviderKeys().then((syncedKeys) => {
+      if (!active) return;
+      setApiKeys(syncedKeys.filter((item) => item.provider === activeProvider));
     });
     return () => { active = false; };
   }, [activeProvider]);
@@ -73,11 +68,11 @@ export default function SettingsPage() {
     setSaveError("");
     const newKey = { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider };
     const saved = await saveRemoteProviderKey(newKey);
-    if (!saved) {
-      setSaveError("API key could not be saved to your account. Please check your login session and MongoDB configuration.");
+    if ('error' in saved) {
+      setSaveError(saved.error);
       return;
     }
-    saveKeys([...apiKeys, saved]);
+    saveKeys([...apiKeys, saved.key]);
     setNewApiKey("");
   };
 
@@ -110,17 +105,29 @@ export default function SettingsPage() {
              { id: "appearance", label: "Appearance", icon: <Moon className="w-4 h-4" /> },
              { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
              { id: "billing", label: "Billing & Plan", icon: <Shield className="w-4 h-4" /> },
-           ].map(tab => (
-              <button 
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                  activeTab === tab.id ? "border border-primary bg-primary/20 text-primary shadow-[0_0_12px_rgba(22,199,132,0.15)]" : "border-0 bg-transparent text-foreground/50 hover:text-primary hover:bg-primary/5"
-                }`}
-              >
-                {tab.icon} {tab.label}
-              </button>
-            ))}
+            ].map(tab => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button 
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors duration-200 ${
+                    isActive ? "text-primary font-semibold" : "text-foreground/60 hover:text-primary hover:bg-primary/5"
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeSettingsTabPill"
+                      className="absolute inset-0 rounded-xl bg-primary/15 border border-primary/40 shadow-[0_0_12px_rgba(22,199,132,0.12)] -z-0"
+                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-3">
+                    {tab.icon} {tab.label}
+                  </span>
+                </button>
+              );
+            })}
         </aside>
 
         {/* Settings Content */}

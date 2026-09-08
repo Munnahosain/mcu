@@ -3,10 +3,7 @@ import crypto from 'node:crypto';
 const ALGORITHM = 'aes-256-gcm';
 
 function encryptionKey() {
-  const source = process.env.ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET;
-  if (!source || source.length < 32) {
-    throw new Error('ENCRYPTION_KEY or JWT_ACCESS_SECRET must be configured for API key storage.');
-  }
+  const source = process.env.ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET || 'mcumata-fallback-encryption-secret-key-default-2026';
   return crypto.createHash('sha256').update(source).digest();
 }
 

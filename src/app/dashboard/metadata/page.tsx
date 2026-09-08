@@ -4,7 +4,7 @@ import { useState } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAuthUser, getDownloadsKey } from "@/lib/auth";
-import { getProviderKeys, getProviderModels, loadRemoteProviderKeys, saveProviderKeys } from "@/lib/ai-settings";
+import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { compressImageForUpload } from "@/lib/client-image";
 
 type DownloadRecord = {
@@ -50,9 +50,7 @@ export default function MetadataGeneratorPage() {
   };
 
   const generateMetadata = async (imgId?: string) => {
-    const remoteKeys = await loadRemoteProviderKeys();
-    if (remoteKeys) saveProviderKeys(remoteKeys);
-    const providerKeys = remoteKeys || getProviderKeys();
+    const providerKeys = await syncProviderKeys();
     const apiKeys = providerKeys.map((item) => item.key);
     const provider = providerKeys[0]?.provider || 'Groq';
     const model = getProviderModels()[provider] || 'meta-llama/llama-4-scout-17b-16e-instruct';
@@ -262,7 +260,7 @@ export default function MetadataGeneratorPage() {
                   initial={{ opacity: 0, scale: 0.8, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
-                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                   className="glass-card overflow-hidden flex flex-col group relative"
                 >
                   <div className="relative aspect-video bg-black shrink-0 overflow-hidden">

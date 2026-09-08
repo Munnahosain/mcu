@@ -1,6 +1,5 @@
-import TradingPage from "../dashboard/trading/page";
-import DashboardLayout from "../dashboard/layout";
+import { redirect } from "next/navigation";
 
-export default function LiveTradingChartsRoute() {
-  return <DashboardLayout><TradingPage /></DashboardLayout>;
+export default function LiveTradingChartsRedirect() {
+  redirect("/dashboard/trading");
 }

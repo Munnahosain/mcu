@@ -32,6 +32,13 @@ function getScopedValue(key: string) {
   const scopedValue = localStorage.getItem(scopedKey);
   if (scopedValue !== null) return scopedValue;
 
+  const guestKey = `${key}:guest`;
+  const guestValue = localStorage.getItem(guestKey);
+  if (guestValue !== null && getStorageScope() !== "guest") {
+    localStorage.setItem(scopedKey, guestValue);
+    return guestValue;
+  }
+
   const legacyValue = localStorage.getItem(key);
   if (legacyValue !== null && getStorageScope() !== "guest") {
     localStorage.setItem(scopedKey, legacyValue);
@@ -71,36 +78,93 @@ export function saveProviderKeys(keys: StoredProviderKey[]) {
 export async function loadRemoteProviderKeys(): Promise<StoredProviderKey[] | null> {
   const token = await ensureAccessToken();
   if (!token) return null;
-  const response = await fetch('/api/settings/keys', { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) return null;
-  const data = await response.json() as { keys?: StoredProviderKey[] };
-  return Array.isArray(data.keys) ? data.keys : null;
+  try {
+    const response = await fetch('/api/settings/keys', { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) return null;
+    const data = await response.json() as { keys?: StoredProviderKey[] };
+    return Array.isArray(data.keys) ? data.keys : null;
+  } catch {
+    return null;
+  }
 }
 
-export async function saveRemoteProviderKey(key: StoredProviderKey): Promise<StoredProviderKey | null> {
+export async function saveRemoteProviderKey(key: StoredProviderKey): Promise<{ key: StoredProviderKey } | { error: string }> {
   const token = await ensureAccessToken();
-  if (!token) return null;
-  const response = await fetch('/api/settings/keys', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ provider: key.provider, key: key.key }),
-  });
-  if (!response.ok) return null;
-  const data = await response.json() as { key?: Partial<StoredProviderKey> };
-  return data.key?.id
-    ? { ...key, ...data.key, key: key.key }
-    : null;
+  if (!token) return { error: 'Your session has expired. Please sign in again.' };
+  try {
+    const response = await fetch('/api/settings/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ provider: key.provider, key: key.key }),
+    });
+    const data = await response.json().catch(() => ({})) as { key?: Partial<StoredProviderKey>; error?: string };
+    if (!response.ok) return { error: data.error || `API key save failed (${response.status}).` };
+    if (!data.key?.id) return { error: 'API key save returned an invalid response.' };
+    return { key: { ...key, ...data.key, key: key.key } };
+  } catch {
+    return { error: 'Network error while saving API key.' };
+  }
 }
 
 export async function deleteRemoteProviderKey(id: string) {
   const token = await ensureAccessToken();
   if (!token) return false;
-  const response = await fetch('/api/settings/keys', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ id }),
-  });
-  return response.ok;
+  try {
+    const response = await fetch('/api/settings/keys', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function syncProviderKeys(): Promise<StoredProviderKey[]> {
+  const localKeys = getProviderKeys();
+  const remoteKeys = await loadRemoteProviderKeys();
+
+  if (remoteKeys === null) {
+    return localKeys;
+  }
+
+  // If remote is empty but local has keys, sync local keys up to MongoDB
+  if (remoteKeys.length === 0 && localKeys.length > 0) {
+    const synced: StoredProviderKey[] = [];
+    for (const lk of localKeys) {
+      const res = await saveRemoteProviderKey(lk);
+      if ('key' in res && res.key) {
+        synced.push(res.key);
+      } else {
+        synced.push(lk);
+      }
+    }
+    saveProviderKeys(synced);
+    return synced;
+  }
+
+  // If remote has keys, merge them with any unique local keys
+  if (remoteKeys.length > 0) {
+    const remoteKeySet = new Set(remoteKeys.map((k) => `${k.provider}:${k.key.trim()}`));
+    const missingInRemote = localKeys.filter((lk) => !remoteKeySet.has(`${lk.provider}:${lk.key.trim()}`));
+
+    const merged = [...remoteKeys];
+    for (const m of missingInRemote) {
+      const res = await saveRemoteProviderKey(m);
+      if ('key' in res && res.key) {
+        merged.push(res.key);
+      } else {
+        merged.push(m);
+      }
+    }
+    saveProviderKeys(merged);
+    return merged;
+  }
+
+  // If both are empty
+  saveProviderKeys([]);
+  return [];
 }
 
 export function getProviderModels(): Record<string, string> {
