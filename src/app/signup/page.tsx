@@ -126,7 +126,7 @@ export default function SignupPage() {
 
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-widest">Password</label>
-              <div className="relative">
+              <div className="relative w-full">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -138,7 +138,7 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 z-10 flex items-center pr-3 text-primary/40 hover:text-primary transition-colors"
+                  className="!absolute !right-0 !top-1/2 !z-10 !m-0 !flex !h-auto !w-auto !-translate-y-1/2 !items-center !rounded-none !bg-transparent !p-0 !pr-3 !text-primary/40 hover:!text-primary"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
