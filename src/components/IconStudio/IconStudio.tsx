@@ -23,7 +23,6 @@ import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import ThemeToggle from "@/components/ThemeToggle";
 
 export type MaterialKind = "glass" | "plastic" | "glossy" | "frosted" | "metallic" | "iridescent";
 export type Resolution = "1K" | "2K" | "4K";
@@ -94,14 +93,22 @@ const sampleSvgChat = `<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/
 </svg>`;
 
 const presetColors = [
-  ["Blue", "#3b82f6"],
+  ["Emerald", "#16c784"],
   ["Cyan", "#06b6d4"],
+  ["Blue", "#3b82f6"],
   ["Purple", "#8b5cf6"],
   ["Pink", "#ec4899"],
-  ["Green", "#16c784"],
   ["Orange", "#f97316"],
+  ["Gold", "#f5c451"],
+  ["Lime", "#84cc16"],
   ["Red", "#ef4444"],
+  ["Teal", "#14b8a6"],
+  ["Violet", "#a855f7"],
+  ["Rose", "#fb7185"],
+  ["Amber", "#d97706"],
+  ["Sky", "#38bdf8"],
   ["White", "#ffffff"],
+  ["Dark", "#1e293b"],
 ];
 
 const materialLabels: Record<MaterialKind, string> = {
@@ -754,7 +761,27 @@ export default function IconStudio() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ThemeToggle />
+          {/* Quick Color Samples Swatches */}
+          <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)]">
+            <Palette className="h-3.5 w-3.5 text-primary mr-1 shrink-0" />
+            <span className="text-[10px] font-bold text-[var(--text-secondary)] mr-1">Colors:</span>
+            {presetColors.slice(0, 8).map(([label, col]) => (
+              <button
+                key={col}
+                onClick={() => {
+                  updateControl("colorMode", "custom");
+                  updateColor(col);
+                }}
+                className={`h-5 w-5 rounded-full border transition-all hover:scale-115 ${
+                  controls.colorMode === "custom" && controls.color === col
+                    ? "ring-2 ring-primary scale-110 border-white"
+                    : "border-white/20 opacity-85 hover:opacity-100"
+                }`}
+                style={{ backgroundColor: col }}
+                title={`Apply ${label}`}
+              />
+            ))}
+          </div>
           <label className="flex h-11 items-center gap-2 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-xs font-bold text-[var(--text-secondary)] cursor-pointer">
             <input type="checkbox" checked={controls.alpha} onChange={(event) => updateControl("alpha", event.target.checked)} className="accent-primary cursor-pointer" />
             Alpha (Transparent)

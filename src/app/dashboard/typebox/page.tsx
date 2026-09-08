@@ -53,7 +53,21 @@ import {
   renderTypeboxToCanvas,
   generateSvgExport,
 } from "@/lib/typebox/engine";
-import ThemeToggle from "@/components/ThemeToggle";
+
+export const TYPEBOX_COLOR_PRESETS = [
+  { name: "Neon Emerald", textColor: "#16c784", bgColor: "#051610" },
+  { name: "Cyber Cyan", textColor: "#00f2fe", bgColor: "#041525" },
+  { name: "Sunset Orange", textColor: "#ff6b4a", bgColor: "#1f0904" },
+  { name: "Electric Purple", textColor: "#c084fc", bgColor: "#17062e" },
+  { name: "Solar Gold", textColor: "#f5c451", bgColor: "#1c1402" },
+  { name: "Acid Lime", textColor: "#ccff00", bgColor: "#0f1c02" },
+  { name: "Hot Pink", textColor: "#ff007f", bgColor: "#20030c" },
+  { name: "Pure White", textColor: "#ffffff", bgColor: "#09090b" },
+  { name: "Monochrome Light", textColor: "#09090b", bgColor: "#f4f4f5" },
+  { name: "Sky Blue", textColor: "#38bdf8", bgColor: "#071a2e" },
+  { name: "Fire Coral", textColor: "#ff4757", bgColor: "#1f0507" },
+  { name: "Pastel Lavender", textColor: "#e0e7ff", bgColor: "#1e1b4b" },
+];
 
 // Pro Slider Component matching 3D Icon Studio style with full number input support
 function StudioSlider({
@@ -454,7 +468,33 @@ export default function TypeboxStudioPage() {
             </button>
           </div>
 
-          <ThemeToggle />
+          {/* Quick Color Samples Swatches */}
+          <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)]">
+            <Palette className="h-3.5 w-3.5 text-primary mr-1 shrink-0" />
+            <span className="text-[10px] font-bold text-[var(--text-secondary)] mr-0.5">Colors:</span>
+            {TYPEBOX_COLOR_PRESETS.slice(0, 8).map((preset) => (
+              <button
+                key={preset.name}
+                onClick={() => {
+                  setState((prev) => ({
+                    ...prev,
+                    color: {
+                      ...prev.color,
+                      textColor: preset.textColor,
+                      bgColor: preset.bgColor,
+                    },
+                  }));
+                }}
+                className={`h-5 w-5 rounded-full border transition-all hover:scale-115 relative overflow-hidden ${
+                  state.color.textColor === preset.textColor
+                    ? "ring-2 ring-primary scale-110 border-white"
+                    : "border-white/20 opacity-85 hover:opacity-100"
+                }`}
+                style={{ backgroundColor: preset.textColor }}
+                title={`Apply ${preset.name} (${preset.textColor})`}
+              />
+            ))}
+          </div>
 
           <label className="flex h-11 items-center gap-2 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-xs font-bold text-[var(--text-secondary)] cursor-pointer">
             <input
@@ -797,6 +837,45 @@ export default function TypeboxStudioPage() {
                     className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] px-2.5 text-xs font-bold uppercase font-mono outline-none focus:border-primary disabled:opacity-30"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Preset Color Samples */}
+            <div className="space-y-2 pt-1 border-t border-[var(--card-border)]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                Color Palette Samples
+              </span>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                {TYPEBOX_COLOR_PRESETS.map((preset) => {
+                  const isSelected = state.color.textColor === preset.textColor;
+                  return (
+                    <button
+                      key={preset.name}
+                      onClick={() => {
+                        setState((prev) => ({
+                          ...prev,
+                          color: {
+                            ...prev.color,
+                            textColor: preset.textColor,
+                            bgColor: preset.bgColor,
+                          },
+                        }));
+                      }}
+                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border text-[11px] font-bold transition-all ${
+                        isSelected
+                          ? "border-2 border-primary bg-primary/20 text-primary shadow-sm"
+                          : "border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-foreground"
+                      }`}
+                      title={`${preset.name}: Text ${preset.textColor} / BG ${preset.bgColor}`}
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full border border-white/20 shrink-0"
+                        style={{ backgroundColor: preset.textColor }}
+                      />
+                      <span className="truncate">{preset.name.split(" ")[0]}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </section>
