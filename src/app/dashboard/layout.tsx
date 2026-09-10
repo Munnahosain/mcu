@@ -181,7 +181,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 marginBottom: isSidebarOpen ? 8 : 0,
               }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden text-[10px] font-bold uppercase tracking-[0.2em] text-primary/60 px-3.5"
+              className="overflow-hidden text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/50 px-3.5"
             >
               Main Menu
             </motion.div>
@@ -197,15 +197,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   onClick={() => { if (isMobile && window.innerWidth < 768) setSidebarOpen(false); }}
                   className={`group relative flex items-center h-12 w-full rounded-2xl transition-colors duration-200 px-2.5 ${
                     isActive
-                      ? "text-white"
-                      : "text-zinc-400 hover:text-white hover:bg-primary/5"
+                      ? "text-primary font-bold"
+                      : "text-foreground/75 hover:text-foreground hover:bg-foreground/[0.04]"
                   }`}
                   title={!isSidebarOpen ? link.name : undefined}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="activeSidebarLinkPill"
-                      className="absolute inset-0 rounded-2xl bg-primary/15 border border-primary/40 shadow-[0_0_20px_rgba(22,199,132,0.18)] -z-0"
+                      className="absolute inset-0 rounded-2xl bg-primary/15 border border-primary/35 shadow-[0_0_20px_rgba(22,199,132,0.12)] -z-0"
                       transition={{
                         duration: 0.22,
                         ease: [0.22, 1, 0.36, 1],
@@ -213,7 +213,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     />
                   )}
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center">
-                    <Icon className={`w-5 h-5 shrink-0 transition-colors duration-200 ${isActive ? "text-primary stroke-[2.4] drop-shadow-[0_0_8px_rgba(22,199,132,0.4)]" : "text-zinc-400 group-hover:text-primary stroke-[2]"}`} />
+                    <Icon className={`w-5 h-5 shrink-0 transition-colors duration-200 ${isActive ? "text-primary stroke-[2.4] drop-shadow-[0_0_8px_rgba(22,199,132,0.35)]" : "text-foreground/50 group-hover:text-primary stroke-[2]"}`} />
                   </div>
                   <motion.span
                     initial={false}
@@ -223,7 +223,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       x: isSidebarOpen ? 0 : -6,
                     }}
                     transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    className={`ml-3 overflow-hidden whitespace-nowrap text-sm relative z-10 ${isActive ? "text-white font-bold tracking-wide" : "text-zinc-300 font-medium group-hover:text-white"}`}
+                    className={`ml-3 overflow-hidden whitespace-nowrap text-sm relative z-10 ${isActive ? "text-primary font-bold tracking-wide" : "font-medium group-hover:text-foreground"}`}
                   >
                     {link.name}
                   </motion.span>
@@ -297,13 +297,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 className="min-w-0 overflow-hidden whitespace-nowrap"
               >
-                <span className="block truncate text-xs font-bold text-primary">{user.name}</span>
-                <span className="block truncate text-[10px] font-semibold text-primary/55">{user.email}</span>
+                <span className="block truncate text-xs font-bold text-foreground">{user.name}</span>
+                <span className="block truncate text-[10px] font-medium text-foreground/50">{user.email}</span>
               </motion.div>
             </div>
             <button
               onClick={handleSignOut}
-              className="flex items-center h-11 w-full rounded-2xl px-2.5 text-sm font-bold text-primary border border-primary/20 hover:bg-primary/10 transition-colors duration-200"
+              className="flex items-center h-11 w-full rounded-2xl px-2.5 text-sm font-bold text-foreground/75 hover:text-red-500 hover:bg-red-500/10 border border-foreground/10 hover:border-red-500/30 transition-colors duration-200"
               title="Sign Out"
             >
               <div className="flex h-7 w-7 shrink-0 items-center justify-center">

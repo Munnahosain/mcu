@@ -82,6 +82,23 @@ function adjustLayoutForGridSize(currentWidgets: WidgetInstance[], newCols: numb
   return [...adjustedWidgets, ...newWidgets];
 }
 
+interface BentoSettings {
+  canvasWidth: number;
+  canvasHeight: number;
+  cols: number;
+  rows: number;
+  gap: number;
+  margins: number;
+  radius: number;
+  complexity: number;
+  hBias: number;
+  maxColSpan: number;
+  maxRowSpan: number;
+  gridStyle: string;
+}
+
+type BentoExportFormat = 'png' | 'jpg' | 'svg';
+
 export default function BentoBuilderPage() {
   const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -92,7 +109,7 @@ export default function BentoBuilderPage() {
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
   const [mergeTargetCell, setMergeTargetCell] = useState<{x: number, y: number} | null>(null);
 
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<BentoSettings>({
     canvasWidth: 400,
     canvasHeight: 300,
     cols: 4,
@@ -130,14 +147,14 @@ export default function BentoBuilderPage() {
         const data = JSON.parse(saved);
         setWidgets(data.widgets || APPLE_PRESET);
         if (data.settings) setSettings(prev => ({ ...prev, ...data.settings }));
-      } catch (e) { setWidgets([...APPLE_PRESET]); }
+      } catch { setWidgets([...APPLE_PRESET]); }
     } else { setWidgets([...APPLE_PRESET]); }
   }, []);
 
-  const updateSetting = (key: string, value: any) => {
+  const updateSetting = <K extends keyof BentoSettings>(key: K, value: BentoSettings[K]) => {
     if (key === 'cols' || key === 'rows') {
-      const newCols = key === 'cols' ? value : settings.cols;
-      const newRows = key === 'rows' ? value : settings.rows;
+      const newCols = key === 'cols' ? (value as number) : settings.cols;
+      const newRows = key === 'rows' ? (value as number) : settings.rows;
       setWidgets(prev => adjustLayoutForGridSize(prev, newCols, newRows));
     } else if (['complexity', 'hBias', 'maxColSpan', 'maxRowSpan', 'gridStyle'].includes(key)) {
       const activeSettings = { ...settings, [key]: value };
@@ -576,8 +593,8 @@ ${rectangles}
               <AnimatePresence>
                 {showExportMenu && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full mt-2 right-0 z-[100] w-48 bg-background p-2" style={{ backgroundColor: 'var(--background)', backgroundImage: 'none' }}>
-                    {['png', 'jpg', 'svg'].map((fmt) => (
-                      <button key={fmt} onClick={() => exportLayout(fmt as any)} className="bento-export-option w-full text-left px-4 py-3 text-[11px] font-black uppercase tracking-widest text-primary/80 hover:bg-primary/5 rounded-xl transition-all">Download as {fmt.toUpperCase()}</button>
+                    {(['png', 'jpg', 'svg'] as const).map((fmt) => (
+                      <button key={fmt} onClick={() => exportLayout(fmt)} className="bento-export-option w-full text-left px-4 py-3 text-[11px] font-black uppercase tracking-widest text-primary/80 hover:bg-primary/5 rounded-xl transition-all">Download as {fmt.toUpperCase()}</button>
                     ))}
                   </motion.div>
                 )}
@@ -706,7 +723,14 @@ ${rectangles}
   );
 }
 
-function CollapsibleSection({ title, isCollapsed, onToggle, children }: any) {
+interface CollapsibleSectionProps {
+  title: string;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+function CollapsibleSection({ title, isCollapsed, onToggle, children }: CollapsibleSectionProps) {
   return (
     <div className="border-t border-primary/20 first:border-t-0">
       <button onClick={onToggle} className="w-full flex items-center justify-between px-6 py-6 hover:bg-primary/5 transition-colors group">

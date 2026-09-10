@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { REFRESH_COOKIE, refreshCookieOptions } from '@/lib/jwt';
+import { REFRESH_COOKIE, refreshCookieOptions } from '@/server/auth/jwt';
 
 export async function POST() {
   const response = NextResponse.json({ success: true });

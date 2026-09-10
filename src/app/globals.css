@@ -4692,6 +4692,24 @@ input[type="range"]::-moz-range-thumb,
   box-shadow: 0 0 0 1px rgba(22, 199, 132, 0.32) !important;
 }
 
+html.light input[type="range"]::-webkit-slider-runnable-track,
+html.light .liquid-slider::-webkit-slider-runnable-track,
+html.light .sidebar-range-pro::-webkit-slider-runnable-track,
+html.light .premium-slider-track input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg,
+      var(--primary) 0 var(--range-progress, var(--slider-progress, 50%)),
+      #d9dee4 var(--range-progress, var(--slider-progress, 50%)) 100%) !important;
+}
+
+html.light input[type="range"]::-moz-range-track,
+html.light .liquid-slider::-moz-range-track,
+html.light .sidebar-range-pro::-moz-range-track,
+html.light .premium-slider-track input[type="range"]::-moz-range-track {
+  background: linear-gradient(90deg,
+      var(--primary) 0 var(--range-progress, var(--slider-progress, 50%)),
+      #d9dee4 var(--range-progress, var(--slider-progress, 50%)) 100%) !important;
+}
+
 a.liquid-button-primary,
 a.liquid-button-secondary,
 .liquid-button-primary,
@@ -4965,75 +4983,21 @@ html.light .liquid-theme-switch {
   transform: translateX(-18px);
 }
 
-/* Active buttons must stay obvious after the minimal reset above. */
-.liquid-button-primary,
-button[class~="bg-primary"],
-a[class~="bg-primary"],
-button[class~="bg-foreground"],
-a[class~="bg-foreground"],
-button[class~="text-background"],
-a[class~="text-background"],
-button[class~="text-white"],
-a[class~="text-white"],
-button[class~="force-white"],
-a[class~="force-white"] {
+/* Scoped primary button utility */
+.liquid-button-primary {
   border-color: var(--primary) !important;
-  color: var(--background) !important;
+  color: #ffffff !important;
   background: var(--primary) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 4px 14px rgba(22, 199, 132, 0.25) !important;
 }
 
-.liquid-button-primary:hover,
-button[class~="bg-primary"]:hover,
-a[class~="bg-primary"]:hover,
-button[class~="bg-foreground"]:hover,
-a[class~="bg-foreground"]:hover,
-button[class~="text-background"]:hover,
-a[class~="text-background"]:hover,
-button[class~="text-white"]:hover,
-a[class~="text-white"]:hover,
-button[class~="force-white"]:hover,
-a[class~="force-white"]:hover {
+.liquid-button-primary:hover {
   border-color: var(--primary-hover) !important;
-  color: var(--background) !important;
   background: var(--primary-hover) !important;
 }
 
-.liquid-button-primary svg,
-button[class~="bg-primary"] svg,
-a[class~="bg-primary"] svg,
-button[class~="bg-foreground"] svg,
-a[class~="bg-foreground"] svg,
-button[class~="text-background"] svg,
-a[class~="text-background"] svg,
-button[class~="text-white"] svg,
-a[class~="text-white"] svg,
-button[class~="force-white"] svg,
-a[class~="force-white"] svg {
-  color: var(--background) !important;
-}
-
-button[aria-pressed="true"],
-button[data-active="true"],
-a[aria-current="page"],
-a[aria-current="page"]:hover {
-  border-color: var(--primary) !important;
-  color: var(--background) !important;
-  background: var(--primary) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
-}
-
-a[aria-current="page"] svg {
-  color: var(--background) !important;
-}
-
-button[class*="bg-primary/20"],
-a[class*="bg-primary/20"],
-button[class*="bg-primary\\/20"],
-a[class*="bg-primary\\/20"] {
-  border-color: rgba(22, 199, 132, 0.48) !important;
-  color: var(--primary) !important;
-  background: rgba(22, 199, 132, 0.18) !important;
+.liquid-button-primary svg {
+  color: #ffffff !important;
 }
 
 .liquid-switch,
@@ -5414,7 +5378,7 @@ html.light body aside.bento-settings-solid {
 }
 
 /* ---- UNIFIED BUTTON DESIGN SYSTEM ---- */
-/* Inactive option buttons, category tabs, and platform pills: clean text ONLY (no borders, no box backgrounds) */
+/* Inactive option buttons, category tabs, and platform pills */
 .platform-options button,
 .platform-options button:not([data-active="true"]),
 button.platform-button:not([data-active="true"]),
@@ -5426,7 +5390,7 @@ button.platform-button:not([data-active="true"]),
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
-  color: rgba(22, 199, 132, 0.65) !important;
+  color: var(--text-secondary) !important;
   border-radius: 9999px !important;
   transition: color 0.2s ease, opacity 0.2s ease !important;
 }
@@ -5438,8 +5402,8 @@ button.platform-button:not([data-active="true"]):hover,
 .segmented-tabs button:not(.is-active):not([data-selected="true"]):hover {
   border: 0 !important;
   outline: none !important;
-  background: transparent !important;
-  background-color: transparent !important;
+  background: rgba(22, 199, 132, 0.08) !important;
+  background-color: rgba(22, 199, 132, 0.08) !important;
   color: var(--primary) !important;
   box-shadow: none !important;
 }
@@ -5452,22 +5416,34 @@ button.platform-button[data-active="true"],
 .filter-tab[data-active="true"] {
   border: 1.5px solid var(--primary) !important;
   border-radius: 9999px !important;
-  background: rgba(22, 199, 132, 0.16) !important;
-  background-color: rgba(22, 199, 132, 0.16) !important;
+  background: rgba(22, 199, 132, 0.14) !important;
+  background-color: rgba(22, 199, 132, 0.14) !important;
   color: var(--primary) !important;
-  box-shadow: 0 0 16px rgba(22, 199, 132, 0.28) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 16px rgba(22, 199, 132, 0.2) !important;
 }
 
 /* Segmented main tabs (like Metadata / Prompt switcher in screenshot) */
+.segmented-tabs {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  border-radius: 14px !important;
+}
+
+.segmented-tabs button {
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+}
+
 .segmented-tabs button.is-active,
 .segmented-tabs button[data-selected="true"] {
   border: 0 !important;
-  border-radius: 9999px !important;
+  border-radius: 10px !important;
   background: var(--primary) !important;
   background-color: var(--primary) !important;
-  color: #052716 !important;
+  color: #ffffff !important;
   font-weight: 700 !important;
-  box-shadow: 0 4px 14px rgba(22, 199, 132, 0.3) !important;
+  box-shadow: 0 2px 10px rgba(22, 199, 132, 0.28) !important;
 }
 
 html body button.bento-export-option {

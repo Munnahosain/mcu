@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken, getAuthUser, AuthUser } from "@/lib/auth";
 import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
 import PremiumSlider from "@/components/PremiumSlider";
-import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
+import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
 import { compressImageForUpload } from "@/lib/client-image";
 
@@ -63,7 +63,7 @@ export default function GeneratorPage() {
   // API Keys
   const [isApiKeyModalOpen, setApiKeyModalOpen] = useState(false);
   const [activeProvider, setActiveProvider] = useState("Groq");
-  const [apiKeys, setApiKeys] = useState<{ id: string; key: string; provider: string }[]>([]);
+  const [apiKeys, setApiKeys] = useState<StoredProviderKey[]>([]);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [batchMode, setBatchMode] = useState(false);
   const keyCursorRef = useRef(0);
@@ -94,10 +94,11 @@ export default function GeneratorPage() {
   const saveKey = async () => {
     const trimmed = apiKeyInput.trim();
     if (!trimmed || apiKeys.some(k => k.key === trimmed && k.provider === activeProvider)) return;
-    const newKeyObj = {
+    const newKeyObj: StoredProviderKey = {
       id: crypto.randomUUID(),
       key: trimmed,
-      provider: activeProvider
+      provider: activeProvider,
+      lastFour: trimmed.slice(-4),
     };
     const newKeys = [...apiKeys, newKeyObj];
     setApiKeys(newKeys);
@@ -180,11 +181,7 @@ export default function GeneratorPage() {
     const availableKeys = providerKeys.filter(key => !attemptedKeyIds.has(key.id));
     const keyIndex = availableKeys.length ? keyCursorRef.current++ % availableKeys.length : 0;
     const keyObject = availableKeys[keyIndex];
-    const keyToUse = keyObject?.key;
-    if (!keyToUse || !keyObject) {
-      alert(`Please set an API key for ${activeProvider}`);
-      return;
-    }
+    const keyToUse = keyObject?.key || '';
 
     setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'generating', error: undefined } : i));
 
@@ -192,7 +189,9 @@ export default function GeneratorPage() {
       const fd = new FormData();
       const uploadImage = await compressImageForUpload(img.file);
       fd.append('image', uploadImage);
-      fd.append('apiKey', keyToUse);
+      if (keyToUse) {
+        fd.append('apiKey', keyToUse);
+      }
       fd.append('provider', activeProvider);
       fd.append('model', activeModel);
 
@@ -221,9 +220,15 @@ export default function GeneratorPage() {
         fd.append('instructions', instr);
       }
 
+      const token = await ensureAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const controller = new AbortController();
       const requestTimeout = window.setTimeout(() => controller.abort(), 60000);
-      const res = await fetch(endpoint, { method: 'POST', body: fd, signal: controller.signal }).finally(() => {
+      const res = await fetch(endpoint, { method: 'POST', headers, body: fd, signal: controller.signal }).finally(() => {
         window.clearTimeout(requestTimeout);
       });
       const data = await res.json().catch(() => ({ success: false, error: `Generation service returned HTTP ${res.status}` }));
@@ -394,27 +399,27 @@ export default function GeneratorPage() {
         <div className="border border-[var(--card-border)] rounded-2xl p-4 space-y-5 bg-[var(--card-bg)]">
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">AI Provider</label>
+              <label className="block text-[10px] font-bold text-foreground/60 uppercase tracking-wider mb-1">AI Provider</label>
               <select
                 value={activeProvider}
                 onChange={e => {
                   setActiveProvider(e.target.value);
                   saveActiveProvider(e.target.value);
                 }}
-                className="w-full text-xs font-semibold bg-background border border-primary/20 rounded-xl px-3 py-2 text-primary outline-none"
+                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground outline-none focus:border-primary"
               >
                 {AI_PROVIDER_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Model</label>
+              <label className="block text-[10px] font-bold text-foreground/60 uppercase tracking-wider mb-1">Model</label>
               <select
                 value={activeModel}
                 onChange={e => {
                   setSelectedModels(prev => ({ ...prev, [activeProvider]: e.target.value }));
                   saveProviderModel(activeProvider, e.target.value);
                 }}
-                className="w-full text-xs font-semibold bg-background border border-primary/20 rounded-xl px-3 py-2 text-primary outline-none"
+                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground outline-none focus:border-primary"
               >
                 {(AI_PROVIDERS[activeProvider] || []).map(m => <option key={m.id} value={m.id}>{m.label}{m.badge ? ` - ${m.badge}` : ''}</option>)}
               </select>
@@ -432,9 +437,9 @@ export default function GeneratorPage() {
           </div>
 
           {activeTab === "Metadata" ? (
-            <div className="space-y-6 pt-4 border-t border-primary/10">
+            <div className="space-y-6 pt-4 border-t border-[var(--card-border)]">
               <div>
-                <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-wider mb-3">Export Platform</label>
+                <label className="block text-[10px] font-bold text-foreground/60 uppercase tracking-wider mb-3">Export Platform</label>
                 <div className="platform-options grid grid-cols-2 gap-2">
                   {platforms.map(p => (
                     <button
@@ -453,21 +458,21 @@ export default function GeneratorPage() {
               <PremiumSlider label="TITLE LENGTH" value={titleLength} min={10} max={200} suffix=" CHARS" onChange={setTitleLength} />
               <PremiumSlider label="DESCRIPTION LENGTH" value={descriptionLength} min={50} max={300} suffix=" CHARS" onChange={setDescriptionLength} />
               <PremiumSlider label="KEYWORDS COUNT" value={keywordsCount} min={5} max={50} suffix=" KEYS" onChange={setKeywordsCount} />
-              <div className="space-y-2 border-t border-primary/10 pt-4">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-primary/60">Additional keywords</label>
-                <input value={additionalKeywords} onChange={e => setAdditionalKeywords(e.target.value)} placeholder="e.g. sustainable, editorial, premium" className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-primary/60">Negative title words</label>
-                <input value={negativeTitleWords} onChange={e => setNegativeTitleWords(e.target.value)} placeholder="e.g. best, beautiful, amazing" className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-primary/60">Negative keywords</label>
-                <input value={negativeKeywords} onChange={e => setNegativeKeywords(e.target.value)} placeholder="e.g. logo, watermark, blurry" className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
-                <label className="flex items-center justify-between pt-2 text-xs font-semibold text-primary">
+              <div className="space-y-2 border-t border-[var(--card-border)] pt-4">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground/60">Additional keywords</label>
+                <input value={additionalKeywords} onChange={e => setAdditionalKeywords(e.target.value)} placeholder="e.g. sustainable, editorial, premium" className="w-full rounded-xl border border-[var(--card-border)] bg-background px-3 py-2 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary" />
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground/60">Negative title words</label>
+                <input value={negativeTitleWords} onChange={e => setNegativeTitleWords(e.target.value)} placeholder="e.g. best, beautiful, amazing" className="w-full rounded-xl border border-[var(--card-border)] bg-background px-3 py-2 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary" />
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground/60">Negative keywords</label>
+                <input value={negativeKeywords} onChange={e => setNegativeKeywords(e.target.value)} placeholder="e.g. logo, watermark, blurry" className="w-full rounded-xl border border-[var(--card-border)] bg-background px-3 py-2 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary" />
+                <label className="flex items-center justify-between pt-2 text-xs font-semibold text-foreground">
                   Auto CSV download
                   <input type="checkbox" checked={autoCsvDownload} onChange={e => setAutoCsvDownload(e.target.checked)} className="h-4 w-4 accent-primary" />
                 </label>
               </div>
             </div>
           ) : (
-            <div className="space-y-5 pt-4 border-t border-primary/10 text-xs text-primary font-semibold">
+            <div className="space-y-5 pt-4 border-t border-[var(--card-border)] text-xs text-foreground font-semibold">
               <div className="flex items-center justify-between">
                 <span>White Background</span>
                 <input type="checkbox" checked={whiteBg} onChange={e => setWhiteBg(e.target.checked)} className="w-4 h-4 accent-primary" />
@@ -483,7 +488,7 @@ export default function GeneratorPage() {
               <div className="space-y-3 pt-2">
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-primary/60 uppercase">Prefix</span>
+                    <span className="text-[10px] font-bold text-foreground/60 uppercase">Prefix</span>
                     <input type="checkbox" checked={usePrefix} onChange={e => setUsePrefix(e.target.checked)} className="accent-primary" />
                   </div>
                   {usePrefix && (
@@ -492,14 +497,14 @@ export default function GeneratorPage() {
                       value={prefixText}
                       onChange={e => setPrefixText(e.target.value)}
                       placeholder="Start prompt with..."
-                      className="w-full bg-background border border-primary/25 rounded-xl px-3 py-1.5 text-xs text-primary outline-none"
+                      className="w-full bg-background border border-[var(--card-border)] rounded-xl px-3 py-1.5 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary"
                     />
                   )}
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-primary/60 uppercase">Suffix</span>
+                    <span className="text-[10px] font-bold text-foreground/60 uppercase">Suffix</span>
                     <input type="checkbox" checked={useSuffix} onChange={e => setUseSuffix(e.target.checked)} className="accent-primary" />
                   </div>
                   {useSuffix && (
@@ -508,14 +513,14 @@ export default function GeneratorPage() {
                       value={suffixText}
                       onChange={e => setSuffixText(e.target.value)}
                       placeholder="End prompt with..."
-                      className="w-full bg-background border border-primary/25 rounded-xl px-3 py-1.5 text-xs text-primary outline-none"
+                      className="w-full bg-background border border-[var(--card-border)] rounded-xl px-3 py-1.5 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary"
                     />
                   )}
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-primary/60 uppercase">Negative Exclude</span>
+                    <span className="text-[10px] font-bold text-foreground/60 uppercase">Negative Exclude</span>
                     <input type="checkbox" checked={useNegativePrompt} onChange={e => setUseNegativePrompt(e.target.checked)} className="accent-primary" />
                   </div>
                   {useNegativePrompt && (
@@ -524,7 +529,7 @@ export default function GeneratorPage() {
                       value={negativePromptText}
                       onChange={e => setNegativePromptText(e.target.value)}
                       placeholder="Exclude terms..."
-                      className="w-full bg-background border border-primary/25 rounded-xl px-3 py-1.5 text-xs text-primary outline-none"
+                      className="w-full bg-background border border-[var(--card-border)] rounded-xl px-3 py-1.5 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary"
                     />
                   )}
                 </div>

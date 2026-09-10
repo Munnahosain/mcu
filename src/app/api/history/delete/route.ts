@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { clearUserHistory, deleteHistoryItem, hasMongoDbConfig } from '@/lib/database';
-import { getAuthenticatedUserId } from '@/lib/request-auth';
+import { clearUserHistory, deleteHistoryItem, hasMongoDbConfig } from '@/server/db/database';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 
 export async function DELETE(req: Request) {
   try {

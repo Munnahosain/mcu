@@ -28,3 +28,10 @@ export function createDevUser(name: string, email: string, password: string) {
 export function findDevUser(email: string) {
   return store.users.get(email.toLowerCase().trim()) ?? null;
 }
+
+export function findDevUserById(id: string) {
+  for (const user of store.users.values()) {
+    if (user.id === id) return user;
+  }
+  return null;
+}

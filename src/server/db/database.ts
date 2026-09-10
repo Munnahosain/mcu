@@ -1,8 +1,8 @@
 import { connectToDatabase } from './mongodb';
-import { User } from './models/User';
-import { MetadataHistory } from './models/MetadataHistory';
-import { createDevUser, findDevUser } from './dev-auth';
-import { verifyPassword } from './hash';
+import { User } from '../models/User';
+import { MetadataHistory } from '../models/MetadataHistory';
+import { createDevUser, findDevUser, findDevUserById } from '../auth/dev-auth';
+import { verifyPassword } from '../auth/hash';
 import { hasMongoDbConfig } from './database-config';
 
 export { getDatabaseProvider, hasMongoDbConfig } from './database-config';
@@ -31,13 +31,13 @@ export async function tryDevSignup(name: string, email: string, password: string
 }
 
 export async function findUserByEmail(email: string) {
-  if (!hasMongoDbConfig()) return null;
+  if (!hasMongoDbConfig()) return findDevUser(email);
   await connectToDatabase();
   return await User.findOne({ email }).lean();
 }
 
 export async function findUserById(id: string) {
-  if (!hasMongoDbConfig()) return null;
+  if (!hasMongoDbConfig()) return findDevUserById(id);
   await connectToDatabase();
   return await User.findById(id).lean();
 }

@@ -3,8 +3,11 @@ import crypto from 'node:crypto';
 const ALGORITHM = 'aes-256-gcm';
 
 function encryptionKey() {
-  const source = process.env.ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET || 'mcumata-fallback-encryption-secret-key-default-2026';
-  return crypto.createHash('sha256').update(source).digest();
+  const source = process.env.ENCRYPTION_KEY;
+  if (!source || source.trim().length < 32) {
+    throw new Error('ENCRYPTION_KEY must be configured with at least 32 characters in environment variables.');
+  }
+  return crypto.createHash('sha256').update(source.trim()).digest();
 }
 
 export function encryptSecret(value: string) {

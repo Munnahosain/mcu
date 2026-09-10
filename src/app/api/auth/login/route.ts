@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server';
-import { findUserByEmail, hasMongoDbConfig, tryDevLogin } from '@/lib/database';
-import { verifyPassword } from '@/lib/hash';
-import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/lib/jwt';
+import { findUserByEmail, hasMongoDbConfig, tryDevLogin } from '@/server/db/database';
+import { verifyPassword } from '@/server/auth/hash';
+import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/server/auth/jwt';
+
+import { enforceRateLimit } from '@/server/auth/rate-limit';
 
 export async function POST(req: Request) {
   try {
+    const rateLimitError = enforceRateLimit(req, null, {
+      limit: 15,
+      windowMs: 60 * 1000,
+      keyPrefix: 'auth-login',
+    });
+    if (rateLimitError) return rateLimitError;
+
     const { email, password } = await req.json();
 
     if (!email || !password) {

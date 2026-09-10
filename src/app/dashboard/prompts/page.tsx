@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon, Plus, X, ExternalLink, Wand2, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ensureAccessToken } from "@/lib/auth";
 import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { compressImageForUpload } from "@/lib/client-image";
 
@@ -37,12 +38,11 @@ export default function PromptsPage() {
   const generatePrompts = async () => {
     // Read from global settings
     const providerKeys = await syncProviderKeys();
-    const apiKeys = providerKeys.map((item) => item.key);
     const provider = providerKeys[0]?.provider || 'Groq';
     const model = getProviderModels()[provider] || 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-    if (apiKeys.length === 0) {
-      alert("Please configure your Groq API Keys in the Settings page.");
+    if (providerKeys.length === 0) {
+      alert("Please configure your API Keys in the Settings page.");
       return;
     }
     
@@ -50,6 +50,11 @@ export default function PromptsPage() {
     let keyIdx = currentKeyIndex;
     
     const pendingImages = images.filter(i => i.status !== 'done');
+    const token = await ensureAccessToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
       
     for (let i = 0; i < pendingImages.length; i++) {
       const img = pendingImages[i];
@@ -60,17 +65,21 @@ export default function PromptsPage() {
       try {
         const formData = new FormData();
         formData.append("image", await compressImageForUpload(img.file));
-        formData.append("apiKey", apiKeys[keyIdx]);
+        const keyVal = providerKeys[keyIdx]?.key;
+        if (keyVal) {
+          formData.append("apiKey", keyVal);
+        }
         formData.append("provider", provider);
-        formData.append("charLength", charLength.toString());
+        formData.append("promptLength", charLength.toString());
         formData.append("model", model);
         
         const res = await fetch("/api/generate-prompt", {
           method: "POST",
+          headers,
           body: formData
         });
         
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ success: false, error: `Generation failed (${res.status})` }));
         
         if (!data.success) throw new Error(data.error);
         
@@ -78,15 +87,15 @@ export default function PromptsPage() {
         setImages(prev => prev.map(item => item.id === img.id ? { ...item, status: 'done', prompt: data.prompt } : item));
         
         // Advance Key Index on Success (Round Robin)
-        keyIdx = (keyIdx + 1) % apiKeys.length;
+        keyIdx = (keyIdx + 1) % providerKeys.length;
         setCurrentKeyIndex(keyIdx);
         
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e);
-        const errorText = e.message || "Generation failed";
+        const errorText = e instanceof Error ? e.message : "Generation failed";
         setImages(prev => prev.map(item => item.id === img.id ? { ...item, status: 'error', errorMsg: errorText } : item));
         // Advance Key Index on Error (Failover)
-        keyIdx = (keyIdx + 1) % Math.max(apiKeys.length, 1);
+        keyIdx = (keyIdx + 1) % Math.max(providerKeys.length, 1);
         setCurrentKeyIndex(keyIdx);
       }
 

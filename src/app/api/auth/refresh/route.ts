@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { findUserById } from '@/lib/database';
-import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions, verifyRefreshToken } from '@/lib/jwt';
+import { findUserById } from '@/server/db/database';
+import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions, verifyRefreshToken } from '@/server/auth/jwt';
 
 export async function POST(req: Request) {
   try {

@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server";
+import { getAuthenticatedUserId } from "@/server/auth/request-auth";
+import { enforceRateLimit } from "@/server/auth/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const userId = await getAuthenticatedUserId(request);
+    if (!userId) {
+      return NextResponse.json({ success: false, error: "Authentication required to use background remover." }, { status: 401 });
+    }
+
+    const rateLimitError = enforceRateLimit(request, userId, {
+      limit: 5,
+      windowMs: 60 * 1000,
+      keyPrefix: "remove-bg",
+    });
+    if (rateLimitError) return rateLimitError;
+
     const formData = await request.formData();
     const imageFile = formData.get("image") as File;
 
@@ -16,9 +30,9 @@ export async function POST(request: Request) {
     bgFormData.append("format", "png");
 
     // Call remove.bg API using environment variable API key
-    const apiKey = process.env.REMOVE_BG_API_KEY;
+    const apiKey = process.env.REMOVE_BG_API_KEY || process.env.BG_REMOVER_API || process.env.BG_REMOVER_API_KEY;
     if (!apiKey) {
-      throw new Error("Remove.bg API key is not configured. Please set REMOVE_BG_API_KEY in your environment.");
+      throw new Error("Remove.bg API key is not configured. Please set REMOVE_BG_API_KEY or BG_REMOVER_API in your .env file.");
     }
     const response = await fetch("https://api.remove.bg/v1.0/removebg", {
       method: "POST",

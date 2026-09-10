@@ -1,20 +1,25 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
-import { ProviderKey } from '@/lib/models/ProviderKey';
-import { decryptSecret, encryptSecret } from '@/lib/secret-encryption';
-import { getAuthenticatedUserId } from '@/lib/request-auth';
+import { connectToDatabase } from '@/server/db/mongodb';
+import { ProviderKey } from '@/server/models/ProviderKey';
+import { decryptSecret, encryptSecret } from '@/server/auth/secret-encryption';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 import crypto from 'node:crypto';
+
+import { enforceRateLimit } from '@/server/auth/rate-limit';
 
 export async function GET(req: Request) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const rateLimitError = enforceRateLimit(req, userId, { limit: 30, windowMs: 60 * 1000, keyPrefix: 'settings-keys-get' });
+  if (rateLimitError) return rateLimitError;
+
   await connectToDatabase();
   const keys = await ProviderKey.find({ userId }).sort({ createdAt: 1 }).lean();
   return NextResponse.json({
     success: true,
     keys: keys.map((item) => ({
       id: String(item._id),
-      key: decryptSecret(item.encryptedKey),
       provider: item.provider,
       model: item.model,
       lastFour: item.lastFour,

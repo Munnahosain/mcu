@@ -990,7 +990,7 @@ export default function GridStudio() {
                     <div className="flex items-center gap-2">
                       <select
                         value={refBlendMode}
-                        onChange={(e) => setRefBlendMode(e.target.value as any)}
+                        onChange={(e) => setRefBlendMode(e.target.value as "screen" | "multiply" | "overlay" | "normal")}
                         className="h-8 px-2.5 rounded-lg bg-foreground/[0.06] border border-foreground/10 text-xs font-bold"
                       >
                         <option value="screen">Blend: Screen</option>

@@ -3,8 +3,10 @@ import { ensureAccessToken } from "@/lib/auth";
 
 export type StoredProviderKey = {
   id: string;
-  key: string;
+  key?: string;
   provider: string;
+  lastFour?: string;
+  model?: string;
 };
 
 const KEYS_STORAGE = "mcustock_provider_keys";
@@ -129,13 +131,17 @@ export async function syncProviderKeys(): Promise<StoredProviderKey[]> {
     return localKeys;
   }
 
-  // If remote is empty but local has keys, sync local keys up to MongoDB
+  // If remote is empty but local has keys with plaintext, sync local keys up to MongoDB
   if (remoteKeys.length === 0 && localKeys.length > 0) {
     const synced: StoredProviderKey[] = [];
     for (const lk of localKeys) {
-      const res = await saveRemoteProviderKey(lk);
-      if ('key' in res && res.key) {
-        synced.push(res.key);
+      if (lk.key) {
+        const res = await saveRemoteProviderKey(lk);
+        if ('key' in res && res.key) {
+          synced.push(res.key);
+        } else {
+          synced.push(lk);
+        }
       } else {
         synced.push(lk);
       }
@@ -146,16 +152,14 @@ export async function syncProviderKeys(): Promise<StoredProviderKey[]> {
 
   // If remote has keys, merge them with any unique local keys
   if (remoteKeys.length > 0) {
-    const remoteKeySet = new Set(remoteKeys.map((k) => `${k.provider}:${k.key.trim()}`));
-    const missingInRemote = localKeys.filter((lk) => !remoteKeySet.has(`${lk.provider}:${lk.key.trim()}`));
+    const remoteIds = new Set(remoteKeys.map((k) => k.id));
+    const missingInRemote = localKeys.filter((lk) => lk.key && !remoteIds.has(lk.id));
 
     const merged = [...remoteKeys];
     for (const m of missingInRemote) {
       const res = await saveRemoteProviderKey(m);
       if ('key' in res && res.key) {
         merged.push(res.key);
-      } else {
-        merged.push(m);
       }
     }
     saveProviderKeys(merged);

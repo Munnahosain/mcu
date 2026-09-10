@@ -5,6 +5,8 @@ import { useState, useRef } from "react";
 import { Upload, Image as ImageIcon, Download, Trash2, Eraser, X, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { ensureAccessToken } from "@/lib/auth";
+
 interface BgImage {
   id: string;
   file: File;
@@ -38,6 +40,7 @@ export default function BackgroundRemoverPage() {
     if (!pendingImages.length) return;
 
     setIsProcessing(true);
+    const token = await ensureAccessToken();
 
     for (const img of pendingImages) {
       setImages((prev) =>
@@ -48,14 +51,21 @@ export default function BackgroundRemoverPage() {
         const formData = new FormData();
         formData.append("image", img.file);
 
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
         const res = await fetch("/api/remove-bg", {
           method: "POST",
+          headers,
           body: formData,
+          credentials: "include",
         });
 
         if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Failed to remove background");
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Failed to remove background (${res.status})`);
         }
 
         const blob = await res.blob();
@@ -68,11 +78,12 @@ export default function BackgroundRemoverPage() {
               : i
           )
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : "Failed to remove background";
         console.error("Remove BG error for", img.file.name, err);
         setImages((prev) =>
           prev.map((i) =>
-            i.id === img.id ? { ...i, status: "error", error: err.message } : i
+            i.id === img.id ? { ...i, status: "error", error: errMsg } : i
           )
         );
       }

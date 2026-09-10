@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { User, Key, Bell, Moon, Shield, ExternalLink, Plus, X } from "lucide-react";
 import { AI_PROVIDERS, AI_DEFAULT_MODELS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
-import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
+import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 
 const PROVIDER_KEY_URLS: Record<string, string> = {
   Groq: "https://console.groq.com/keys",
@@ -19,7 +19,7 @@ export default function SettingsPage() {
 
   // API Key Management State
   const [activeProvider, setActiveProvider] = useState(() => getActiveProvider());
-  const [apiKeys, setApiKeys] = useState<{ id: string; key: string; provider: string }[]>(() => {
+  const [apiKeys, setApiKeys] = useState<StoredProviderKey[]>(() => {
     const provider = getActiveProvider();
     return getProviderKeys().filter((item) => item.provider === provider);
   });
@@ -57,7 +57,7 @@ export default function SettingsPage() {
   };
 
   // Save keys
-  const saveKeys = (keys: { id: string; key: string; provider: string }[]) => {
+  const saveKeys = (keys: StoredProviderKey[]) => {
     setApiKeys(keys);
     const otherProviderKeys = getProviderKeys().filter((item) => item.provider !== activeProvider);
     saveProviderKeys([...otherProviderKeys, ...keys]);
@@ -66,7 +66,7 @@ export default function SettingsPage() {
   const addKey = async () => {
     if (!newApiKey.trim() || apiKeys.some((item) => item.key === newApiKey.trim())) return;
     setSaveError("");
-    const newKey = { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider };
+    const newKey: StoredProviderKey = { id: crypto.randomUUID(), key: newApiKey.trim(), provider: activeProvider, lastFour: newApiKey.trim().slice(-4) };
     const saved = await saveRemoteProviderKey(newKey);
     if ('error' in saved) {
       setSaveError(saved.error);
@@ -245,7 +245,7 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-3">
                           <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
                           <span className="font-mono text-gray-200">
-                             {k.key.substring(0, 8)}••••••••••••••••••••••••{k.key.slice(-4)}
+                             {k.key ? `${k.key.substring(0, 6)}••••••••••••••••${k.key.slice(-4)}` : `••••••••••••••••••••••••${k.lastFour || ''}`}
                           </span>
                         </div>
                         <button onClick={() => removeKey(i)} className="text-gray-500 hover:text-red-400 p-1 bg-black/40 rounded opacity-0 group-hover:opacity-100 transition-opacity">

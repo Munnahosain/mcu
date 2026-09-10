@@ -151,10 +151,16 @@ function sanitizeHex(value: string) {
   return null;
 }
 
-/**
- * Extract authentic fill color from SVG path
- */
-function parseColorFromPath(path: any, fallbackHex: string): string {
+interface SVGPathLike {
+  userData?: {
+    style?: {
+      fill?: string;
+    };
+  };
+  color?: THREE.Color | { getHexString?: () => string };
+}
+
+function parseColorFromPath(path: SVGPathLike, fallbackHex: string): string {
   if (path.userData?.style?.fill && path.userData.style.fill !== "none" && path.userData.style.fill !== "currentColor") {
     const f = path.userData.style.fill;
     if (f.startsWith("#")) return f;

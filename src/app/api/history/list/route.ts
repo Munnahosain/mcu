@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { hasMongoDbConfig, listUserHistory, normalizeHistoryItem } from '@/lib/database';
-import { getAuthenticatedUserId } from '@/lib/request-auth';
+import { hasMongoDbConfig, listUserHistory, normalizeHistoryItem } from '@/server/db/database';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 
 export async function GET(req: Request) {
   try {

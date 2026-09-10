@@ -22,7 +22,10 @@ export const clearAccessToken = () => {
 export async function ensureAccessToken() {
   if (accessToken) return accessToken;
   try {
-    const response = await fetch('/api/auth/refresh', { method: 'POST' });
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      credentials: 'include',
+    });
     const data = await response.json() as { accessToken?: string };
     if (response.ok && data.accessToken) {
       accessToken = data.accessToken;

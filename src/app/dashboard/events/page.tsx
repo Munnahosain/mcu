@@ -6,6 +6,25 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getAllEvents, CalendarEvent, EventCategory } from "@/data/events2026";
 import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 
+interface GeneratedIdeaData {
+  uploader_insight?: {
+    orientation?: string;
+    content_style?: string;
+    advice?: string;
+  };
+  stock_ideas?: string[];
+  keywords?: string[];
+  prompts?: string[];
+  captions?: string[];
+}
+
+interface CustomEventForm {
+  title: string;
+  date: string;
+  category: EventCategory;
+  country: string;
+}
+
 export default function EventCalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 1)); // Default for SSR
   const [selectedDate, setSelectedDate] = useState<Date | null>(null); // Start null to show all events in the month by default 
@@ -23,10 +42,10 @@ export default function EventCalendarPage() {
   const [ideaModalOpen, setIdeaModalOpen] = useState(false);
   const [activeEventForIdea, setActiveEventForIdea] = useState<CalendarEvent | null>(null);
   const [isGeneratingIdea, setIsGeneratingIdea] = useState(false);
-  const [generatedIdeaData, setGeneratedIdeaData] = useState<any>(null);
+  const [generatedIdeaData, setGeneratedIdeaData] = useState<GeneratedIdeaData | null>(null);
 
   const [addCustomModalOpen, setAddCustomModalOpen] = useState(false);
-  const [newCustomEvent, setNewCustomEvent] = useState<any>({ title: '', date: '', category: 'Custom', country: 'Global' });
+  const [newCustomEvent, setNewCustomEvent] = useState<CustomEventForm>({ title: '', date: '', category: 'Custom', country: 'Global' });
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
@@ -42,7 +61,7 @@ export default function EventCalendarPage() {
      setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
      
      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-     setNewCustomEvent((prev: any) => ({ ...prev, date: todayStr }));
+     setNewCustomEvent((prev) => ({ ...prev, date: todayStr }));
 
      const favs = localStorage.getItem('event_favorites');
      if (favs) setFavorites(JSON.parse(favs));
@@ -204,9 +223,10 @@ export default function EventCalendarPage() {
          if (!data.success) throw new Error(data.error);
 
          setGeneratedIdeaData(data.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
          console.error(err);
-         alert(err.message);
+         const message = err instanceof Error ? err.message : 'Failed to generate event ideas';
+         alert(message);
          setIdeaModalOpen(false);
       } finally {
          setIsGeneratingIdea(false);
@@ -554,7 +574,7 @@ export default function EventCalendarPage() {
                          </div>
                          <div>
                              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Category</label>
-                             <select value={newCustomEvent.category} onChange={e=>setNewCustomEvent({...newCustomEvent, category: e.target.value})} className="dashboard-liquid-select w-full rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+                             <select value={newCustomEvent.category} onChange={e=>setNewCustomEvent({...newCustomEvent, category: e.target.value as EventCategory})} className="dashboard-liquid-select w-full rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
                                  {categories.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
                              </select>
                          </div>
