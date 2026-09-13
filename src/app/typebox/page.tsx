@@ -1,5 +1,5 @@
-import TypeboxStudioPage from "../dashboard/typebox/page";
+import { redirect } from "next/navigation";
 
 export default function TypeboxPublicPage() {
-  return <TypeboxStudioPage />;
+  redirect("/dashboard/typebox");
 }

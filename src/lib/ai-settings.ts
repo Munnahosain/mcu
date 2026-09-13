@@ -61,10 +61,19 @@ export function getProviderKeys(): StoredProviderKey[] {
     if (typeof entry === "string" && entry.trim()) {
       return [{ id: `legacy-${index}`, key: entry.trim(), provider: "Groq" }];
     }
-    if (entry && typeof entry === "object" && "key" in entry && typeof entry.key === "string") {
+    if (entry && typeof entry === "object" && "provider" in entry && typeof entry.provider === "string") {
       const item = entry as Partial<StoredProviderKey>;
-      const key = item.key;
-      return key ? [{ id: item.id || `key-${index}`, key, provider: item.provider || "Groq" }] : [];
+      const provider = entry.provider;
+      const key = typeof item.key === "string" ? item.key : undefined;
+      const lastFour = typeof item.lastFour === "string" ? item.lastFour : key?.slice(-4);
+      if (!key && !lastFour) return [];
+      return [{
+        id: item.id || `key-${index}`,
+        ...(key ? { key } : {}),
+        provider,
+        ...(lastFour ? { lastFour } : {}),
+        ...(typeof item.model === "string" ? { model: item.model } : {}),
+      }];
     }
     return [];
   });

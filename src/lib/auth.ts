@@ -26,9 +26,12 @@ export async function ensureAccessToken() {
       method: 'POST',
       credentials: 'include',
     });
-    const data = await response.json() as { accessToken?: string };
+    const data = await response.json() as { accessToken?: string; user?: Omit<AuthUser, 'signedInAt'> };
     if (response.ok && data.accessToken) {
       accessToken = data.accessToken;
+      if (data.user) {
+        setAuthUser({ ...data.user, signedInAt: Date.now() });
+      }
       return accessToken;
     }
   } catch {

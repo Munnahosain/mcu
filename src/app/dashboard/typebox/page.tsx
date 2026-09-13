@@ -33,6 +33,8 @@ import {
   FileImage,
   ImageIcon,
 } from "lucide-react";
+import { downloadDataUrl, downloadText } from "@/lib/downloadHelper";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import {
   TypeboxState,
   SourceMode,
@@ -54,7 +56,7 @@ import {
   generateSvgExport,
 } from "@/lib/typebox/engine";
 
-export const TYPEBOX_COLOR_PRESETS = [
+const TYPEBOX_COLOR_PRESETS = [
   { name: "Neon Emerald", textColor: "#16c784", bgColor: "#051610" },
   { name: "Cyber Cyan", textColor: "#00f2fe", bgColor: "#041525" },
   { name: "Sunset Orange", textColor: "#ff6b4a", bgColor: "#1f0904" },
@@ -359,12 +361,8 @@ export default function TypeboxStudioPage() {
       await renderTypeboxToCanvas(exportCanvas, state, state.exportScale);
 
       const dataUrl = exportCanvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = `typebox-${state.activeEffect}-${state.artboardWidth}x${state.artboardHeight}@${state.exportScale}x.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const filename = `typebox-${state.activeEffect}-${state.artboardWidth}x${state.artboardHeight}@${state.exportScale}x.png`;
+      downloadDataUrl(dataUrl, filename);
 
       setCopiedNotification("PNG exported successfully!");
       setTimeout(() => setCopiedNotification(null), 3000);
@@ -379,15 +377,8 @@ export default function TypeboxStudioPage() {
   const handleSaveSvg = () => {
     try {
       const svgStr = generateSvgExport(state);
-      const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `typebox-${state.activeEffect}.svg`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const filename = `typebox-${state.activeEffect}.svg`;
+      downloadText(svgStr, filename, "image/svg+xml;charset=utf-8");
 
       setCopiedNotification("SVG vector exported successfully!");
       setTimeout(() => setCopiedNotification(null), 3000);
@@ -538,28 +529,17 @@ export default function TypeboxStudioPage() {
                 </h2>
                 <p className="text-xs text-[var(--text-secondary)]">Choose Text or SVG Graphic</p>
               </div>
-              <div className="flex bg-[var(--input-bg)] p-1 rounded-2xl border border-[var(--card-border)]">
-                <button
-                  onClick={() => updateState("sourceMode", "text")}
-                  className={`px-3 py-1 text-xs font-bold rounded-xl transition-all ${
-                    state.sourceMode === "text"
-                      ? "bg-primary text-background shadow"
-                      : "text-[var(--text-secondary)] hover:text-foreground"
-                  }`}
-                >
-                  Text
-                </button>
-                <button
-                  onClick={() => updateState("sourceMode", "svg")}
-                  className={`px-3 py-1 text-xs font-bold rounded-xl transition-all ${
-                    state.sourceMode === "svg"
-                      ? "bg-primary text-background shadow"
-                      : "text-[var(--text-secondary)] hover:text-foreground"
-                  }`}
-                >
-                  SVG File
-                </button>
-              </div>
+              <SegmentedToggle<SourceMode>
+                options={[
+                  { id: "text", label: "Text" },
+                  { id: "svg", label: "SVG File" },
+                ]}
+                value={state.sourceMode}
+                onChange={(val) => updateState("sourceMode", val)}
+                size="sm"
+                className="w-auto min-w-[180px]"
+                ariaLabel="Typebox source"
+              />
             </div>
 
             {state.sourceMode === "text" ? (
@@ -575,21 +555,18 @@ export default function TypeboxStudioPage() {
                 {/* Alignment */}
                 <div className="flex items-center justify-between text-xs text-[var(--text-secondary)] font-bold">
                   <span>TEXT ALIGN</span>
-                  <div className="flex bg-[var(--input-bg)] p-1 rounded-xl border border-[var(--card-border)]">
-                    {(["left", "center", "right"] as TextAlign[]).map((align) => (
-                      <button
-                        key={align}
-                        onClick={() => updateState("textAlign", align)}
-                        className={`px-3 py-1 capitalize rounded-lg text-xs font-bold transition-all ${
-                          state.textAlign === align
-                            ? "bg-primary text-background"
-                            : "text-[var(--text-secondary)] hover:text-foreground"
-                        }`}
-                      >
-                        {align}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedToggle<TextAlign>
+                    options={([
+                      { id: "left", label: "Left" },
+                      { id: "center", label: "Center" },
+                      { id: "right", label: "Right" },
+                    ] as const)}
+                    value={state.textAlign}
+                    onChange={(val) => updateState("textAlign", val)}
+                    size="sm"
+                    className="w-auto min-w-[200px]"
+                    ariaLabel="Text alignment"
+                  />
                 </div>
 
                 {/* Font Selector */}
@@ -597,21 +574,18 @@ export default function TypeboxStudioPage() {
                   <span className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
                     Font Family
                   </span>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["Pretendard", "Myungjo", "Inter", "Outfit", "Orbitron", "Custom"] as FontFamily[]).map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => updateState("fontFamily", f)}
-                        className={`px-2 py-2 rounded-xl text-xs font-bold border truncate transition-all ${
-                          state.fontFamily === f
-                            ? "border-2 border-primary bg-primary/20 text-primary shadow-[0_0_12px_rgba(22,199,132,0.25)]"
-                            : "border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-foreground"
-                        }`}
-                      >
-                        {f === "Myungjo" ? "Myungjo (명조)" : f === "Custom" ? "My Font" : f}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedToggle<FontFamily>
+                    options={(["Pretendard", "Myungjo", "Inter", "Outfit", "Orbitron", "Custom"] as FontFamily[]).map((f) => ({
+                      id: f,
+                      label: f === "Myungjo" ? "Myungjo" : f === "Custom" ? "My Font" : f,
+                    }))}
+                    value={state.fontFamily}
+                    onChange={(val) => updateState("fontFamily", val)}
+                    columns={3}
+                    size="sm"
+                    className="w-full"
+                    ariaLabel="Font family"
+                  />
                 </div>
 
                 {/* Custom Font Loader */}
@@ -887,32 +861,22 @@ export default function TypeboxStudioPage() {
             </h2>
 
             {/* 6 Effects Buttons */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: "type", label: "Type", icon: TypeIcon },
-                { id: "dither", label: "Dither", icon: Grid },
-                { id: "line", label: "Line", icon: Radio },
-                { id: "slice", label: "Slice", icon: Scissors },
-                { id: "boom", label: "Boom", icon: Bomb },
-                { id: "crack", label: "Crack", icon: Zap },
-              ].map(({ id, label, icon: Icon }) => {
-                const isActive = state.activeEffect === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => updateState("activeEffect", id as EffectType)}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-2xl text-xs font-extrabold transition-all border ${
-                      isActive
-                        ? "border-2 border-primary bg-primary/20 text-primary shadow-[0_0_12px_rgba(22,199,132,0.25)]"
-                        : "border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <SegmentedToggle<EffectType>
+              options={[
+                { id: "type", label: "Type", icon: <TypeIcon className="h-3.5 w-3.5" /> },
+                { id: "dither", label: "Dither", icon: <Grid className="h-3.5 w-3.5" /> },
+                { id: "line", label: "Line", icon: <Radio className="h-3.5 w-3.5" /> },
+                { id: "slice", label: "Slice", icon: <Scissors className="h-3.5 w-3.5" /> },
+                { id: "boom", label: "Boom", icon: <Bomb className="h-3.5 w-3.5" /> },
+                { id: "crack", label: "Crack", icon: <Zap className="h-3.5 w-3.5" /> },
+              ]}
+              value={state.activeEffect}
+              onChange={(val) => updateState("activeEffect", val)}
+              columns={3}
+              size="sm"
+              className="w-full"
+              ariaLabel="Visual effect"
+            />
 
             {/* Dynamic Effect Parameters */}
             <div className="p-4 rounded-2xl bg-[var(--input-bg)] border border-[var(--card-border)] space-y-3.5">
@@ -927,21 +891,17 @@ export default function TypeboxStudioPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold">
                     <span className="text-[var(--text-secondary)]">DOT SHAPE</span>
-                    <div className="flex bg-[var(--card-bg)] p-1 rounded-xl border border-[var(--card-border)]">
-                      {(["dot", "square"] as DitherShape[]).map((shape) => (
-                        <button
-                          key={shape}
-                          onClick={() => updateNested("dither", "shape", shape)}
-                          className={`px-3 py-1 capitalize rounded-lg text-xs font-bold transition-all ${
-                            state.dither.shape === shape
-                              ? "bg-primary text-background"
-                              : "text-[var(--text-secondary)] hover:text-foreground"
-                          }`}
-                        >
-                          {shape}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedToggle<DitherShape>
+                      options={([
+                        { id: "dot", label: "Dot" },
+                        { id: "square", label: "Square" },
+                      ] as const)}
+                      value={state.dither.shape}
+                      onChange={(val) => updateNested("dither", "shape", val)}
+                      size="sm"
+                      className="w-auto min-w-[150px]"
+                      ariaLabel="Dither dot shape"
+                    />
                   </div>
                   <StudioSlider
                     label="Cell Size"
@@ -1029,21 +989,17 @@ export default function TypeboxStudioPage() {
               {state.activeEffect === "slice" && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold">
-                    <div className="flex bg-[var(--card-bg)] p-1 rounded-xl border border-[var(--card-border)]">
-                      {(["alternate", "random"] as SliceMode[]).map((m) => (
-                        <button
-                          key={m}
-                          onClick={() => updateNested("slice", "mode", m)}
-                          className={`px-3 py-1 capitalize rounded-lg text-xs font-bold transition-all ${
-                            state.slice.mode === m
-                              ? "bg-primary text-background"
-                              : "text-[var(--text-secondary)] hover:text-foreground"
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedToggle<SliceMode>
+                      options={([
+                        { id: "alternate", label: "Alternate" },
+                        { id: "random", label: "Random" },
+                      ] as const)}
+                      value={state.slice.mode}
+                      onChange={(val) => updateNested("slice", "mode", val)}
+                      size="sm"
+                      className="w-auto min-w-[180px]"
+                      ariaLabel="Slice mode"
+                    />
                     <button
                       onClick={() => updateNested("slice", "seed", Math.random() * 1000)}
                       className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
@@ -1110,21 +1066,17 @@ export default function TypeboxStudioPage() {
                   </div>
 
                   {/* Shard Shape */}
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {(["dot", "square", "triangle", "svg"] as BoomShape[]).map((shp) => (
-                      <button
-                        key={shp}
-                        onClick={() => updateNested("boom", "shape", shp)}
-                        className={`py-1.5 text-xs font-bold rounded-xl capitalize border transition-all ${
-                          state.boom.shape === shp
-                            ? "border-2 border-primary bg-primary/20 text-primary"
-                            : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] hover:text-foreground"
-                        }`}
-                      >
-                        {shp}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedToggle<BoomShape>
+                    options={(["dot", "square", "triangle", "svg"] as BoomShape[]).map((shp) => ({
+                      id: shp,
+                      label: shp,
+                    }))}
+                    value={state.boom.shape}
+                    onChange={(val) => updateNested("boom", "shape", val)}
+                    size="sm"
+                    className="w-full"
+                    ariaLabel="Boom shard shape"
+                  />
 
                   {state.boom.shape === "svg" && (
                     <div className="p-2.5 bg-[var(--card-bg)] rounded-xl border border-[var(--card-border)] space-y-1">

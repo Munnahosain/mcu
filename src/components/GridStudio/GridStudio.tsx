@@ -38,8 +38,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ThemeToggle from "@/components/ThemeToggle";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import { GridConfig, GridType, LineStyle, BgMode, CanvasPreset, CompositionScores, ReferenceAnalysis } from "@/lib/grid/types";
 import { CANVAS_PRESETS, GRID_COLOR_PALETTES } from "@/lib/grid/presets";
+import { downloadText, downloadBlob } from "@/lib/downloadHelper";
 import {
   createDefaultConfig,
   generateSeed,
@@ -260,15 +262,8 @@ export default function GridStudio() {
   // Export SVG vector file
   const handleExportSvg = () => {
     const fullSvg = buildGridSvg(config, width, height, { isExport: true });
-    const blob = new Blob([fullSvg], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `smart-grid-${config.type}-${width}x${height}-${config.seed.toLowerCase()}.svg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `smart-grid-${config.type}-${width}x${height}-${config.seed.toLowerCase()}.svg`;
+    downloadText(fullSvg, filename, "image/svg+xml;charset=utf-8");
     notify("Vector SVG exported successfully");
   };
 
@@ -313,14 +308,8 @@ export default function GridStudio() {
 
       canvas.toBlob((blob) => {
         if (!blob) return;
-        const pngUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = pngUrl;
-        a.download = `smart-grid-${config.type}-${width}x${height}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(pngUrl);
+        const filename = `smart-grid-${config.type}-${width}x${height}.png`;
+        downloadBlob(blob, filename);
         notify("High-res PNG exported!");
       }, "image/png");
     };
@@ -383,29 +372,17 @@ export default function GridStudio() {
           </div>
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="flex items-center gap-1 bg-foreground/[0.04] p-1 rounded-xl border border-foreground/10">
-          <button
-            onClick={() => setMode("generate")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              mode === "generate"
-                ? "bg-primary text-background shadow-sm"
-                : "text-foreground/60 hover:text-foreground"
-            }`}
-          >
-            <Sparkles className="h-3.5 w-3.5" /> Grid Composer
-          </button>
-          <button
-            onClick={() => setMode("analyze")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              mode === "analyze"
-                ? "bg-primary text-background shadow-sm"
-                : "text-foreground/60 hover:text-foreground"
-            }`}
-          >
-            <Search className="h-3.5 w-3.5" /> AI Analyzer
-          </button>
-        </div>
+        <SegmentedToggle<"generate" | "analyze">
+          options={[
+            { id: "generate", label: "Grid Composer", icon: <Sparkles className="h-3.5 w-3.5" /> },
+            { id: "analyze", label: "AI Analyzer", icon: <Search className="h-3.5 w-3.5" /> },
+          ]}
+          value={mode}
+          onChange={(val) => setMode(val)}
+          size="sm"
+          className="w-auto min-w-[280px]"
+          ariaLabel="Grid studio mode"
+        />
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
@@ -523,29 +500,23 @@ export default function GridStudio() {
               <span className="text-[10px] font-bold text-foreground/50 font-mono">{config.type.toUpperCase()}</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-1.5">
-              {GRID_TYPE_ITEMS.map((item) => {
-                const isSelected = config.type === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      updateConfig("type", item.id);
-                      handleGenerateNew(item.id);
-                    }}
-                    title={item.desc}
-                    className={`flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all border ${
-                      isSelected
-                        ? "border-primary bg-primary/20 text-primary shadow-sm font-bold scale-[1.02]"
-                        : "border-foreground/10 bg-foreground/[0.03] text-foreground/70 hover:border-primary/40 hover:text-foreground"
-                    }`}
-                  >
-                    <span className="text-base mb-1">{item.icon}</span>
-                    <span className="text-[11px] font-bold leading-tight">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <SegmentedToggle<GridType>
+              options={GRID_TYPE_ITEMS.map((item) => ({
+                id: item.id,
+                label: item.label,
+                icon: <span>{item.icon}</span>,
+                ariaLabel: item.desc,
+              }))}
+              value={config.type}
+              onChange={(val) => {
+                updateConfig("type", val);
+                handleGenerateNew(val);
+              }}
+              columns={3}
+              size="sm"
+              className="w-full"
+              ariaLabel="Grid system"
+            />
           </div>
 
           {/* 4. ASPECT RATIO & DIMENSIONS */}
@@ -831,21 +802,18 @@ export default function GridStudio() {
             {/* Background Style Switcher */}
             <div className="pt-2 border-t border-foreground/10 flex items-center justify-between text-xs">
               <span className="text-foreground/70 font-bold">Background:</span>
-              <div className="inline-flex gap-1 bg-foreground/[0.05] p-1 rounded-lg border border-foreground/10">
-                {(["dark", "transparent", "light"] as BgMode[]).map((bg) => (
-                  <button
-                    key={bg}
-                    onClick={() => updateConfig("bgMode", bg)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
-                      config.bgMode === bg
-                        ? "bg-primary text-background"
-                        : "text-foreground/60 hover:text-foreground"
-                    }`}
-                  >
-                    {bg}
-                  </button>
-                ))}
-              </div>
+              <SegmentedToggle<BgMode>
+                options={([
+                  { id: "dark", label: "Dark" },
+                  { id: "transparent", label: "Clear" },
+                  { id: "light", label: "Light" },
+                ] as const)}
+                value={config.bgMode}
+                onChange={(val) => updateConfig("bgMode", val)}
+                size="sm"
+                className="w-auto min-w-[210px]"
+                ariaLabel="Canvas background"
+              />
             </div>
           </div>
         </aside>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BarChart3, BrainCircuit, ChevronDown, Heart, Search, Sparkles, UserRound } from "lucide-react";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 type Asset = { title: string; type: string; creator: string; ai: boolean; age: string; tone: string; image: string };
 
@@ -48,7 +49,20 @@ export default function AnalyticsPage() {
     <div className="space-y-8">
       <header className="space-y-3"><div className="liquid-chip w-fit"><BarChart3 className="h-4 w-4" /> Market Research</div><h1 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">Adobe Analytics</h1><p className="max-w-2xl text-sm leading-relaxed text-foreground/60 sm:text-base">Search and analyze top-performing assets on Adobe Stock. Discover trends, explore winning content, and find inspiration for your next upload.</p></header>
       <section className="liquid-card space-y-6 p-5 sm:p-7">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex rounded-full border border-primary/20 bg-primary/5 p-1"><button onClick={() => setMode("keyword")} className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${mode === "keyword" ? "border border-primary bg-primary/20 text-primary shadow-[0_0_12px_rgba(22,199,132,0.2)]" : "border-0 bg-transparent text-foreground/50 hover:text-primary"}`}>Search by Keyword</button><button onClick={() => setMode("contributor")} className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${mode === "contributor" ? "border border-primary bg-primary/20 text-primary shadow-[0_0_12px_rgba(22,199,132,0.2)]" : "border-0 bg-transparent text-foreground/50 hover:text-primary"}`}>Search by Contributor ID</button></div><button className="liquid-button-secondary !rounded-xl !px-4 !py-2 text-xs"><Heart className="h-4 w-4" /> Moodboards</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SegmentedToggle<"keyword" | "contributor">
+            options={[
+              { id: "keyword", label: "Search by Keyword" },
+              { id: "contributor", label: "Search by Contributor ID" },
+            ]}
+            value={mode}
+            onChange={(val) => setMode(val)}
+            size="sm"
+            className="w-auto min-w-[320px]"
+            ariaLabel="Search mode selection"
+          />
+          <button className="liquid-button-secondary !rounded-xl !px-4 !py-2 text-xs"><Heart className="h-4 w-4" /> Moodboards</button>
+        </div>
         <form onSubmit={(event) => { event.preventDefault(); setHasSearched(true); setVisibleCount(12); }} className="flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-foreground/45" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === "keyword" ? "Search for vectors, photos, illustrations..." : "Enter Adobe contributor ID..."} className="h-14 w-full rounded-2xl border border-foreground/10 bg-white/50 pl-12 pr-4 text-sm text-foreground outline-none dark:bg-white/5" /></label><button type="submit" className="liquid-button-primary !h-14 !rounded-2xl !px-7"><Search className="h-4 w-4" /> Analyze</button></form>
         <div className="grid gap-3 border-t border-foreground/10 pt-5 md:grid-cols-3"><Filter label="Sort By" value={sort} onChange={setSort} options={["Relevance", "Most Recent", "Most Popular"]} /><Filter label="Content Type" value={contentType} onChange={setContentType} options={["All Asset Types", "Photo/Image", "Vector"]} /><Filter label="Generative AI" value={aiFilter} onChange={setAiFilter} options={["All Content (Include AI)", "AI Generated", "Non-AI"]} /></div>
       </section>

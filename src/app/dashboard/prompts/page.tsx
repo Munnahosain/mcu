@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken } from "@/lib/auth";
 import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { compressImageForUpload } from "@/lib/client-image";
+import { downloadText } from "@/lib/downloadHelper";
 
 interface ImageFile {
   id: string;
@@ -124,15 +125,9 @@ export default function PromptsPage() {
     ];
 
     try {
-      const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `mcu_prompts_${Date.now()}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const csvContent = lines.join("\r\n");
+      const filename = `mcu_prompts_${Date.now()}.csv`;
+      downloadText(csvContent, filename, "text/csv;charset=utf-8");
     } catch (e) {
       console.error(e);
       alert("CSV download failed. Please try again.");

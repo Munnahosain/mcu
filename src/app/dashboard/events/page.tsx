@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, DownloadCloud, Heart, Sparkles, MapPin, Tag, Plus, X, Globe, Image as ImageIcon, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAllEvents, CalendarEvent, EventCategory } from "@/data/events2026";
-import { getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
+import { getActiveProvider, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 interface GeneratedIdeaData {
   uploader_insight?: {
@@ -156,7 +157,7 @@ export default function EventCalendarPage() {
   };
 
   const displayedEvents = useMemo(() => {
-    let filtered = totalEvents.filter(e => {
+    const filtered = totalEvents.filter(e => {
         if (selectedCategory !== "All" && e.category !== selectedCategory) return false;
         if (selectedCountry !== "All" && e.country !== selectedCountry) return false;
         if (searchQuery && !e.title.toLowerCase().includes(searchQuery.toLowerCase()) && !e.category.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -175,7 +176,7 @@ export default function EventCalendarPage() {
     });
 
     return filtered.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [currentMonth, currentYear, selectedDate, selectedCategory, selectedCountry, totalEvents]);
+    }, [currentMonth, currentYear, selectedDate, selectedCategory, selectedCountry, searchQuery, totalEvents]);
 
   const totalMonthEventsCount = useMemo(() => {
       let count = 0;
@@ -236,7 +237,7 @@ export default function EventCalendarPage() {
   const exportCSV = () => {
     if (!totalEvents.length) return;
     const esc = (value: string) => `"${(value||'').replace(/"/g, '""')}"`;
-    let lines = [
+    const lines = [
         "Date,Event Title,Category,Country,Favorite,IsCustom",
         ...totalEvents.map((e) => [
             esc(e.date), esc(e.title), esc(e.category), esc(e.country||''), 
@@ -443,23 +444,14 @@ export default function EventCalendarPage() {
 
         {/* BOTTOM: Month Selector Nav Pill */}
         <div className="event-month-selector mt-8 mb-10 overflow-x-auto w-full max-w-full flex justify-center no-scrollbar px-4">
-            <div className="inline-flex items-center gap-1 p-2 rounded-full border border-primary/20 bg-primary/5 max-w-full shrink-0 shadow-inner">
-                {months.map((month, idx) => (
-                    <motion.button
-                        key={month}
-                        onClick={() => setMonthDirectly(idx)}
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                        className={`event-month-button rounded-full px-5 sm:px-6 py-2.5 text-sm font-bold transition-all duration-200 relative min-w-[72px] ${idx === currentMonth ? '!text-[#052716]' : 'text-primary/60 hover:text-primary'}`}
-                    >
-                        {idx === currentMonth && (
-                            <motion.div layoutId="activeMonthPill" transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-0 rounded-full shadow-[0_4px_16px_rgba(22,199,132,0.3)] -z-10 bg-primary" />
-                        )}
-                        {month}
-                    </motion.button>
-                ))}
-            </div>
+            <SegmentedToggle<number>
+                options={months.map((month, idx) => ({ id: idx, label: month }))}
+                value={currentMonth}
+                onChange={(monthIndex) => setMonthDirectly(monthIndex)}
+                size="sm"
+                className="event-month-toggle min-w-[900px]"
+                ariaLabel="Select event month"
+            />
         </div>
 
       </div>

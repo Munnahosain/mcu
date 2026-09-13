@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as htmlToImage from 'html-to-image';
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 const STORAGE_KEY = "bento_layout_v6_pro";
 
@@ -672,14 +673,15 @@ ${rectangles}
 
           <div className="flex-1 pb-12">
             <CollapsibleSection title="Grid style" isCollapsed={collapsedSections["Grid style"]} onToggle={() => toggleSection("Grid style")}>
-              <div className="grid grid-cols-2 gap-2">
-                {GRID_STYLES.map(style => (
-                  <button key={style} onClick={() => updateSetting('gridStyle', style)}
-                    className={`py-2.5 px-3 rounded-full text-[12px] font-bold transition-all ${settings.gridStyle === style ? 'border-2 border-primary bg-primary/20 text-primary shadow-[0_0_14px_rgba(22,199,132,0.3)]' : 'border-0 bg-transparent text-primary/60 hover:text-primary'}`}>
-                    {style}
-                  </button>
-                ))}
-              </div>
+              <SegmentedToggle<string>
+                options={GRID_STYLES}
+                value={settings.gridStyle}
+                onChange={(val) => updateSetting('gridStyle', val)}
+                columns={2}
+                size="md"
+                className="w-full"
+                ariaLabel="Grid style"
+              />
             </CollapsibleSection>
 
             <CollapsibleSection title="Dimensions" isCollapsed={collapsedSections["Dimensions"]} onToggle={() => toggleSection("Dimensions")}>

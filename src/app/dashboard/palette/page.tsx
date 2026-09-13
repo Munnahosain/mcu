@@ -4,6 +4,7 @@ import NextImage from "next/image";
 import { useState, useRef, useEffect } from "react";
 import { Upload, Download, RefreshCw, Palette, ImagePlus, ChevronDown, Copy, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { downloadText, downloadJson } from "@/lib/downloadHelper";
 
 // --- Helpers ---
 function rgbToHex(r: number, g: number, b: number) {
@@ -234,10 +235,40 @@ export default function ColorPalettePage() {
   };
 
   const exportAsCSS = () => {
-    const cssVars = palette.map((c, i) => `--color-${i+1}: ${c.hex};`).join('\n');
+    const cssVars = palette.map((c, i) => `  --color-${i + 1}: ${c.hex};`).join("\n");
     const css = `:root {\n${cssVars}\n}`;
     navigator.clipboard.writeText(css);
-    alert("Palette exported & copied to clipboard as CSS variables!");
+    alert("Palette copied to clipboard as CSS variables!");
+  };
+
+  const downloadCssFile = () => {
+    const cssVars = palette.map((c, i) => `  --color-${i + 1}: ${c.hex};`).join("\n");
+    const css = `/* MCUSTOCK Color Palette */\n:root {\n${cssVars}\n}`;
+    downloadText(css, `palette-${Date.now()}.css`, "text/css;charset=utf-8");
+  };
+
+  const downloadJsonFile = () => {
+    downloadJson({ palette, exportedAt: new Date().toISOString() }, `palette-${Date.now()}.json`);
+  };
+
+  const downloadSvgSwatches = () => {
+    const swatchWidth = 100;
+    const swatchHeight = 120;
+    const totalWidth = palette.length * swatchWidth;
+    const rects = palette
+      .map(
+        (c, idx) => `
+      <g transform="translate(${idx * swatchWidth}, 0)">
+        <rect width="${swatchWidth}" height="${swatchHeight - 30}" fill="${c.hex}" />
+        <rect y="${swatchHeight - 30}" width="${swatchWidth}" height="30" fill="#ffffff" />
+        <text x="10" y="${swatchHeight - 10}" font-family="monospace" font-size="11" font-weight="bold" fill="#091a16">${c.hex}</text>
+      </g>`
+      )
+      .join("");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${swatchHeight}" width="${totalWidth}" height="${swatchHeight}">
+      ${rects}
+    </svg>`;
+    downloadText(svg, `palette-swatches-${Date.now()}.svg`, "image/svg+xml;charset=utf-8");
   };
 
   return (
@@ -266,8 +297,11 @@ export default function ColorPalettePage() {
               <Download className="w-4 h-4" /> Export palette <ChevronDown className="w-3.5 h-3.5 ml-1" />
             </button>
             {exportMenuOpen && (
-               <div className="absolute top-12 right-0 bg-background border border-primary/20 shadow-2xl rounded-xl py-2 w-48 z-50 overflow-hidden">
-                  <button onClick={() => { exportAsCSS(); setExportMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-sm font-semibold text-primary/80 hover:bg-primary/5">Copy as CSS Variables</button>
+               <div className="absolute top-12 right-0 bg-background border border-primary/20 shadow-2xl rounded-xl py-2 w-56 z-50 overflow-hidden text-xs">
+                  <button onClick={() => { exportAsCSS(); setExportMenuOpen(false); }} className="w-full text-left px-4 py-2 font-bold text-foreground hover:bg-primary/10">Copy CSS Variables</button>
+                  <button onClick={() => { downloadCssFile(); setExportMenuOpen(false); }} className="w-full text-left px-4 py-2 font-bold text-foreground hover:bg-primary/10">Download .CSS File</button>
+                  <button onClick={() => { downloadJsonFile(); setExportMenuOpen(false); }} className="w-full text-left px-4 py-2 font-bold text-foreground hover:bg-primary/10">Download .JSON File</button>
+                  <button onClick={() => { downloadSvgSwatches(); setExportMenuOpen(false); }} className="w-full text-left px-4 py-2 font-bold text-foreground hover:bg-primary/10">Download SVG Swatches</button>
                </div>
             )}
           </div>

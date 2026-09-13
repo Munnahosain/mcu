@@ -22,7 +22,12 @@ export async function POST(req: Request) {
 
     const accessToken = await createAccessToken(userId);
     const rotatedRefreshToken = await createRefreshToken(userId);
-    const response = NextResponse.json({ success: true, accessToken });
+    const normalizedUser = {
+      id: user._id ? String(user._id) : String(user.id),
+      name: String(user.name ?? ''),
+      email: String(user.email ?? ''),
+    };
+    const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });
     response.cookies.set(REFRESH_COOKIE, rotatedRefreshToken, refreshCookieOptions());
     return response;
   } catch {

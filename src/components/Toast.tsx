@@ -46,7 +46,7 @@ const Toast = ({ message, onClose }: ToastProps) => {
       initial={{ opacity: 0, y: -20, x: 100 }}
       animate={{ opacity: 1, y: 0, x: 0 }}
       exit={{ opacity: 0, y: -20, x: 100 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24 }}
+      transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
       className={`${color.bg} ${color.border} border backdrop-blur-sm rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg`}
     >
       <div className="shrink-0">{icons[message.type]}</div>

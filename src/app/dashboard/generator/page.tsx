@@ -26,6 +26,8 @@ import PremiumSlider from "@/components/PremiumSlider";
 import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
 import { compressImageForUpload } from "@/lib/client-image";
+import { downloadText, downloadJson } from "@/lib/downloadHelper";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 type ImageFile = GeneratorImageFile;
 
@@ -140,13 +142,8 @@ export default function GeneratorPage() {
 
   const downloadMetadataJson = (image: ImageFile) => {
     if (!image.metadata) return;
-    const blob = new Blob([JSON.stringify({ filename: image.file.name, ...image.metadata }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${image.file.name.replace(/\.[^.]+$/, '')}-metadata.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const filename = `${image.file.name.replace(/\.[^.]+$/, "")}-metadata.json`;
+    downloadJson({ filename: image.file.name, ...image.metadata }, filename);
   };
 
   const handleFiles = useCallback((files: FileList | null) => {
@@ -333,15 +330,9 @@ export default function GeneratorPage() {
       ];
     }
 
-    const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `mcustock_${activeTab.toLowerCase()}_${Date.now()}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const csvContent = lines.join("\r\n");
+    const filename = `mcustock_${activeTab.toLowerCase()}_${Date.now()}.csv`;
+    downloadText(csvContent, filename, "text/csv;charset=utf-8");
   };
 
   return (
@@ -365,63 +356,46 @@ export default function GeneratorPage() {
             </button>
           </div>
 
-          <div className="segmented-tabs relative flex gap-1 rounded-xl p-1">
-            <motion.span
-              layoutId="generator-mode-indicator"
-              className="segmented-tabs-indicator"
-              animate={{ x: activeTab === "Prompt" ? "100%" : "0%" }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            />
-            <button 
-              onClick={() => setActiveTab("Metadata")}
-              data-selected={activeTab === "Metadata"}
-              className={`relative z-10 flex-1 inline-flex items-center justify-center gap-2 text-[13px] font-bold py-2 transition-colors ${activeTab === "Metadata" ? "is-active" : ""}`}
-            >
-              <span className="inline-flex items-center justify-center gap-2">
-                <Layers className="h-3.5 w-3.5" />
-                Metadata
-              </span>
-            </button>
-            <button 
-              onClick={() => setActiveTab("Prompt")}
-              data-selected={activeTab === "Prompt"}
-              className={`relative z-10 flex-1 inline-flex items-center justify-center gap-2 text-[13px] font-bold py-2 transition-colors ${activeTab === "Prompt" ? "is-active" : ""}`}
-            >
-              <span className="inline-flex items-center justify-center gap-2">
-                <Type className="h-3.5 w-3.5" />
-                Prompt
-              </span>
-            </button>
-          </div>
+          <SegmentedToggle<"Metadata" | "Prompt">
+            options={[
+              { id: "Metadata", label: "Metadata", icon: <Layers className="h-3.5 w-3.5" /> },
+              { id: "Prompt", label: "Prompt", icon: <Type className="h-3.5 w-3.5" /> },
+            ]}
+            value={activeTab}
+            onChange={(val) => setActiveTab(val)}
+            size="md"
+            className="w-full"
+            ariaLabel="Generator mode toggle"
+          />
         </div>
 
         {/* Option Panel Controls */}
         <div className="border border-[var(--card-border)] rounded-2xl p-4 space-y-5 bg-[var(--card-bg)]">
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] font-bold text-foreground/60 uppercase tracking-wider mb-1">AI Provider</label>
+              <label className="block text-[10px] font-bold text-foreground/70 uppercase tracking-wider mb-1">AI Provider</label>
               <select
                 value={activeProvider}
                 onChange={e => {
                   setActiveProvider(e.target.value);
                   saveActiveProvider(e.target.value);
                 }}
-                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground outline-none focus:border-primary"
+                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground dark:text-white outline-none focus:border-primary cursor-pointer"
               >
-                {AI_PROVIDER_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
+                {AI_PROVIDER_NAMES.map(p => <option key={p} value={p} className="bg-[var(--card-bg)] text-foreground">{p}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-foreground/60 uppercase tracking-wider mb-1">Model</label>
+              <label className="block text-[10px] font-bold text-foreground/70 uppercase tracking-wider mb-1">Model</label>
               <select
                 value={activeModel}
                 onChange={e => {
                   setSelectedModels(prev => ({ ...prev, [activeProvider]: e.target.value }));
                   saveProviderModel(activeProvider, e.target.value);
                 }}
-                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground outline-none focus:border-primary"
+                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground dark:text-white outline-none focus:border-primary cursor-pointer"
               >
-                {(AI_PROVIDERS[activeProvider] || []).map(m => <option key={m.id} value={m.id}>{m.label}{m.badge ? ` - ${m.badge}` : ''}</option>)}
+                {(AI_PROVIDERS[activeProvider] || []).map(m => <option key={m.id} value={m.id} className="bg-[var(--card-bg)] text-foreground">{m.label}{m.badge ? ` - ${m.badge}` : ''}</option>)}
               </select>
             </div>
             {activeProviderKeyObj ? (
@@ -440,19 +414,15 @@ export default function GeneratorPage() {
             <div className="space-y-6 pt-4 border-t border-[var(--card-border)]">
               <div>
                 <label className="block text-[10px] font-bold text-foreground/60 uppercase tracking-wider mb-3">Export Platform</label>
-                <div className="platform-options grid grid-cols-2 gap-2">
-                  {platforms.map(p => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPlatform(p)}
-                      data-active={p === platform}
-                      className="platform-button px-3 py-2 rounded-full text-[11px] font-bold transition-all"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
+                <SegmentedToggle<string>
+                  options={platforms}
+                  value={platform}
+                  onChange={(val) => setPlatform(val)}
+                  columns={2}
+                  size="md"
+                  className="w-full"
+                  ariaLabel="Export platform"
+                />
               </div>
 
               <PremiumSlider label="TITLE LENGTH" value={titleLength} min={10} max={200} suffix=" CHARS" onChange={setTitleLength} />

@@ -31,6 +31,7 @@ import {
   IterationCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 // --- Types ---
 type CharSet = "standard" | "blocks" | "light" | "dense" | "custom";
@@ -702,22 +703,18 @@ export default function ASCIIVisionPage() {
       <div className="flex-1 flex flex-col min-w-0 bg-main-bg relative h-[600px] lg:h-full overflow-hidden">
         {/* Header Tabs */}
         <div className="h-14 sm:h-16 border-b border-divider flex items-center justify-between px-4 sm:px-6 bg-header-bg backdrop-blur-xl sticky top-0 z-20 shrink-0">
-          <div className="flex p-1 bg-primary/5 rounded-full border border-primary/20 overflow-x-auto no-scrollbar max-w-[60%] sm:max-w-none">
-            {(['Original', 'Processed', 'Compare'] as const).map((tab) => {
-              const tabKey = tab.toLowerCase() as 'original' | 'processed' | 'compare';
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tabKey)}
-                  className={`px-7 py-2 rounded-full text-[12px] font-medium transition-all ${
-                    activeTab === tabKey ? 'border border-primary bg-primary/20 text-primary shadow-[0_0_12px_rgba(22,199,132,0.2)]' : 'border-0 bg-transparent text-primary/70 hover:text-primary'
-                  }`}
-                >
-                  {tab}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedToggle<"original" | "processed" | "compare">
+            options={[
+              { id: "original", label: "Original" },
+              { id: "processed", label: "Processed" },
+              { id: "compare", label: "Compare" },
+            ]}
+            value={activeTab}
+            onChange={(val) => setActiveTab(val)}
+            size="sm"
+            className="w-auto min-w-[280px]"
+            ariaLabel="ASCII preview mode selection"
+          />
 
           <div className="flex items-center gap-2 sm:gap-4 text-primary/70 text-[11px] shrink-0 min-w-0">
             {image && (

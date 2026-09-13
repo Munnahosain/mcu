@@ -6,6 +6,7 @@ import { ArrowRight, Check, Sparkles, Star, Layers, HelpCircle, ChevronDown, Cro
 import { motion, AnimatePresence } from "framer-motion";
 import MarketingChrome from "../../components/MarketingChrome";
 import MarketingFooter from "../../components/MarketingFooter";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 const tiers = [
   {
@@ -140,24 +141,26 @@ export default function PricingPage() {
           </p>
 
           {/* Monthly / Annual Billing Toggle */}
-          <div className="pt-2 flex items-center justify-center gap-3">
-            <span className={`text-xs font-bold ${billingCycle === "monthly" ? "text-primary font-extrabold" : "text-foreground/60"}`}>
-              Monthly
-            </span>
-            <button
-              onClick={() => setBillingCycle((prev) => (prev === "monthly" ? "annual" : "monthly"))}
-              className="relative h-8 w-16 rounded-full bg-foreground/15 p-1 transition-colors border border-foreground/10 focus:outline-none"
-              aria-label="Toggle Billing Cycle"
-            >
-              <motion.div
-                animate={{ x: billingCycle === "annual" ? 30 : 0 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                className="h-6 w-6 rounded-full bg-primary shadow-md flex items-center justify-center text-background text-[10px] font-bold"
-              />
-            </button>
-            <span className={`text-xs font-bold flex items-center gap-1.5 ${billingCycle === "annual" ? "text-primary font-extrabold" : "text-foreground/60"}`}>
-              Annual <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/20 text-primary border border-primary/30">SAVE 20%</span>
-            </span>
+          <div className="pt-2 flex items-center justify-center">
+            <SegmentedToggle<"monthly" | "annual">
+              options={[
+                { id: "monthly", label: "Monthly" },
+                {
+                  id: "annual",
+                  label: "Annual",
+                  badge: (
+                    <span className="ml-1.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-white/20 text-white shadow-xs">
+                      SAVE 20%
+                    </span>
+                  ),
+                },
+              ]}
+              value={billingCycle}
+              onChange={(val) => setBillingCycle(val)}
+              size="md"
+              className="w-auto min-w-[260px]"
+              ariaLabel="Billing cycle selection"
+            />
           </div>
         </div>
 

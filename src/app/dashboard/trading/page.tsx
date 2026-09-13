@@ -39,6 +39,7 @@ import { candleIntervals, markets, MockMarketDataProvider, tickIntervals } from 
 import { chartCategories, chartTemplates, defaultTemplate } from "@/lib/trading/chartTemplates";
 import { calculateIndicators, heikinAshi } from "@/lib/trading/indicators";
 import { buildChartSvg, downloadSvg } from "@/lib/trading/svgExporter";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import type { Candle, CandleInterval, ChartTemplate, ChartType, IndicatorKey, MarketSymbol, TickInterval } from "@/lib/trading/types";
 
 const chartWidth = 1000;
@@ -277,43 +278,31 @@ export default function TradingPage() {
           <span className="text-[10px] font-extrabold uppercase tracking-widest text-foreground/45 shrink-0">
             Time:
           </span>
-          <div className="inline-flex items-center gap-1 bg-foreground/[0.04] p-1 rounded-xl border border-foreground/10">
-            {(["1s", "5s", "15s", "1m", "5m", "15m", "1h", "4h", "1D"] as CandleInterval[]).map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setInterval(tf)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                  interval === tf
-                    ? "bg-primary text-background shadow-sm"
-                    : "text-foreground/60 hover:text-foreground hover:bg-foreground/5"
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle<CandleInterval>
+            options={(["1s", "5s", "15s", "1m", "5m", "15m", "1h", "4h", "1D"] as CandleInterval[])}
+            value={interval}
+            onChange={(val) => setInterval(val)}
+            size="sm"
+            className="w-auto min-w-[420px]"
+            ariaLabel="Chart timeframe"
+          />
         </div>
 
         {/* Chart Types & Indicator controls */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {/* Chart Style Switcher */}
-          <div className="inline-flex items-center gap-1 bg-foreground/[0.04] p-1 rounded-xl border border-foreground/10">
-            {CHART_TYPES.slice(0, 5).map((ct) => (
-              <button
-                key={ct.id}
-                onClick={() => setChartType(ct.id)}
-                title={ct.label}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                  chartType === ct.id
-                    ? "bg-primary text-background shadow-sm"
-                    : "text-foreground/60 hover:text-foreground hover:bg-foreground/5"
-                }`}
-              >
-                <span>{ct.icon}</span>
-                <span className="hidden sm:inline">{ct.label}</span>
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle<ChartType>
+            options={CHART_TYPES.slice(0, 5).map((ct) => ({
+              id: ct.id,
+              label: ct.label,
+              icon: <span>{ct.icon}</span>,
+            }))}
+            value={chartType}
+            onChange={(val) => setChartType(val)}
+            size="sm"
+            className="w-auto min-w-[420px]"
+            ariaLabel="Chart style"
+          />
 
           <button
             onClick={() => setShowSettings((v) => !v)}

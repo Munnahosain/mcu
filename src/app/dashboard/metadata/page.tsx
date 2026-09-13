@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken, getAuthUser, getDownloadsKey } from "@/lib/auth";
 import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { compressImageForUpload } from "@/lib/client-image";
+import { downloadText } from "@/lib/downloadHelper";
 
 type DownloadRecord = {
   id: string;
@@ -136,15 +137,7 @@ export default function MetadataGeneratorPage() {
     try {
       const csvContent = lines.join("\r\n");
       const fileName = `mcu_stock_metadata_${Date.now()}.csv`;
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      downloadText(csvContent, fileName, "text/csv;charset=utf-8");
 
       const user = getAuthUser();
       const historyKey = getDownloadsKey(user?.email);
@@ -162,7 +155,7 @@ export default function MetadataGeneratorPage() {
         fileName,
         type: "CSV",
         date: new Date().toISOString(),
-        size: blob.size,
+        size: new Blob([csvContent]).size,
         itemCount: done.length,
         content: csvContent,
       };
