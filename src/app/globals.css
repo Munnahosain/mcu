@@ -96,6 +96,54 @@
   transition: max-width 0.2s ease-out, opacity 0.15s ease-out, transform 0.2s ease-out;
 }
 
+.dashboard-topbar,
+.dashboard-topbar .nav-pill-link,
+.dashboard-topbar .nav-pill-link .collapsible,
+.dashboard-topbar .nav-pill-link .collapsible-inner {
+  transition: none !important;
+}
+
+.dashboard-topbar .nav-pill-link:hover,
+.dashboard-topbar .nav-pill-link:active,
+.dashboard-topbar .nav-pill-link:focus-visible {
+  transform: none !important;
+}
+
+.dashboard-topbar .nav-pill-link .collapsible {
+  grid-template-columns: 0fr !important;
+}
+
+.dashboard-topbar .nav-pill-link .collapsible-inner {
+  max-width: 0 !important;
+  opacity: 0 !important;
+  transform: translateX(-4px) !important;
+}
+
+.dashboard-topbar .nav-pill-link.is-active {
+  gap: 6px;
+}
+
+.dashboard-topbar .nav-pill-link.is-active .collapsible {
+  grid-template-columns: 1fr !important;
+}
+
+.dashboard-topbar .nav-pill-link.is-active .collapsible-inner {
+  max-width: 120px !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.dashboard-topbar .nav-pill-link.is-active {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dashboard-topbar .nav-pill-link .collapsible-inner,
+.dashboard-topbar .nav-pill-link .label {
+  position: relative;
+  z-index: 10;
+}
+
 .nav-pill-link.is-active {
   gap: 6px;
   border-color: rgba(96, 241, 191, 0.7);
@@ -417,11 +465,6 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 80px;
-}
-
-/* ---- LIQUID TRANSITIONS FOR ALL ELEMENTS ---- */
-* {
-  @apply transition-all duration-300 ease-out;
 }
 
 /* Optimize rapid interactions */
@@ -3048,14 +3091,13 @@ html.light .liquid-icon-shell {
 .liquid-nav-link:hover,
 .liquid-footer-link:hover,
 .liquid-inline-link:hover {
-  transform: translateY(-2px);
+  transform: none !important;
   color: #fff;
   border-color: transparent;
 }
 
 .liquid-button-primary:hover::before,
 .liquid-button-secondary:hover::before,
-.liquid-nav-link:hover::before,
 .liquid-footer-link:hover::before {
   opacity: 1;
   animation: liquidButtonSweep 1.1s ease forwards;
@@ -3093,6 +3135,16 @@ html.light .liquid-icon-shell {
   display: none;
 }
 
+.nav-active-pill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #16c784, #0fae74);
+  box-shadow: 0 4px 12px rgba(15, 174, 116, 0.28);
+  pointer-events: none;
+}
+
 .nav-item {
   position: relative;
   z-index: 1;
@@ -3104,14 +3156,8 @@ html.light .liquid-icon-shell {
   border-radius: 999px;
   color: rgba(236, 241, 252, 0.7);
   border: 1px solid transparent;
-  gap: 0;
-  transition:
-    padding 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    gap 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.3s ease,
-    color 0.3s ease,
-    border-color 0.3s ease,
-    opacity 0.25s ease;
+  gap: 6px;
+  transition: color 0.2s ease;
   overflow: hidden;
 }
 
@@ -3130,42 +3176,23 @@ html.light .liquid-icon-shell {
   position: relative;
   z-index: 1;
   overflow: hidden;
-  max-width: 0;
+  max-width: 120px;
   white-space: nowrap;
-  opacity: 0;
+  opacity: 1;
   transform: none;
   margin: 0;
-  transition:
-    max-width 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.25s ease,
-    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    margin 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-item.is-active {
   color: #ffffff;
-  gap: 6px;
-  background: linear-gradient(180deg, #16c784, #0fae74);
+  background: transparent;
   border-color: transparent;
   box-shadow: 0 4px 12px rgba(15, 174, 116, 0.28);
-}
-
-.nav-item.is-active .nav-label {
-  max-width: 120px;
-  opacity: 1;
-  transform: none;
-  margin-left: 0;
 }
 
 .liquid-nav.is-compact .nav-item {
   padding-left: 10px;
   padding-right: 10px;
-}
-
-.liquid-nav.is-compact .nav-item:not(.is-active) .nav-label {
-  max-width: 0;
-  opacity: 0;
-  transform: none;
 }
 
 .liquid-nav-link.is-active {
@@ -4232,7 +4259,7 @@ html.light .liquid-theme-switch {
 }
 
 .liquid-theme-switch:hover {
-  transform: translateY(-2px) !important;
+  transform: none !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 12px 30px rgba(22, 199, 132, 0.28) !important;
 }
 
@@ -5880,6 +5907,11 @@ html body .liquid-nav-link:hover::before {
   opacity: 0 !important;
 }
 
+html body .nav-segment-shell .liquid-nav-link.is-active {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 html.dark .dashboard-topbar .dashboard-brand > div span:last-child {
   color: #edf2ef !important;
 }
@@ -6005,9 +6037,15 @@ html.dark .dashboard-nav-segments .nav-pill-link:hover {
 html.light body .dashboard-topbar .dashboard-nav-segments .nav-pill-link.is-active,
 html.dark body .dashboard-topbar .dashboard-nav-segments .nav-pill-link.is-active {
   color: #ffffff !important;
-  background: linear-gradient(180deg, #16c784, #0fae74) !important;
+  background: transparent !important;
   border-color: transparent !important;
-  box-shadow: 0 4px 10px rgba(15, 174, 116, 0.3) !important;
+  box-shadow: none !important;
+}
+
+.dashboard-topbar .dashboard-nav-segments .nav-pill-link .collapsible-inner,
+.dashboard-topbar .dashboard-nav-segments .nav-pill-link .label {
+  position: relative;
+  z-index: 10;
 }
 
 html.light body .dashboard-topbar .dashboard-nav-segments .nav-pill-link.is-active svg,

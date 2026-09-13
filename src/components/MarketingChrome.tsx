@@ -12,6 +12,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import ThemeToggle from "./ThemeToggle";
 import { clearAuthUser, ensureAccessToken, getAuthUser } from "@/lib/auth";
 
@@ -35,6 +36,7 @@ export default function MarketingChrome({
 }: MarketingChromeProps) {
   const router = useRouter();
   const [isCompact, setIsCompact] = useState(false);
+  const [displayPath, setDisplayPath] = useState(activePath);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -69,6 +71,10 @@ export default function MarketingChrome({
   const prefetchRoute = (href: string) => {
     router.prefetch(href.split("#")[0]);
   };
+
+  useEffect(() => {
+    setDisplayPath(activePath);
+  }, [activePath]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -113,17 +119,31 @@ export default function MarketingChrome({
           <div className="desktop-nav hidden items-center lg:flex">
             <div className="nav-segment-shell">
               {NAV_ITEMS.map((item) => {
-                const isActive = activePath === item.match;
+                const isActive = displayPath === item.match;
                 const Icon = item.icon;
 
                 return (
                   <Link
                     key={item.label}
                     href={item.href}
+                    onClick={(event) => {
+                      if (isActive) return;
+                      event.preventDefault();
+                      setDisplayPath(item.match);
+                      window.setTimeout(() => router.push(item.href), 220);
+                    }}
                     onMouseEnter={() => prefetchRoute(item.href)}
                     onFocus={() => prefetchRoute(item.href)}
                     className={`liquid-nav-link nav-item text-sm font-medium ${isActive ? "is-active" : ""}`}
                   >
+                    {isActive && (
+                      <motion.span
+                        layoutId="marketing-nav-active-pill"
+                        className="nav-active-pill"
+                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                        aria-hidden="true"
+                      />
+                    )}
                     <span className="nav-icon" aria-hidden="true">
                       <Icon className="h-4 w-4" />
                     </span>

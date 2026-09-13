@@ -4,6 +4,18 @@
 ### MERN + TypeScript — Industry Agnostic
 
 
+## Navbar Animation Contract
+
+The navbar animation is a protected UI behavior and must not be changed during unrelated work.
+
+- Keep the active green pill movement smooth and short: `220ms` with easing `[0.22, 1, 0.36, 1]`.
+- Do not add bounce, lift, scale, ripple, sweep, or spring effects to navbar links, the active pill, the theme toggle, or the dashboard topbar.
+- Keep navbar geometry stable. Do not animate `padding`, `gap`, `max-width`, `grid-template-columns`, or label visibility when changing the active item.
+- Keep active labels above the pill with a positive stacking order so text remains visible.
+- Do not reintroduce universal `* { transition: ... }` rules or long topbar transitions.
+- Before changing navbar styles, verify the rendered navbar at desktop width and confirm: `transform: none`, no bounce animation, visible labels, and one active pill.
+
+
 > **Version:** 2.2 
 > **Document snapshot:** Practices are maintained over time — dependency numbers in this file are **not** authoritative. 
 > **Audience:** Solo developers, AI coding assistants (Cursor, Copilot, Claude), team developers, non-technical stakeholders 
