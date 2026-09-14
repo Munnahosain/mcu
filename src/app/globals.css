@@ -3753,20 +3753,14 @@ html.light .liquid-nav {
 
 html.light .liquid-nav-shell {
   border-color: rgba(24, 34, 51, 0.08);
-  background:
-    radial-gradient(circle at 32% 18%, rgba(255, 190, 125, 0.14), transparent 20%),
-    radial-gradient(circle at 68% 22%, rgba(121, 190, 255, 0.12), transparent 22%),
-    radial-gradient(circle at 50% 118%, rgba(255, 156, 120, 0.08), transparent 28%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.58)),
-    rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.24);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.82),
     inset 0 -1px 0 rgba(255, 255, 255, 0.26),
     0 18px 38px rgba(42, 58, 80, 0.1);
   backdrop-filter: blur(18px) saturate(1.35) !important;
   -webkit-backdrop-filter: blur(18px) saturate(1.35) !important;
-  transform: translateZ(0);
-  will-change: transform, backdrop-filter;
+  isolation: isolate;
 }
 
 html.light .liquid-nav-shell::before {
