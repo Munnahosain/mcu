@@ -348,7 +348,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         <nav className="dashboard-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden" aria-label="Mobile navigation">
-          <div className="dashboard-mobile-nav-inner mx-auto flex max-w-lg items-center gap-1 overflow-x-auto px-2 py-2 no-scrollbar">
+          <div className="dashboard-mobile-nav-inner mx-auto flex max-w-lg items-center gap-1 overflow-x-auto px-2 no-scrollbar">
             {navLinks.map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href || (link.href === "/dashboard/generator" && pathname === "/dashboard");
@@ -362,12 +362,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     aria-current={isActive ? "page" : undefined}
                     aria-label={link.name}
                     title={link.name}
-                    className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors duration-200 ${isActive ? "text-[#063b2c]" : "text-foreground/55 hover:text-foreground"}`}
+                    className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 ${isActive ? "text-[#063b2c]" : "text-foreground/55 hover:text-foreground"}`}
                   >
                     {isActive && (
                       <motion.span
                         layoutId="mobile-nav-active-pill"
-                        className="absolute inset-0 rounded-2xl bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
+                        className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
                         transition={{ type: "spring", stiffness: 420, damping: 30 }}
                         aria-hidden="true"
                       />

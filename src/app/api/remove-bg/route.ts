@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import { Poof, PoofError } from "@poof-bg/js";
 import { getAuthenticatedUserId } from "@/server/auth/request-auth";
 import { enforceRateLimit } from "@/server/auth/rate-limit";
+
+const poof = new Poof({
+  apiKey: process.env.POOF_API_KEY || process.env.REMOVE_BG_API_KEY || "",
+});
 
 export async function POST(request: Request) {
   try {
@@ -17,58 +22,36 @@ export async function POST(request: Request) {
     if (rateLimitError) return rateLimitError;
 
     const formData = await request.formData();
-    const imageFile = formData.get("image") as File;
+    const imageFile = formData.get("image");
 
-    if (!imageFile) {
+    if (!imageFile || !(imageFile instanceof File)) {
       return NextResponse.json({ success: false, error: "No image file provided" }, { status: 400 });
     }
 
-    // Prepare FormData for remove.bg API
-    const bgFormData = new FormData();
-    bgFormData.append("image_file", imageFile);
-    bgFormData.append("size", "auto");
-    bgFormData.append("format", "png");
-
-    // Call remove.bg API using environment variable API key
-    const apiKey = process.env.REMOVE_BG_API_KEY || process.env.BG_REMOVER_API || process.env.BG_REMOVER_API_KEY || process.env.BG_Remover_API;
+    const apiKey = process.env.POOF_API_KEY || process.env.REMOVE_BG_API_KEY;
     if (!apiKey) {
-      throw new Error("Remove.bg API key is not configured. Please set REMOVE_BG_API_KEY or BG_REMOVER_API in your .env file.");
+      throw new Error("POOF_API_KEY is not configured. Add your Poof.bg key to the server env file.");
     }
-    const response = await fetch("https://api.remove.bg/v1.0/removebg", {
-      method: "POST",
-      headers: {
-        "X-Api-Key": apiKey,
-      },
-      body: bgFormData,
+
+    const result = await poof.removeBackground(imageFile, {
+      format: "png",
+      size: "full",
     });
 
-    if (!response.ok) {
-        let errorDetails = "";
-        try {
-            const errorObj = await response.json();
-            errorDetails = errorObj.errors ? errorObj.errors[0].title : "API Error";
-        } catch {
-            errorDetails = response.statusText;
-        }
-        if (response.status === 403) {
-          throw new Error("Remove.bg API key is invalid or expired. Update REMOVE_BG_API_KEY in .env and restart the dev server.");
-        }
-        throw new Error(`remove.bg failed: ${response.status} ${errorDetails}`);
-    }
-
-    const imageBlob = await response.blob();
-    const arrayBuffer = await imageBlob.arrayBuffer();
-
-    return new NextResponse(arrayBuffer, {
+    return new NextResponse(result.data, {
       status: 200,
       headers: {
-        "Content-Type": "image/png",
+        "Content-Type": result.metadata.contentType || "image/png",
       },
     });
-
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    console.error("Background Removal Error:", err);
-    return NextResponse.json({ success: false, error: err.message || "Something went wrong" }, { status: 500 });
+    const message = error instanceof PoofError
+      ? `${error.message} (${error.code})`
+      : error instanceof Error
+        ? error.message
+        : "Poof background removal failed";
+
+    console.error("Poof background removal error:", error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

@@ -210,7 +210,7 @@ export default function MarketingChrome({
         </div>
 
         {/* Mobile Nav Row */}
-        <div className="liquid-nav-mobile-row mt-2 hidden items-center gap-1.5 overflow-x-auto px-2 pb-2 lg:hidden">
+        <div className="liquid-nav-mobile-row mt-2 hidden items-center gap-1.5 overflow-x-auto px-2 lg:hidden">
           {NAV_ITEMS.map((item) => {
             const isActive = activePath === item.match;
             return (
@@ -243,7 +243,7 @@ export default function MarketingChrome({
       </nav>
 
       <nav className="marketing-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden" aria-label="Mobile marketing navigation">
-      <div className="marketing-mobile-nav-inner mx-auto flex max-w-sm items-center justify-center gap-1 overflow-x-auto px-2 py-2 no-scrollbar">
+      <div className="marketing-mobile-nav-inner mx-auto flex max-w-sm items-center justify-center gap-1 overflow-x-auto px-2 no-scrollbar">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = displayPath === item.match;
@@ -255,12 +255,12 @@ export default function MarketingChrome({
                 onMouseEnter={() => prefetchRoute(item.href)}
                 aria-label={item.label}
                 title={item.label}
-                className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors duration-200 ${isActive ? "text-[#063b2c]" : "text-foreground/55 hover:text-foreground"}`}
+                className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 ${isActive ? "text-[#063b2c]" : "text-foreground/55 hover:text-foreground"}`}
               >
                 {isActive && (
                   <motion.span
                     layoutId="marketing-mobile-active-pill"
-                    className="absolute inset-0 rounded-2xl bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
+                    className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
                     transition={{ type: "spring", stiffness: 420, damping: 30 }}
                     aria-hidden="true"
                   />
