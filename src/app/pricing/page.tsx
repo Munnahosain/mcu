@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Sparkles, Star, Layers, HelpCircle, ChevronDown, Crown } from "lucide-react";
+import { ArrowRight, Check, Star, Layers, HelpCircle, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import MarketingChrome from "../../components/MarketingChrome";
 import MarketingFooter from "../../components/MarketingFooter";
@@ -127,12 +127,6 @@ export default function PricingPage() {
       <MarketingChrome activePath="/pricing" />
       <main className="mx-auto max-w-7xl space-y-16 px-4 pb-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl space-y-6 text-center">
-          <div className="flex justify-center">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest shadow-sm">
-              <Sparkles className="h-4 w-4" />
-              Annual plans save 20%
-            </div>
-          </div>
           <h1 className="liquid-title text-4xl font-extrabold tracking-tight md:text-6xl text-foreground">
             Simple, Transparent Pricing
           </h1>
@@ -148,11 +142,6 @@ export default function PricingPage() {
                 {
                   id: "annual",
                   label: "Annual",
-                  badge: (
-                    <span className="ml-1.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-white/20 text-white shadow-xs">
-                      SAVE 20%
-                    </span>
-                  ),
                 },
               ]}
               value={billingCycle}
@@ -178,9 +167,9 @@ export default function PricingPage() {
                 }`}
               >
                 {tier.popular ? (
-                  <div className="absolute left-1/2 top-0 flex -translate-x-1/2 items-center gap-2 rounded-b-xl bg-primary px-4 py-1.5 text-xs font-bold uppercase tracking-[0.25em] text-background shadow-lg">
+                  <div className="absolute left-1/2 top-0 flex -translate-x-1/2 items-center gap-2 rounded-b-xl bg-primary px-4 py-1.5 text-xs font-bold text-background shadow-lg">
                     <Star className="h-4 w-4 fill-current" />
-                    Most Popular
+                    Most popular
                   </div>
                 ) : null}
 
@@ -192,8 +181,8 @@ export default function PricingPage() {
                       </h2>
                       <p className="liquid-copy text-xs text-foreground/60 min-h-[32px]">{tier.description}</p>
                     </div>
-                    <span className="rounded-xl border border-primary/20 flex items-center justify-center bg-primary/10 text-primary px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] shrink-0">
-                      {tier.icon}
+                    <span className="rounded-xl border border-primary/20 flex items-center justify-center bg-primary/10 text-primary px-3 py-1.5 text-[10px] font-semibold shrink-0">
+                      {tier.icon.replace("Tier", "Plan")}
                     </span>
                   </div>
 
@@ -221,7 +210,7 @@ export default function PricingPage() {
                   </Link>
 
                   <div className="mt-8 space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-primary/70">
+                    <p className="text-[11px] font-semibold text-primary/70">
                       What&apos;s included
                     </p>
                     {tier.features.map((feature) => (
@@ -253,7 +242,7 @@ export default function PricingPage() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-foreground/10 text-foreground/60 font-bold uppercase tracking-wider text-[11px]">
+                <tr className="border-b border-foreground/10 text-foreground/60 font-semibold text-[11px]">
                   <th className="py-3 px-4">Feature / Capability</th>
                   <th className="py-3 px-4 text-center">Free Starter</th>
                   <th className="py-3 px-4 text-center text-primary font-black">Pro Creator</th>
@@ -264,7 +253,7 @@ export default function PricingPage() {
                 {COMPARISON_FEATURES.map((cat, ci) => (
                   <Fragment key={ci}>
                     <tr>
-                      <td colSpan={4} className="pt-5 pb-2 px-4 font-black text-primary text-xs uppercase tracking-widest bg-foreground/[0.02]">
+                      <td colSpan={4} className="pt-5 pb-2 px-4 font-bold text-primary text-xs bg-foreground/[0.02]">
                         {cat.category}
                       </td>
                     </tr>

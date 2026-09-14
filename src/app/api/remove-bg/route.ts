@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     bgFormData.append("format", "png");
 
     // Call remove.bg API using environment variable API key
-    const apiKey = process.env.REMOVE_BG_API_KEY || process.env.BG_REMOVER_API || process.env.BG_REMOVER_API_KEY;
+    const apiKey = process.env.REMOVE_BG_API_KEY || process.env.BG_REMOVER_API || process.env.BG_REMOVER_API_KEY || process.env.BG_Remover_API;
     if (!apiKey) {
       throw new Error("Remove.bg API key is not configured. Please set REMOVE_BG_API_KEY or BG_REMOVER_API in your .env file.");
     }
@@ -49,6 +49,9 @@ export async function POST(request: Request) {
             errorDetails = errorObj.errors ? errorObj.errors[0].title : "API Error";
         } catch {
             errorDetails = response.statusText;
+        }
+        if (response.status === 403) {
+          throw new Error("Remove.bg API key is invalid or expired. Update REMOVE_BG_API_KEY in .env and restart the dev server.");
         }
         throw new Error(`remove.bg failed: ${response.status} ${errorDetails}`);
     }

@@ -4,6 +4,8 @@ import {
   ArrowRight,
   BadgeDollarSign,
   FileText,
+  LogIn,
+  LogOut,
   Sparkles,
   Zap,
   type LucideIcon,
@@ -11,7 +13,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
 import ThemeToggle from "./ThemeToggle";
 import { clearAuthUser, ensureAccessToken, getAuthUser } from "@/lib/auth";
@@ -31,14 +33,32 @@ const NAV_ITEMS: Array<{
   { href: "/docs", label: "Docs", match: "/docs", icon: FileText },
 ];
 
+const AUTH_EVENT = "mcustock-auth-changed";
+
+function subscribeToAuth(callback: () => void) {
+  window.addEventListener(AUTH_EVENT, callback);
+  return () => window.removeEventListener(AUTH_EVENT, callback);
+}
+
+function getClientAuthSnapshot() {
+  return Boolean(getAuthUser());
+}
+
+function getServerAuthSnapshot() {
+  return false;
+}
+
 export default function MarketingChrome({
   activePath = "/",
 }: MarketingChromeProps) {
   const router = useRouter();
   const [isCompact, setIsCompact] = useState(false);
   const [displayPath, setDisplayPath] = useState(activePath);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
+  const isAuthenticated = useSyncExternalStore(
+    subscribeToAuth,
+    getClientAuthSnapshot,
+    getServerAuthSnapshot,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -48,12 +68,11 @@ export default function MarketingChrome({
       if (cancelled) return;
 
       if (token && getAuthUser()) {
-        setIsAuthenticated(true);
+        window.dispatchEvent(new Event(AUTH_EVENT));
       } else {
         clearAuthUser();
-        setIsAuthenticated(false);
+        window.dispatchEvent(new Event(AUTH_EVENT));
       }
-      setAuthChecked(true);
     };
 
     void checkSession();
@@ -65,7 +84,7 @@ export default function MarketingChrome({
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
     clearAuthUser();
-    setIsAuthenticated(false);
+    window.dispatchEvent(new Event(AUTH_EVENT));
   };
 
   const prefetchRoute = (href: string) => {
@@ -88,13 +107,14 @@ export default function MarketingChrome({
   }, []);
 
   return (
-    <nav className={`liquid-nav fixed inset-x-0 top-0 z-50 ${isCompact ? "is-compact" : ""}`}>
+    <>
+      <nav className={`liquid-nav fixed inset-x-0 top-0 z-50 hidden lg:block ${isCompact ? "is-compact" : ""}`}>
       <div className="mx-auto flex w-full max-w-7xl flex-col px-4 pt-3 sm:px-6 sm:pt-4 lg:px-8">
-        <div className="liquid-nav-shell grid grid-cols-[1fr_auto_1fr] min-h-[68px] items-center px-4 py-2 sm:min-h-[76px] sm:px-6">
+        <div className="liquid-nav-shell grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] min-h-[68px] items-center px-3 py-2 sm:min-h-[76px] sm:px-6">
           {/* Brand */}
           <Link
             href="/"
-            className="liquid-brand group flex items-center gap-2.5 rounded-full px-2 py-2 sm:gap-3 sm:px-3"
+            className="liquid-brand group flex min-w-0 items-center gap-2.5 rounded-full px-2 py-2 sm:gap-3 sm:px-3"
           >
             <span className="liquid-icon-shell h-9 w-9 rounded-xl sm:h-10 sm:w-10">
               <Image
@@ -126,11 +146,8 @@ export default function MarketingChrome({
                   <Link
                     key={item.label}
                     href={item.href}
-                    onClick={(event) => {
-                      if (isActive) return;
-                      event.preventDefault();
+                    onClick={() => {
                       setDisplayPath(item.match);
-                      window.setTimeout(() => router.push(item.href), 220);
                     }}
                     onMouseEnter={() => prefetchRoute(item.href)}
                     onFocus={() => prefetchRoute(item.href)}
@@ -159,10 +176,19 @@ export default function MarketingChrome({
             <div className="hidden sm:block">
               <ThemeToggle />
             </div>
-            {authChecked && isAuthenticated ? (
+            {isAuthenticated ? (
               <>
                 <button type="button" onClick={() => void handleLogout()} className="liquid-nav-link hidden text-sm md:inline-flex">
                   Log out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="liquid-nav-link inline-flex h-9 w-9 justify-center p-0 md:hidden"
+                  aria-label="Log out"
+                  title="Log out"
+                >
+                  <LogOut className="h-4 w-4" />
                 </button>
                 <Link href="/dashboard/generator" className="liquid-button-primary inline-flex text-sm">
                   Open App
@@ -171,10 +197,10 @@ export default function MarketingChrome({
               </>
             ) : (
               <>
-                <Link href="/login" className="liquid-nav-link hidden text-sm md:inline-flex">
+                <Link href="/login" className="liquid-nav-link hidden whitespace-nowrap text-sm md:inline-flex">
                   Log in
                 </Link>
-                <Link href="/signup" className="liquid-button-primary inline-flex text-sm">
+                <Link href="/signup" className="liquid-button-primary inline-flex whitespace-nowrap px-3 text-xs sm:px-6 sm:text-sm">
                   Start Free
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -184,7 +210,7 @@ export default function MarketingChrome({
         </div>
 
         {/* Mobile Nav Row */}
-        <div className="liquid-nav-mobile-row mt-2 flex items-center gap-1.5 overflow-x-auto px-2 pb-2 lg:hidden">
+        <div className="liquid-nav-mobile-row mt-2 hidden items-center gap-1.5 overflow-x-auto px-2 pb-2 lg:hidden">
           {NAV_ITEMS.map((item) => {
             const isActive = activePath === item.match;
             return (
@@ -200,7 +226,7 @@ export default function MarketingChrome({
               </Link>
             );
           })}
-          {authChecked && isAuthenticated ? (
+          {isAuthenticated ? (
             <Link href="/dashboard/generator" className="liquid-nav-link shrink-0 text-sm md:hidden">
               Open App
             </Link>
@@ -210,10 +236,57 @@ export default function MarketingChrome({
             </Link>
           )}
           <div className="shrink-0 sm:hidden">
-            <ThemeToggle />
+            <ThemeToggle iconOnly />
           </div>
         </div>
       </div>
-    </nav>
+      </nav>
+
+      <nav className="marketing-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden" aria-label="Mobile marketing navigation">
+      <div className="marketing-mobile-nav-inner mx-auto flex max-w-sm items-center justify-center gap-1 overflow-x-auto px-2 py-2 no-scrollbar">
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = displayPath === item.match;
+
+          return (
+            <motion.div key={item.label} whileTap={{ scale: 0.88 }} className="shrink-0">
+              <Link
+                href={item.href}
+                onMouseEnter={() => prefetchRoute(item.href)}
+                aria-label={item.label}
+                title={item.label}
+                className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors duration-200 ${isActive ? "text-[#063b2c]" : "text-foreground/55 hover:text-foreground"}`}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="marketing-mobile-active-pill"
+                    className="absolute inset-0 rounded-2xl bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
+                    transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                    aria-hidden="true"
+                  />
+                )}
+                <Icon className="relative z-10 h-[18px] w-[18px]" strokeWidth={isActive ? 2.5 : 2} />
+              </Link>
+            </motion.div>
+          );
+        })}
+        {isAuthenticated ? (
+          <>
+            <Link href="/dashboard/generator" aria-label="Open app" title="Open app" className="marketing-mobile-action">
+              <ArrowRight className="h-[17px] w-[17px]" />
+            </Link>
+            <button type="button" onClick={() => void handleLogout()} aria-label="Log out" title="Log out" className="marketing-mobile-action">
+              <LogOut className="h-[17px] w-[17px]" />
+            </button>
+          </>
+        ) : (
+          <Link href="/login" aria-label="Log in" title="Log in" className="marketing-mobile-action">
+            <LogIn className="h-[17px] w-[17px]" />
+          </Link>
+        )}
+        <ThemeToggle iconOnly />
+      </div>
+      </nav>
+    </>
   );
 }

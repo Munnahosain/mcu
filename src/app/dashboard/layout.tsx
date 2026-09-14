@@ -18,8 +18,6 @@ import {
   LogOut,
   ChevronDown,
   Type,
-  Menu,
-  X,
   Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -57,7 +55,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,10 +98,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Close mobile menu on route change
+  // Close popovers on route change
   useEffect(() => {
     const closeMenus = window.setTimeout(() => {
-      setIsMobileMenuOpen(false);
       setIsProfileOpen(false);
     }, 0);
     return () => window.clearTimeout(closeMenus);
@@ -130,6 +126,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <GeneratorStateProvider>
       <div className="relative min-h-screen w-full flex flex-col bg-[var(--main-bg)] text-foreground selection:bg-primary selection:text-white">
+        <Link
+          href="/"
+          className="dashboard-mobile-home-logo fixed left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-2xl"
+          aria-label="Go to MCUSTOCK home"
+          title="MCUSTOCK home"
+        >
+          <Image
+            src="/MCU-LOGO-0.2V-1.png"
+            alt="MCUSTOCK"
+            width={24}
+            height={24}
+            className="h-6 w-6 object-contain"
+            priority
+          />
+        </Link>
+
         {/* Subtle Ambient Aurora Background Glow */}
         <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
           <div className="absolute left-[15%] top-[-8%] h-[36rem] w-[36rem] rounded-full bg-[radial-gradient(circle,rgba(22,199,132,0.06)_0%,transparent_70%)] blur-3xl" />
@@ -137,9 +149,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* 1. TOP STICKY ALWAYS-VISIBLE LIQUID GLASS NAVBAR */}
-        <header className="sticky top-0 z-50 w-full px-2 py-2 sm:px-6 sm:py-3 pointer-events-none flex justify-center">
+        <header className="sticky top-0 z-50 relative hidden w-full px-2 py-2 sm:px-6 sm:py-3 pointer-events-none lg:flex justify-center">
           <div
-            className="dashboard-topbar pointer-events-auto flex items-center rounded-full border border-[#1e4b44] bg-[#071b17]/78 p-1.5 shadow-[0_0_0_1px_rgba(18,79,70,0.55)] compact w-auto max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5"
+            className="dashboard-topbar pointer-events-auto flex items-center rounded-full border border-[#1e4b44] bg-[#071b17]/78 p-1.5 shadow-[0_0_0_1px_rgba(18,79,70,0.55)] compact w-full max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5"
           >
             {/* Left: Brand Logo & Title */}
             <Link
@@ -331,58 +343,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <LogOut className="h-4 w-4" />
               </button>
 
-              {/* Mobile Menu Toggle */}
-              <button
-                type="button"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border border-white/40 dark:border-primary/20 bg-foreground/[0.03] text-foreground/80 hover:text-primary transition-colors duration-150"
-                aria-label="Toggle navigation menu"
-              >
-                {isMobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-              </button>
             </div>
           </div>
-
-          {/* Mobile Navigation Drawer */}
-          <AnimatePresence>
-            {isMobileMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="lg:hidden mt-2 overflow-hidden rounded-3xl border border-white/50 dark:border-[rgba(22,199,132,0.2)] bg-white/95 dark:bg-[#071713]/95 p-3 shadow-2xl backdrop-blur-2xl"
-              >
-                <div className="grid grid-cols-2 gap-1.5">
-                  {navLinks.map((link) => {
-                    const Icon = link.icon;
-                    const isActive =
-                      pathname === link.href ||
-                      (link.href === "/dashboard/generator" && pathname === "/dashboard");
-
-                    return (
-                      <Link
-                        key={link.name}
-                        href={link.href}
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className={`flex items-center gap-2 rounded-2xl p-2.5 text-xs font-bold transition-all ${isActive
-                            ? "bg-primary/20 text-primary border border-primary/30"
-                            : "bg-foreground/[0.02] text-foreground/75 hover:bg-foreground/[0.06] hover:text-foreground"
-                          }`}
-                      >
-                        <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-foreground/50"}`} />
-                        <span>{link.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </header>
 
+        <nav className="dashboard-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden" aria-label="Mobile navigation">
+          <div className="dashboard-mobile-nav-inner mx-auto flex max-w-lg items-center gap-1 overflow-x-auto px-2 py-2 no-scrollbar">
+            {navLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href || (link.href === "/dashboard/generator" && pathname === "/dashboard");
+
+              return (
+                <motion.div key={link.name} whileTap={{ scale: 0.88 }} className="shrink-0">
+                  <Link
+                    href={link.href}
+                    scroll={false}
+                    onMouseEnter={() => router.prefetch(link.href)}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={link.name}
+                    title={link.name}
+                    className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors duration-200 ${isActive ? "text-[#063b2c]" : "text-foreground/55 hover:text-foreground"}`}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="mobile-nav-active-pill"
+                        className="absolute inset-0 rounded-2xl bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
+                        transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <Icon className="relative z-10 h-[18px] w-[18px]" strokeWidth={isActive ? 2.5 : 2} />
+                  </Link>
+                </motion.div>
+              );
+            })}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.88 }}
+              onClick={handleSignOut}
+              className="flex h-10 shrink-0 items-center justify-center gap-1 rounded-2xl px-2 text-foreground/55 transition-colors hover:bg-red-500/10 hover:text-red-500"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-[18px] w-[18px]" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide">Logout</span>
+            </motion.button>
+          </div>
+        </nav>
+
         {/* 2. FULL-WIDTH WORKSPACE CONTENT */}
-        <main className="flex-1 w-full min-w-0 bg-transparent relative z-10 px-3 py-2 sm:px-6 sm:py-4">
+        <main className="flex-1 w-full min-w-0 bg-transparent relative z-10 px-3 py-2 pb-20 sm:px-6 sm:py-4 lg:pb-4">
           <div className="mx-auto w-full max-w-[1920px]">
             <motion.div
               key={pathname}

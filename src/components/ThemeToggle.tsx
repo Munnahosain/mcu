@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 
 type ThemeMode = "dark" | "light";
@@ -10,46 +10,51 @@ interface ThemeToggleProps {
   iconOnly?: boolean;
 }
 
+const THEME_EVENT = "mcustock-theme-changed";
+
+function subscribeToTheme(callback: () => void) {
+  window.addEventListener(THEME_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(THEME_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function getClientThemeSnapshot(): ThemeMode {
+  const saved = localStorage.getItem("mcustock_theme");
+  if (saved === "light" || saved === "dark") return saved;
+  return document.documentElement.classList.contains("light") ? "light" : "dark";
+}
+
+function getServerThemeSnapshot(): ThemeMode {
+  return "dark";
+}
+
 export default function ThemeToggle({ className = "", iconOnly = false }: ThemeToggleProps) {
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("mcustock_theme") as ThemeMode | null;
-      const initial =
-        saved === "light" || saved === "dark"
-          ? saved
-          : document.documentElement.classList.contains("light")
-          ? "light"
-          : "dark";
-
-      document.documentElement.classList.remove("dark", "light");
-      document.documentElement.classList.add(initial);
-      setTheme(initial);
-    } catch {
-      document.documentElement.classList.remove("dark", "light");
-      document.documentElement.classList.add("dark");
-    }
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(theme);
-  }, [theme, mounted]);
+  const theme = useSyncExternalStore(subscribeToTheme, getClientThemeSnapshot, getServerThemeSnapshot);
 
   const toggleTheme = () => {
     const next: ThemeMode = theme === "dark" ? "light" : "dark";
-    setTheme(next);
     try {
       localStorage.setItem("mcustock_theme", next);
     } catch {
       // Ignore storage errors
     }
-    document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(next);
+    const root = document.documentElement;
+    const applyTheme = () => {
+      root.classList.remove("dark", "light");
+      root.classList.add(next);
+      root.classList.add("theme-transitioning");
+      window.setTimeout(() => root.classList.remove("theme-transitioning"), 420);
+      window.dispatchEvent(new Event(THEME_EVENT));
+    };
+
+    if ("startViewTransition" in document) {
+      document.startViewTransition(applyTheme);
+    } else {
+      applyTheme();
+    }
   };
 
   if (iconOnly) {
