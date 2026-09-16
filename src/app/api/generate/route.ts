@@ -9,6 +9,7 @@ import {
   prepareImage,
   resolveUserApiKey,
 } from '@/server/services/vision-service';
+import { incrementUsage } from '@/server/services/usage-service';
 
 export const maxDuration = 60;
 
@@ -160,6 +161,13 @@ export async function POST(req: Request) {
 
     if (typeof metadata.title === 'string' && metadata.title.length > titleLength) {
       metadata.title = metadata.title.slice(0, titleLength).trimEnd();
+    }
+
+    if (userId) {
+      await Promise.all([
+        incrementUsage(userId, 'metadataGenerated').catch((usageError) => console.error('[generate] usage metadata error:', usageError)),
+        incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[generate] usage api error:', usageError)),
+      ]);
     }
 
     return NextResponse.json({ success: true, metadata });

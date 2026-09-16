@@ -72,7 +72,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="relative rounded-[2rem] border border-primary/20 bg-foreground/[0.035] p-4 shadow-2xl backdrop-blur-xl sm:p-6">
+          <div className="relative rounded-[2rem] border border-white/10 bg-white/[0.045] p-4 shadow-2xl backdrop-blur-[24px] [-webkit-backdrop-filter:blur(24px)] sm:p-6">
             <div className="rounded-[1.5rem] border border-foreground/10 bg-background/70 p-4 sm:p-5">
               <div className="flex items-center justify-between border-b border-foreground/10 pb-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-primary"><ImagePlus className="h-4 w-4" /> Workspace queue</div>

@@ -1,0 +1,15 @@
+"use client";
+
+import { useEffect, useState } from 'react';
+import { Database, ImageIcon, KeyRound, Layers3, Upload, WandSparkles } from 'lucide-react';
+
+type Summary = { users: number; metadataGenerated: number; backgroundRemoved: number; threeDGenerated: number; imagesUploaded: number; apiRequests: number; storageUsedMB: number; creditsUsed: number };
+const metrics = [['Metadata generated', 'metadataGenerated', WandSparkles], ['Background removals', 'backgroundRemoved', ImageIcon], ['3D generations', 'threeDGenerated', Layers3], ['Images uploaded', 'imagesUploaded', Upload], ['API requests', 'apiRequests', KeyRound], ['Storage used (MB)', 'storageUsedMB', Database]] as const;
+
+export default function AdminUsagePage() {
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [period, setPeriod] = useState(() => { const now = new Date(); return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`; });
+  const [error, setError] = useState('');
+  useEffect(() => { fetch(`/api/admin/usage?period=${period}`, { credentials: 'include' }).then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Unable to load usage.'); setSummary(data.summary); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load usage.')); }, [period]);
+  return <div className="mx-auto max-w-7xl space-y-7"><section className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-primary">Metering</p><h2 className="mt-2 text-3xl font-black">Usage overview</h2><p className="mt-2 text-sm text-white/55">Monthly server-side consumption across the workspace.</p></div><input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white outline-none focus:border-primary/60" /></section>{error && <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{metrics.map(([label, key, Icon]) => <div key={key} className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur-xl"><div className="flex items-center justify-between"><p className="text-xs font-semibold text-white/50">{label}</p><Icon className="h-4 w-4 text-primary" /></div><p className="mt-5 text-3xl font-black">{summary ? summary[key] : '—'}</p></div>)}</div><div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-5 text-sm text-white/65"><span className="font-bold text-primary">{summary?.users ?? 0}</span> users have recorded usage in {period}. Total credits used: <span className="font-bold text-primary">{summary?.creditsUsed ?? 0}</span>.</div></div>;
+}

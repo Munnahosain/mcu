@@ -366,9 +366,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   >
                     {isActive && (
                       <motion.span
-                        layoutId="mobile-nav-active-pill"
+                        layoutId="dashboard-nav-active-pill"
                         className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
-                        transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                         aria-hidden="true"
                       />
                     )}

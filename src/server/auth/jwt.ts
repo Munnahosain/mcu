@@ -50,7 +50,7 @@ export function refreshCookieOptions() {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict' as const,
-    path: '/api/auth',
+    path: '/',
     maxAge: 60 * 60 * 24 * 7,
   };
 }

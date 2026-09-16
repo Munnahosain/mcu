@@ -5860,6 +5860,66 @@ html body button.toggle-option:disabled {
   opacity: 0.45;
 }
 
+/* Admin stays dark and readable regardless of the public theme. */
+.admin-shell,
+.admin-shell body {
+  background: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html.light .admin-shell {
+  background: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html.light .admin-shell .text-white,
+html.light .admin-shell .text-white\/40,
+html.light .admin-shell .text-white\/45,
+html.light .admin-shell .text-white\/50,
+html.light .admin-shell .text-white\/55,
+html.light .admin-shell .text-white\/60,
+html.light .admin-shell .text-white\/65 {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+html.light .admin-shell .text-white { color: #f8fafc !important; }
+html.light .admin-shell .text-white\/40 { color: rgba(255, 255, 255, 0.4) !important; }
+html.light .admin-shell .text-white\/45 { color: rgba(255, 255, 255, 0.45) !important; }
+html.light .admin-shell .text-white\/50 { color: rgba(255, 255, 255, 0.5) !important; }
+html.light .admin-shell .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
+html.light .admin-shell .text-white\/60 { color: rgba(255, 255, 255, 0.6) !important; }
+
+html.light .admin-shell .bg-white\/\[0\.025\],
+html.light .admin-shell .bg-white\/\[0\.035\],
+html.light .admin-shell .bg-white\/\[0\.04\],
+html.light .admin-shell .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.045) !important;
+}
+
+html.light .admin-shell .border-white\/10,
+html.light .admin-shell .border-white\/15 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.admin-login-shell {
+  min-height: 100vh;
+  background: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html.light .admin-login-shell .text-white { color: #f8fafc !important; }
+html.light .admin-login-shell .text-white\/30 { color: rgba(255, 255, 255, 0.3) !important; }
+html.light .admin-login-shell .text-white\/35 { color: rgba(255, 255, 255, 0.35) !important; }
+html.light .admin-login-shell .text-white\/40 { color: rgba(255, 255, 255, 0.4) !important; }
+html.light .admin-login-shell .text-white\/50 { color: rgba(255, 255, 255, 0.5) !important; }
+html.light .admin-login-shell .text-white\/60 { color: rgba(255, 255, 255, 0.6) !important; }
+html.light .admin-login-shell input {
+  background: rgba(0, 0, 0, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+html.light .admin-login-shell input::placeholder { color: rgba(255, 255, 255, 0.3) !important; }
+
 @media (prefers-reduced-motion: reduce) {
   html body .toggle-thumb {
     transition: none !important;
@@ -6252,3 +6312,32 @@ html.dark .marketing-mobile-nav {
   color: var(--primary);
   background-color: color-mix(in srgb, var(--primary) 10%, transparent);
 }
+
+/* Final admin theme isolation: the public light-theme rules must never wash out admin UI. */
+html.light body .admin-login-shell > main,
+html.light body .admin-shell {
+  background-color: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html.light body .admin-login-shell > main .text-white,
+html.light body .admin-shell .text-white { color: #f8fafc !important; }
+html.light body .admin-login-shell > main .text-white\/30,
+html.light body .admin-shell .text-white\/40 { color: rgba(255, 255, 255, 0.4) !important; }
+html.light body .admin-login-shell > main .text-white\/35,
+html.light body .admin-shell .text-white\/45 { color: rgba(255, 255, 255, 0.45) !important; }
+html.light body .admin-login-shell > main .text-white\/50,
+html.light body .admin-shell .text-white\/50 { color: rgba(255, 255, 255, 0.5) !important; }
+html.light body .admin-login-shell > main .text-white\/60,
+html.light body .admin-shell .text-white\/60 { color: rgba(255, 255, 255, 0.6) !important; }
+html.light body .admin-shell .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
+html.light body .admin-shell .text-white\/65 { color: rgba(255, 255, 255, 0.65) !important; }
+
+html.light body .admin-login-shell > main input,
+html.light body .admin-shell input {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+  color: #f8fafc !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.light body .admin-login-shell > main input::placeholder { color: rgba(255, 255, 255, 0.38) !important; }
