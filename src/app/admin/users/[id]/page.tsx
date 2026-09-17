@@ -16,12 +16,13 @@ export default function AdminUserDetailsPage() {
   const [plans, setPlans] = useState<Array<{ _id: string; name: string; slug: string; price: number; billingInterval: string }>>([]);
 
   useEffect(() => {
+    if (!params?.id) return;
     fetch(`/api/admin/users/${params.id}`, { credentials: 'include' }).then(async (response) => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to load user.');
       setUser(payload.user);
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load user.'));
-  }, [params.id]);
+  }, [params?.id]);
 
   useEffect(() => {
     fetch('/api/admin/plans', { credentials: 'include' }).then((response) => response.json()).then((payload) => setPlans(payload.plans || [])).catch(() => undefined);
@@ -31,6 +32,7 @@ export default function AdminUserDetailsPage() {
   if (!user) return <p className="text-sm text-white/50">Loading user...</p>;
 
   const changeCredits = async (action: 'add' | 'remove' | 'reset') => {
+    if (!params?.id) return;
     setError('');
     setMessage('');
     const response = await fetch(`/api/admin/users/${params.id}/credits`, {
@@ -49,6 +51,7 @@ export default function AdminUserDetailsPage() {
   };
 
   const assignPlan = async (planId: string) => {
+    if (!params?.id) return;
     setError(''); setMessage('');
     const response = await fetch(`/api/admin/users/${params.id}/plan`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId }) });
     const payload = await response.json();
