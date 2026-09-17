@@ -6380,3 +6380,21 @@ html.light body .admin-shell input {
 }
 
 html.light body .admin-login-shell > main input::placeholder { color: rgba(255, 255, 255, 0.38) !important; }
+
+/* Marketing navbar primary action stays a true rounded theme pill. */
+html body .liquid-nav-shell a.liquid-button-primary {
+  min-height: 42px !important;
+  padding: 0 22px !important;
+  border: 1px solid rgba(22, 199, 132, 0.28) !important;
+  border-radius: 9999px !important;
+  color: #ffffff !important;
+  background: var(--primary) !important;
+  box-shadow: 0 8px 22px rgba(22, 199, 132, 0.2) !important;
+}
+
+html body .liquid-nav-shell a.liquid-button-primary:hover {
+  color: #ffffff !important;
+  background: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
+  box-shadow: 0 10px 26px rgba(22, 199, 132, 0.28) !important;
+}

@@ -14,7 +14,7 @@ export async function GET(req: Request, context: RouteContext) {
     if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     await connectToDatabase();
-    const user = await User.findById(id).select('-password').lean();
+    const user = await User.findById(id).select('-password').populate('planId', 'name slug price billingInterval monthlyCredits').lean();
     if (!user) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
 
     return NextResponse.json({ success: true, user: { ...user, _id: String(user._id), planId: user.planId ? String(user.planId) : null } });
