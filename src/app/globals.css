@@ -100,7 +100,7 @@
 .dashboard-topbar .nav-pill-link,
 .dashboard-topbar .nav-pill-link .collapsible,
 .dashboard-topbar .nav-pill-link .collapsible-inner {
-  transition: none !important;
+  transition: grid-template-columns 0.2s ease-out, max-width 0.2s ease-out, opacity 0.15s ease-out, transform 0.2s ease-out;
 }
 
 .dashboard-topbar .nav-pill-link:hover,
@@ -109,11 +109,11 @@
   transform: none !important;
 }
 
-.dashboard-topbar .nav-pill-link .collapsible {
+.dashboard-topbar .nav-pill-link:not(.is-active) .collapsible {
   grid-template-columns: 0fr !important;
 }
 
-.dashboard-topbar .nav-pill-link .collapsible-inner {
+.dashboard-topbar .nav-pill-link:not(.is-active) .collapsible-inner {
   max-width: 0 !important;
   opacity: 0 !important;
   transform: translateX(-4px) !important;
@@ -3209,6 +3209,23 @@ html.light .liquid-icon-shell {
   opacity: 1;
   transform: none;
   margin: 0;
+  transition: max-width 0.2s ease-out, opacity 0.15s ease-out, transform 0.2s ease-out;
+}
+
+.desktop-nav .nav-item:not(.is-active) .nav-label {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-4px);
+}
+
+.desktop-nav .nav-item.is-active {
+  gap: 6px;
+}
+
+.desktop-nav .nav-item.is-active .nav-label {
+  max-width: 120px;
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .nav-item.is-active {
@@ -5862,7 +5879,13 @@ html body button.toggle-option:disabled {
 
 /* Admin stays dark and readable regardless of the public theme. */
 .admin-shell,
-.admin-shell body {
+.admin-login-shell {
+  background: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html body:has(.admin-shell),
+html body:has(.admin-login-shell) {
   background: #06110f !important;
   color: #f8fafc !important;
 }
@@ -5870,6 +5893,22 @@ html body button.toggle-option:disabled {
 html.light .admin-shell {
   background: #06110f !important;
   color: #f8fafc !important;
+}
+
+html.light body:has(.admin-shell),
+html.light body:has(.admin-login-shell) {
+  background: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html.light body:has(.admin-shell) aside,
+html.light body:has(.admin-shell) main {
+  background: transparent !important;
+  color: #f8fafc !important;
+}
+
+html.light body:has(.admin-shell) aside {
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 html.light .admin-shell .text-white,

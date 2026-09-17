@@ -110,7 +110,14 @@ export default function MarketingChrome({
     <>
       <nav className={`liquid-nav fixed inset-x-0 top-0 z-50 hidden lg:block ${isCompact ? "is-compact" : ""}`}>
       <div className="mx-auto flex w-full max-w-7xl flex-col px-4 pt-3 sm:px-6 sm:pt-4 lg:px-8">
-        <div className="liquid-nav-shell grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] min-h-[68px] items-center px-3 py-2 sm:min-h-[76px] sm:px-6">
+        <div
+          className="liquid-nav-shell grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] min-h-[68px] items-center px-3 py-2 sm:min-h-[76px] sm:px-6"
+          style={{
+            backdropFilter: "blur(24px) saturate(1.2)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.2)",
+            isolation: "isolate",
+          }}
+        >
           {/* Brand */}
           <Link
             href="/"
@@ -155,9 +162,9 @@ export default function MarketingChrome({
                   >
                     {isActive && (
                       <motion.span
-                        layoutId="marketing-nav-active-pill"
+                        layoutId="marketing-nav-active-pill-desktop"
                         className="nav-active-pill"
-                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
                         aria-hidden="true"
                       />
                     )}
@@ -210,7 +217,14 @@ export default function MarketingChrome({
         </div>
 
         {/* Mobile Nav Row */}
-        <div className="liquid-nav-mobile-row mt-2 hidden items-center gap-1.5 overflow-x-auto px-2 lg:hidden">
+        <div
+          className="liquid-nav-mobile-row mt-2 hidden items-center gap-1.5 overflow-x-auto px-2 lg:hidden"
+          style={{
+            backdropFilter: "blur(24px) saturate(1.2)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.2)",
+            isolation: "isolate",
+          }}
+        >
           {NAV_ITEMS.map((item) => {
             const isActive = activePath === item.match;
             return (
@@ -259,9 +273,9 @@ export default function MarketingChrome({
               >
                 {isActive && (
                   <motion.span
-                    layoutId="marketing-nav-active-pill"
+                    layoutId="marketing-nav-active-pill-mobile"
                     className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
-                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
                     aria-hidden="true"
                   />
                 )}

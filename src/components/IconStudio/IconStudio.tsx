@@ -59,7 +59,7 @@ export type ArtboardMode = "fit" | "custom";
 export type ExportFormat = "png" | "webp" | "svg" | "obj" | "gltf" | "mp4";
 export type ColorMode = "svg" | "custom";
 export type LightingPreset = "studio" | "softbox" | "rim" | "warm" | "cyber";
-export type AnimationKind = "none" | "turntable" | "floating" | "wobble" | "pulse" | "swing";
+export type AnimationKind = "none" | "turntable" | "floating" | "wobble" | "pulse" | "swing" | "orbit" | "tilt" | "bob";
 
 export type IconAsset = {
   id: string;
@@ -504,7 +504,7 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
   const bevelSegments = isExport
     ? Math.max(12, Math.round(controls.bevel * 3.5))
     : controls.fastPreview
-    ? Math.max(3, Math.min(6, Math.round(controls.bevel * 1.5)))
+    ? Math.max(6, Math.min(12, Math.round(controls.bevel * 2.5)))
     : Math.max(6, Math.round(controls.bevel * 2.5));
 
   data.paths.forEach((path, pathIndex) => {
@@ -634,7 +634,10 @@ const IconPreview = forwardRef<
   const frameRef = useRef<number | null>(null);
   const clockRef = useRef<THREE.Clock>(new THREE.Clock());
   const controlsRefCurrent = useRef<StudioControls>(controls);
-  controlsRefCurrent.current = controls;
+
+  useEffect(() => {
+    controlsRefCurrent.current = controls;
+  }, [controls]);
 
   const clearIcon = useCallback(() => {
     if (!sceneRef.current || !iconRef.current) return;
@@ -802,6 +805,18 @@ const IconPreview = forwardRef<
         } else if (c.animation === "swing") {
           iconRef.current.rotation.y = baseRotY + Math.sin(elapsed * 2 * speed) * 0.55;
           iconRef.current.position.set(basePosX, basePosY, basePosZ);
+          iconRef.current.scale.set(currentScale, currentScale, currentScale);
+        } else if (c.animation === "orbit") {
+          iconRef.current.rotation.set(baseRotX + Math.sin(elapsed * 1.4 * speed) * 0.12, baseRotY + elapsed * 0.9 * speed, baseRotZ);
+          iconRef.current.position.set(basePosX + Math.cos(elapsed * 1.4 * speed) * 0.16, basePosY + Math.sin(elapsed * 1.4 * speed) * 0.12, basePosZ);
+          iconRef.current.scale.set(currentScale, currentScale, currentScale);
+        } else if (c.animation === "tilt") {
+          iconRef.current.rotation.set(baseRotX + Math.sin(elapsed * 1.8 * speed) * 0.2, baseRotY, baseRotZ + Math.cos(elapsed * 1.8 * speed) * 0.12);
+          iconRef.current.position.set(basePosX, basePosY, basePosZ);
+          iconRef.current.scale.set(currentScale, currentScale, currentScale);
+        } else if (c.animation === "bob") {
+          iconRef.current.position.set(basePosX, basePosY + Math.sin(elapsed * 2.6 * speed) * 0.28, basePosZ);
+          iconRef.current.rotation.set(baseRotX, baseRotY + Math.sin(elapsed * 2.6 * speed) * 0.06, baseRotZ);
           iconRef.current.scale.set(currentScale, currentScale, currentScale);
         } else {
           // Static pose
@@ -1056,7 +1071,7 @@ const IconPreview = forwardRef<
         }
       },
       record360Video: async (targetAsset, durationSeconds, onProgress) => {
-        const recordSize = 1080;
+        const recordSize = 720;
         const offCanvas = document.createElement("canvas");
         offCanvas.width = recordSize;
         offCanvas.height = recordSize;
@@ -1127,19 +1142,20 @@ const IconPreview = forwardRef<
 
         const stream = offCanvas.captureStream(60);
 
+        if (typeof MediaRecorder === "undefined") {
+          throw new Error("Video export is not supported by this browser. Try Chrome, Edge, or Firefox.");
+        }
+
         let selectedMimeType = "video/webm";
         let formatExt = "webm";
 
         if (typeof MediaRecorder !== "undefined") {
           const candidateTypes = [
-            { mime: "video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext: "mp4" },
-            { mime: "video/mp4;codecs=avc1.4d401f", ext: "mp4" },
-            { mime: "video/mp4;codecs=avc1", ext: "mp4" },
-            { mime: "video/mp4", ext: "mp4" },
             { mime: "video/webm;codecs=vp9,opus", ext: "webm" },
             { mime: "video/webm;codecs=vp9", ext: "webm" },
             { mime: "video/webm;codecs=vp8", ext: "webm" },
             { mime: "video/webm", ext: "webm" },
+            { mime: "video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext: "mp4" },
           ];
 
           for (const cand of candidateTypes) {
@@ -1161,7 +1177,7 @@ const IconPreview = forwardRef<
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
 
-        const fps = 60;
+        const fps = 30;
         const duration = Math.max(1, Math.min(20, durationSeconds || 4));
         const totalFrames = Math.round(duration * fps);
         const baseRotX = THREE.MathUtils.degToRad(controls.rotX);
@@ -1174,7 +1190,7 @@ const IconPreview = forwardRef<
         const currentScale = (controls.scale / 100) * baseScale;
         const speed = controls.animSpeed || 1;
 
-        mediaRecorder.start(100);
+        mediaRecorder.start(250);
 
         const frameInterval = 1000 / fps;
         const startRecordTime = performance.now();
@@ -1205,6 +1221,18 @@ const IconPreview = forwardRef<
             exportGroup.rotation.y = baseRotY + Math.sin(animTime * 2 * speed) * 0.55;
             exportGroup.position.set(basePosX, basePosY, basePosZ);
             exportGroup.scale.set(currentScale, currentScale, currentScale);
+          } else if (controls.animation === "orbit") {
+            exportGroup.rotation.set(baseRotX + Math.sin(animTime * 1.4 * speed) * 0.12, baseRotY + animTime * 0.9 * speed, baseRotZ);
+            exportGroup.position.set(basePosX + Math.cos(animTime * 1.4 * speed) * 0.16, basePosY + Math.sin(animTime * 1.4 * speed) * 0.12, basePosZ);
+            exportGroup.scale.set(currentScale, currentScale, currentScale);
+          } else if (controls.animation === "tilt") {
+            exportGroup.rotation.set(baseRotX + Math.sin(animTime * 1.8 * speed) * 0.2, baseRotY, baseRotZ + Math.cos(animTime * 1.8 * speed) * 0.12);
+            exportGroup.position.set(basePosX, basePosY, basePosZ);
+            exportGroup.scale.set(currentScale, currentScale, currentScale);
+          } else if (controls.animation === "bob") {
+            exportGroup.position.set(basePosX, basePosY + Math.sin(animTime * 2.6 * speed) * 0.28, basePosZ);
+            exportGroup.rotation.set(baseRotX, baseRotY + Math.sin(animTime * 2.6 * speed) * 0.06, baseRotZ);
+            exportGroup.scale.set(currentScale, currentScale, currentScale);
           } else {
             // Default 360 Turntable rotation for full seamless loop!
             exportGroup.rotation.y = baseRotY + frameProgress * Math.PI * 2;
@@ -1230,10 +1258,13 @@ const IconPreview = forwardRef<
 
         await new Promise((r) => setTimeout(r, 150));
 
-        const videoBlob = await new Promise<Blob>((resolve) => {
+        const videoBlob = await new Promise<Blob>((resolve, reject) => {
           mediaRecorder.onstop = () => {
-            resolve(new Blob(chunks, { type: selectedMimeType }));
+            const blob = new Blob(chunks, { type: selectedMimeType });
+            if (!blob.size) reject(new Error("Video export produced an empty file. Please try a shorter duration."));
+            else resolve(blob);
           };
+          mediaRecorder.onerror = () => reject(new Error("Video recording failed. Please try WebM or a shorter duration."));
           mediaRecorder.stop();
         });
 
@@ -1699,6 +1730,9 @@ export default function IconStudio() {
                   ["wobble", "3D Wobble"],
                   ["pulse", "Heartbeat Pulse"],
                   ["swing", "45° Swing"],
+                  ["orbit", "Orbit Drift"],
+                  ["tilt", "Tilt Reveal"],
+                  ["bob", "Soft Bob"],
                 ] as [AnimationKind, string][]
               ).map(([id, label]) => ({ id, label }))}
               value={controls.animation}
@@ -1721,7 +1755,7 @@ export default function IconStudio() {
                 onChange={(v) => updateControl("videoDuration", v)}
               />
               <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Output: {controls.videoDuration} seconds @ 60 FPS ({controls.videoDuration * 60} frames loop)
+                Output: {controls.videoDuration} seconds @ 30 FPS ({controls.videoDuration * 30} frames, WebM for reliable playback)
               </p>
             </div>
 
@@ -1952,7 +1986,8 @@ export default function IconStudio() {
           <section className="space-y-4 rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl">
             <h2 className="text-sm font-extrabold text-foreground">Extrusion & Bevel Smoothing</h2>
             <Slider label="Depth (Thickness)" min={1} max={60} value={controls.depth} onChange={(value) => updateControl("depth", value)} />
-            <Slider label="Bevel Roundness" min={0} max={8} step={0.1} value={controls.bevel} onChange={(value) => updateControl("bevel", value)} />
+            <Slider label="Bevel Sharpness" min={0} max={8} step={0.1} value={controls.bevel} onChange={(value) => updateControl("bevel", value)} />
+            <p className="text-[10px] text-[var(--text-muted)]">Preview keeps bevel detail in Fast Preview; final exports use maximum geometry quality.</p>
             <Slider label="Surface Roughness" min={0} max={100} suffix="%" value={controls.roughness} onChange={(value) => updateControl("roughness", value)} />
             <Slider label="Brightness" min={50} max={180} suffix="%" value={controls.brightness} onChange={(value) => updateControl("brightness", value)} />
           </section>

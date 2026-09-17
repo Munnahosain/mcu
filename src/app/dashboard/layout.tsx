@@ -55,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNavCompact, setIsNavCompact] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,6 +87,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace("/login");
     }
   }, [isHydrated, router, user]);
+
+  useEffect(() => {
+    const handleScroll = () => setIsNavCompact(window.scrollY > 80);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Close profile dropdown on outside click
   useEffect(() => {
@@ -151,7 +159,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* 1. TOP STICKY ALWAYS-VISIBLE LIQUID GLASS NAVBAR */}
         <header className="sticky top-0 z-50 relative hidden w-full px-2 py-2 sm:px-6 sm:py-3 pointer-events-none lg:flex justify-center">
           <div
-            className="dashboard-topbar pointer-events-auto flex items-center rounded-full border border-[#1e4b44] bg-[#071b17]/78 p-1.5 shadow-[0_0_0_1px_rgba(18,79,70,0.55)] compact w-full max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5"
+            className={`dashboard-topbar pointer-events-auto flex items-center rounded-full border border-[#1e4b44] bg-[#071b17]/78 p-1.5 shadow-[0_0_0_1px_rgba(18,79,70,0.55)] w-full max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5 ${isNavCompact ? "compact" : ""}`}
           >
             {/* Left: Brand Logo & Title */}
             <Link
@@ -205,7 +213,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     >
                       {isActive && (
                         <motion.span
-                          layoutId="dashboard-nav-active-pill"
+                          layoutId="dashboard-nav-active-pill-desktop"
                           className="nav-active-pill"
                           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                           aria-hidden="true"
@@ -366,7 +374,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   >
                     {isActive && (
                       <motion.span
-                        layoutId="dashboard-nav-active-pill"
+                        layoutId="dashboard-nav-active-pill-mobile"
                         className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]"
                         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                         aria-hidden="true"
