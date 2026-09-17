@@ -44,6 +44,7 @@ import {
   Timer,
 } from "lucide-react";
 import * as THREE from "three";
+import { useRouter } from "next/navigation";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -51,6 +52,7 @@ import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUti
 import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { downloadBlob, downloadText, copyBlobToClipboard } from "@/lib/downloadHelper";
+import { readSessionValue, removeSessionValue } from "@/lib/safeStorage";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 export type MaterialKind = "glass" | "plastic" | "glossy" | "frosted" | "metallic" | "iridescent";
@@ -123,6 +125,10 @@ type PreviewHandle = {
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
 
 const sampleSvgCursor = `<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <path fill="#16c784" d="M24 16 L24 96 L46 76 L68 116 L84 106 L62 66 L94 66 Z"/>
@@ -1334,6 +1340,7 @@ function Slider({
 }
 
 export default function IconStudio() {
+  const router = useRouter();
   const [assets, setAssets] = useState<IconAsset[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [controls, setControls] = useState<StudioControls>(defaultControls);
@@ -1347,6 +1354,21 @@ export default function IconStudio() {
   const cancelBatch = useRef(false);
   const previewRef = useRef<PreviewHandle | null>(null);
   const selectedAsset = assets.find((asset) => asset.id === selectedId);
+
+  useEffect(() => {
+    const imported = readSessionValue<{ svg: string; name: string }>("mcustock_studio_import");
+    if (!imported?.svg || !imported.name) return;
+    removeSessionValue("mcustock_studio_import");
+    const asset: IconAsset = {
+      id: `splitter-${Date.now()}`,
+      name: imported.name,
+      text: imported.svg,
+      preview: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(imported.svg)}`,
+    };
+    setAssets((current) => [asset, ...current].slice(0, MAX_FILES));
+    setSelectedId(asset.id);
+    setError("");
+  }, []);
 
   const addAssets = useCallback(
     async (files: FileList | File[]) => {
@@ -1419,6 +1441,14 @@ export default function IconStudio() {
       }
       return remaining;
     });
+  };
+
+  const clearAssets = () => {
+    cancelBatch.current = true;
+    setAssets([]);
+    setSelectedId("");
+    setBatch({ running: false, current: "", completed: 0, failed: 0 });
+    setError("");
   };
 
   const updateControl = <K extends keyof StudioControls>(key: K, value: StudioControls[K]) => {
@@ -1508,6 +1538,7 @@ export default function IconStudio() {
       let failed = 0;
       for (const asset of assets) {
         if (cancelBatch.current) break;
+        await yieldToBrowser();
         setBatch({ running: true, current: asset.name, completed, failed });
         try {
           const blob = await previewRef.current.exportBlob(asset, "png", controls.resolution);
@@ -1517,9 +1548,14 @@ export default function IconStudio() {
           failed += 1;
         }
         setBatch({ running: true, current: asset.name, completed, failed });
+        // Let React paint progress and process cancellation before the next WebGL export.
+        await yieldToBrowser();
       }
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      downloadBlob(zipBlob, `3d-icons-${controls.resolution}.zip`);
+      if (!cancelBatch.current && completed > 0) {
+        await yieldToBrowser();
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(zipBlob, `3d-icons-${controls.resolution}.zip`);
+      }
     } catch (zipError) {
       setError(zipError instanceof Error ? zipError.message : "Batch export failed.");
     } finally {
@@ -1559,6 +1595,16 @@ export default function IconStudio() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/splitter")}
+            className="!transform-none flex h-10 items-center gap-1.5 rounded-full border border-transparent bg-primary px-3.5 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_4px_16px_rgba(22,199,132,0.3)] transition-[background-color,box-shadow] duration-200 hover:!transform-none hover:border-transparent hover:bg-primary-hover hover:shadow-[0_5px_18px_rgba(22,199,132,0.42)]"
+            title="Open Vector Sheet Splitter"
+          >
+            <Box className="h-4 w-4" />
+            <span>Vector Splitter</span>
+          </button>
+
           <div className="flex items-center gap-2" title="Fast Preview: 60 FPS viewport. Exports still render ultra high-quality.">
             <Zap className={`h-4 w-4 ${controls.fastPreview ? "text-primary" : "text-[var(--text-secondary)]"}`} />
             <span className="hidden sm:inline text-xs font-bold text-[var(--text-secondary)]">Fast Preview</span>
@@ -1633,6 +1679,18 @@ export default function IconStudio() {
                   {assets.length}/{MAX_FILES} loaded
                 </p>
               </div>
+              {assets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAssets}
+                  disabled={batch.running}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-extrabold text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Remove all loaded SVGs"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Clear All
+                </button>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-1.5 pt-0.5">
