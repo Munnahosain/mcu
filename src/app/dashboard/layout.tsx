@@ -160,6 +160,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-50 relative hidden w-full px-2 py-2 sm:px-6 sm:py-3 pointer-events-none lg:flex justify-center">
           <div
             className={`dashboard-topbar pointer-events-auto flex items-center rounded-full border border-[#1e4b44] bg-[#071b17]/78 p-1.5 shadow-[0_0_0_1px_rgba(18,79,70,0.55)] w-full max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5 ${isNavCompact ? "compact" : ""}`}
+            style={{
+              backdropFilter: "blur(24px) saturate(1.2)",
+              WebkitBackdropFilter: "blur(24px) saturate(1.2)",
+              isolation: "isolate",
+            }}
           >
             {/* Left: Brand Logo & Title */}
             <Link
@@ -355,7 +360,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        <nav className="dashboard-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden" aria-label="Mobile navigation">
+        <nav
+          className="dashboard-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden"
+          aria-label="Mobile navigation"
+          style={{
+            backdropFilter: "blur(24px) saturate(1.2)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.2)",
+            isolation: "isolate",
+          }}
+        >
           <div className="dashboard-mobile-nav-inner mx-auto flex max-w-lg items-center gap-1 overflow-x-auto px-2 no-scrollbar">
             {navLinks.map((link) => {
               const Icon = link.icon;
