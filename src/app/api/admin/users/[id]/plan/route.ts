@@ -23,7 +23,11 @@ export async function POST(req: Request, context: RouteContext) {
     if (!plan) return NextResponse.json({ success: false, error: 'Active plan not found.' }, { status: 404 });
 
     await Subscription.updateMany({ userId: id, status: { $in: ['active', 'trial'] } }, { $set: { status: 'cancelled', autoRenew: false, updatedAt: new Date() } });
-    const subscription = await Subscription.create({ userId: id, planId, status: 'active', startedAt: new Date(), provider: 'manual', autoRenew: false });
+    const startedAt = new Date();
+    const expiresAt = new Date(startedAt);
+    if (plan.billingInterval === 'year') expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    else expiresAt.setMonth(expiresAt.getMonth() + 1);
+    const subscription = await Subscription.create({ userId: id, planId, status: 'active', startedAt, expiresAt, provider: 'manual', autoRenew: false });
     const updated = await User.findByIdAndUpdate(id, { $set: { planId, 'credits.monthly': plan.monthlyCredits, updatedAt: new Date() } }, { new: true }).select('-password').lean();
 
     await AuditLog.create({ actorId: actor._id, actorRole: actor.role, action: 'CHANGE_PLAN', targetUserId: id, metadata: { beforePlanId: user.planId ? String(user.planId) : null, afterPlanId: planId, subscriptionId: String(subscription._id) }, ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '', userAgent: req.headers.get('user-agent') || '' });

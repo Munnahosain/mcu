@@ -9,12 +9,17 @@ import {
   prepareImage,
   resolveUserApiKey,
 } from '@/server/services/vision-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { incrementUsage } from '@/server/services/usage-service';
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  let creditReserved = false;
+  let authenticatedUserId: string | null = null;
   try {
     const userId = await getAuthenticatedUserId(req);
+    authenticatedUserId = userId;
 
     const rateLimitError = enforceRateLimit(req, userId, {
       limit: 20,
@@ -65,6 +70,11 @@ export async function POST(req: Request) {
     const { base64, dataUrl } = await prepareImage(buffer, 768, 75);
     const provider = detectProvider(apiKey, providerHint);
 
+    if (userId) {
+      await consumeCredits(userId, 1, 'AI prompt generation');
+      creditReserved = true;
+    }
+
     console.log(`[generate-prompt] provider=${provider}, model=${modelHint}, length=${promptLength}`);
 
     // Build instruction modifiers cleanly
@@ -106,8 +116,21 @@ OUTPUT RULES:
       temperature: 0.7,
     });
 
+    if (userId) {
+      await Promise.all([
+        incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[generate-prompt] usage api error:', usageError)),
+        incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate-prompt] usage credits error:', usageError)),
+      ]);
+    }
+
     return NextResponse.json({ success: true, prompt: responseText.trim() });
   } catch (error) {
+    if (creditReserved && authenticatedUserId) {
+      await refundCredits(authenticatedUserId, 1).catch((refundError) => console.error('[generate-prompt] credit refund error:', refundError));
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
     const status = getStatusCode(error) || 500;
     console.error('[generate-prompt] error:', error instanceof Error ? error.message : error);
     return NextResponse.json(

@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { downloadDataUrl, downloadText } from "@/lib/downloadHelper";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import ThemedSelect from "@/components/ui/ThemedSelect";
 import {
   TypeboxState,
   SourceMode,
@@ -618,19 +619,15 @@ export default function TypeboxStudioPage() {
                   <label className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
                     Weight
                   </label>
-                  <select
+                  <ThemedSelect
                     value={state.fontWeight}
-                    onChange={(e) => updateState("fontWeight", e.target.value as FontWeight)}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-xs font-bold text-foreground focus:border-primary outline-none"
-                  >
-                    <option value="100">Thin 100</option>
-                    <option value="300">Light 300</option>
-                    <option value="400">Regular 400</option>
-                    <option value="500">Medium 500</option>
-                    <option value="600">SemiBold 600</option>
-                    <option value="700">Bold 700</option>
-                    <option value="900">Black 900</option>
-                  </select>
+                    onChange={(value) => updateState("fontWeight", value as FontWeight)}
+                    ariaLabel="Font weight"
+                    options={[
+                      ["100", "Thin 100"], ["300", "Light 300"], ["400", "Regular 400"], ["500", "Medium 500"],
+                      ["600", "SemiBold 600"], ["700", "Bold 700"], ["900", "Black 900"],
+                    ].map(([value, label]) => ({ value, label }))}
+                  />
                 </div>
 
                 {/* Typography Sliders */}
@@ -1040,22 +1037,16 @@ export default function TypeboxStudioPage() {
                   <div className="flex items-center gap-2">
                     <div className="flex-1 space-y-1">
                       <label className="text-[11px] font-bold text-[var(--text-secondary)]">ORIGIN</label>
-                      <select
+                      <ThemedSelect
                         value={state.boom.origin}
-                        onChange={(e) => updateNested("boom", "origin", e.target.value as BoomOrigin)}
-                        className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground"
-                      >
-                        <option value="center">Center</option>
-                        <option value="glyph">Per glyph</option>
-                        <option value="top">Top</option>
-                        <option value="bottom">Bottom</option>
-                        <option value="left">Left</option>
-                        <option value="right">Right</option>
-                        <option value="top-left">Top left</option>
-                        <option value="top-right">Top right</option>
-                        <option value="bottom-left">Bottom left</option>
-                        <option value="bottom-right">Bottom right</option>
-                      </select>
+                        onChange={(value) => updateNested("boom", "origin", value as BoomOrigin)}
+                        ariaLabel="Boom origin"
+                        options={[
+                          ["center", "Center"], ["glyph", "Per glyph"], ["top", "Top"], ["bottom", "Bottom"],
+                          ["left", "Left"], ["right", "Right"], ["top-left", "Top left"], ["top-right", "Top right"],
+                          ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"],
+                        ].map(([value, label]) => ({ value, label }))}
+                      />
                     </div>
                     <button
                       onClick={() => updateNested("boom", "seed", Math.random() * 1000)}

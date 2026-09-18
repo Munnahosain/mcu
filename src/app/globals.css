@@ -2838,9 +2838,8 @@ html.light .liquid-copy {
   position: relative;
   overflow: hidden;
   border-radius: 999px;
-  border: 1px solid rgba(22, 199, 132, 0.18);
   background: rgba(7, 27, 23, 0.7);
-  box-shadow: 0 0 0 1px rgba(22, 199, 132, 0.08), 0 14px 32px rgba(4, 15, 12, 0.4);
+  box-shadow: 0 14px 32px rgba(4, 15, 12, 0.4);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   transition:
@@ -3772,11 +3771,10 @@ html.light .liquid-nav {
 
 html.light .liquid-nav-shell {
   border-color: rgba(24, 34, 51, 0.08);
-  background: rgba(255, 255, 255, 0.24);
+  background: transparent;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.26),
-    0 18px 38px rgba(42, 58, 80, 0.1);
+    inset 0 -1px 0 rgba(255, 255, 255, 0.26);
   backdrop-filter: blur(18px) saturate(1.35) !important;
   -webkit-backdrop-filter: blur(18px) saturate(1.35) !important;
   isolation: isolate;
@@ -4104,11 +4102,10 @@ html.light .mouse-liquid-specular {
 
 .liquid-nav-shell,
 .liquid-nav-mobile-row {
-  border-color: rgba(22, 199, 132, 0.24);
   background:
     linear-gradient(135deg, rgba(22, 199, 132, 0.12), rgba(255, 255, 255, 0.04)),
     rgba(7, 27, 23, 0.78);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 20px 50px rgba(0, 0, 0, 0.28), 0 0 32px rgba(22, 199, 132, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 20px 50px rgba(0, 0, 0, 0.28);
 }
 
 .liquid-panel,
@@ -5940,6 +5937,159 @@ html.light .admin-shell .border-white\/15 {
   border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
+/* Admin surfaces follow the selected theme while preserving readable contrast. */
+html.light .admin-shell {
+  background: #e8f3ef !important;
+  color: #17201e !important;
+}
+
+html.light body:has(.admin-shell) {
+  background: #e8f3ef !important;
+  color: #17201e !important;
+}
+
+html.light .admin-shell header {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(23, 32, 30, 0.1) !important;
+  color: #17201e !important;
+}
+
+html.light .admin-shell aside {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(23, 32, 30, 0.1) !important;
+}
+
+html.light .admin-shell main,
+html.light .admin-shell nav {
+  color: #17201e !important;
+}
+
+html.light .admin-shell .text-white,
+html.light .admin-shell .text-white\/40,
+html.light .admin-shell .text-white\/45,
+html.light .admin-shell .text-white\/50,
+html.light .admin-shell .text-white\/55,
+html.light .admin-shell .text-white\/60,
+html.light .admin-shell .text-white\/65,
+html.light .admin-shell .text-white\/70,
+html.light .admin-shell .text-white\/75 {
+  color: rgba(23, 32, 30, 0.72) !important;
+}
+
+html.light .admin-shell .text-white { color: #17201e !important; }
+html.light .admin-shell .text-white\/40 { color: rgba(23, 32, 30, 0.42) !important; }
+html.light .admin-shell .text-white\/45 { color: rgba(23, 32, 30, 0.48) !important; }
+html.light .admin-shell .text-white\/50 { color: rgba(23, 32, 30, 0.56) !important; }
+html.light .admin-shell .text-white\/55 { color: rgba(23, 32, 30, 0.62) !important; }
+html.light .admin-shell .text-white\/60 { color: rgba(23, 32, 30, 0.68) !important; }
+html.light .admin-shell .text-white\/65 { color: rgba(23, 32, 30, 0.74) !important; }
+html.light .admin-shell .text-white\/70 { color: rgba(23, 32, 30, 0.78) !important; }
+html.light .admin-shell .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
+
+html.light .admin-shell .bg-white\/\[0\.025\],
+html.light .admin-shell .bg-white\/\[0\.035\],
+html.light .admin-shell .bg-white\/\[0\.04\],
+html.light .admin-shell .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+html.light .admin-shell .border-white\/10,
+html.light .admin-shell .border-white\/15 {
+  border-color: rgba(23, 32, 30, 0.12) !important;
+}
+
+html.light .admin-shell input,
+html.light .admin-shell textarea,
+html.light .admin-shell select,
+html.light .admin-shell .admin-select {
+  background-color: #ffffff !important;
+  border-color: rgba(23, 32, 30, 0.16) !important;
+  color: #17201e !important;
+}
+
+html.light .admin-shell select option {
+  background: #ffffff;
+  color: #17201e;
+}
+
+.admin-shell select,
+.admin-select {
+  cursor: pointer;
+}
+
+.admin-mobile-home-logo {
+  border: 1px solid rgba(22, 199, 132, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 24px rgba(42, 58, 80, 0.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+}
+
+html.dark .admin-mobile-home-logo {
+  border-color: rgba(117, 240, 203, 0.24);
+  background: rgba(7, 23, 19, 0.52);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* Admin uses a focused dark workspace even when the public theme is light. */
+html.light body:has(.admin-shell),
+html.light body .admin-shell {
+  background: #06110f !important;
+  color: #f8fafc !important;
+}
+
+html.light body .admin-shell .admin-header,
+html.light body .admin-shell .dashboard-topbar {
+  background: transparent !important;
+  color: #f8fafc !important;
+}
+
+html.light body .admin-shell .dashboard-topbar .dashboard-brand > div span:last-child,
+html.light body .admin-shell .dashboard-topbar .dashboard-brand > div span:first-child,
+html.light body .admin-shell .dashboard-topbar .nav-pill-link:not(.is-active),
+html.light body .admin-shell .dashboard-topbar .nav-pill-link:not(.is-active) svg,
+html.light body .admin-shell .text-foreground,
+html.light body .admin-shell .text-foreground\/55,
+html.light body .admin-shell .text-foreground\/60 {
+  color: rgba(237, 242, 239, 0.72) !important;
+}
+
+html.light body .admin-shell .dashboard-topbar .dashboard-brand > div span:last-child,
+html.light body .admin-shell .text-foreground {
+  color: #edf2ef !important;
+}
+
+html.light body .admin-shell .bg-white\/\[0\.025\],
+html.light body .admin-shell .bg-white\/\[0\.035\],
+html.light body .admin-shell .bg-white\/\[0\.04\],
+html.light body .admin-shell .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.045) !important;
+}
+
+html.light body .admin-shell .border-white\/10,
+html.light body .admin-shell .border-white\/15 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html.light body .admin-shell input,
+html.light body .admin-shell textarea,
+html.light body .admin-shell select {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f8fafc !important;
+}
+
+html.light body .admin-shell select option {
+  background: #071713;
+  color: #f8fafc;
+}
+
+html.light body .admin-mobile-home-logo {
+  border-color: rgba(117, 240, 203, 0.24);
+  background: rgba(7, 23, 19, 0.52);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
 .admin-login-shell {
   min-height: 100vh;
   background: #06110f !important;
@@ -5988,7 +6138,7 @@ html body .btn-primary:hover {
 /* Final UI corrections for the shared brand surfaces. */
 html body .liquid-icon-shell {
   background: transparent !important;
-  border-color: color-mix(in srgb, var(--foreground) 12%, transparent) !important;
+  border: none !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -6052,7 +6202,7 @@ html.dark .dashboard-topbar {
 }
 
 html.dark .dashboard-topbar .dashboard-brand > div span:first-child {
-  color: rgba(117, 240, 203, 0.82) !important;
+  color: rgba(237, 242, 239, 0.46) !important;
 }
 
 html.dark .dashboard-topbar .nav-pill-link:not(.is-active) {
@@ -6071,8 +6221,8 @@ html.dark .dashboard-topbar .nav-pill-link.is-active {
 
 html.light .dashboard-topbar {
   border-color: rgba(23, 32, 30, 0.1) !important;
-  background: rgba(255, 255, 255, 0.24) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 12px 30px rgba(42, 58, 80, 0.1) !important;
+  background: transparent !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(22px) saturate(1.35) contrast(1.04);
   -webkit-backdrop-filter: blur(22px) saturate(1.35) contrast(1.04);
 }
@@ -6082,7 +6232,7 @@ html.light .dashboard-topbar .dashboard-brand > div span:last-child {
 }
 
 html.light .dashboard-topbar .dashboard-brand > div span:first-child {
-  color: #0aaa6a !important;
+  color: rgba(24, 34, 51, 0.46) !important;
 }
 
 html.light .dashboard-topbar .nav-pill-link:not(.is-active) {
@@ -6193,10 +6343,10 @@ html.dark body .dashboard-topbar .dashboard-nav-segments .nav-pill-link.is-activ
   min-height: 3.875rem;
   max-height: 3.875rem;
   overflow: hidden;
-  border: 1px solid rgba(22, 199, 132, 0.3);
+  border: none;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(22, 199, 132, 0.06)), rgba(255, 255, 255, 0.24);
-  box-shadow: 0 12px 30px rgba(42, 58, 80, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(22, 199, 132, 0.12);
+  box-shadow: 0 12px 30px rgba(42, 58, 80, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   transform: none;
   padding-bottom: 0;
   overscroll-behavior: contain;
@@ -6207,7 +6357,7 @@ html.dark body .dashboard-topbar .dashboard-nav-segments .nav-pill-link.is-activ
 html.dark .dashboard-mobile-nav {
   background: linear-gradient(135deg, rgba(22, 199, 132, 0.11), rgba(7, 23, 19, 0.32)), rgba(7, 23, 19, 0.36);
   border-color: rgba(117, 240, 203, 0.3);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(117, 240, 203, 0.18), inset 0 -1px 0 rgba(22, 199, 132, 0.16);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .dashboard-mobile-nav-inner {
@@ -6265,18 +6415,18 @@ html.dark .dashboard-mobile-nav {
 @media (max-width: 1023px) {
   .dashboard-mobile-home-logo {
     display: flex;
-    border: 1px solid rgba(22, 199, 132, 0.24);
-    background: rgba(255, 255, 255, 0.78);
-    box-shadow: 0 8px 20px rgba(42, 58, 80, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    -webkit-backdrop-filter: blur(16px) saturate(1.1);
-    backdrop-filter: blur(16px) saturate(1.1);
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
 html.dark .dashboard-mobile-home-logo {
-  background: rgba(7, 23, 19, 0.88);
-  border-color: rgba(117, 240, 203, 0.18);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(117, 240, 203, 0.08);
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .marketing-mobile-nav {
@@ -6289,10 +6439,10 @@ html.dark .dashboard-mobile-home-logo {
   min-height: 3.875rem;
   max-height: 3.875rem;
   overflow: hidden;
-  border: 1px solid rgba(22, 199, 132, 0.3);
+  border: none;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(22, 199, 132, 0.06)), rgba(255, 255, 255, 0.24);
-  box-shadow: 0 12px 30px rgba(42, 58, 80, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(22, 199, 132, 0.12);
+  box-shadow: 0 12px 30px rgba(42, 58, 80, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   transform: none;
   padding-bottom: 0;
   overscroll-behavior: contain;
@@ -6303,7 +6453,7 @@ html.dark .dashboard-mobile-home-logo {
 html.dark .marketing-mobile-nav {
   background: linear-gradient(135deg, rgba(22, 199, 132, 0.11), rgba(7, 23, 19, 0.32)), rgba(7, 23, 19, 0.36);
   border-color: rgba(117, 240, 203, 0.3);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(117, 240, 203, 0.18), inset 0 -1px 0 rgba(22, 199, 132, 0.16);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .marketing-mobile-nav-inner {
@@ -6352,34 +6502,88 @@ html.dark .marketing-mobile-nav {
   background-color: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
-/* Final admin theme isolation: the public light-theme rules must never wash out admin UI. */
+/* Final admin theme isolation: keep admin controls readable in both themes. */
 html.light body .admin-login-shell > main,
 html.light body .admin-shell {
-  background-color: #06110f !important;
+  background-color: #e8f3ef !important;
+  color: #17201e !important;
+}
+
+html.dark body .admin-shell main {
   color: #f8fafc !important;
+}
+
+html.light body .admin-shell main {
+  color: #17201e !important;
+}
+
+html.light body .admin-shell main h1,
+html.light body .admin-shell main h2,
+html.light body .admin-shell main h3,
+html.light body .admin-shell main td,
+html.light body .admin-shell main th {
+  color: #17201e;
 }
 
 html.light body .admin-login-shell > main .text-white,
-html.light body .admin-shell .text-white { color: #f8fafc !important; }
+html.light body .admin-shell .text-white { color: #17201e !important; }
 html.light body .admin-login-shell > main .text-white\/30,
-html.light body .admin-shell .text-white\/40 { color: rgba(255, 255, 255, 0.4) !important; }
+html.light body .admin-shell .text-white\/40 { color: rgba(23, 32, 30, 0.42) !important; }
 html.light body .admin-login-shell > main .text-white\/35,
-html.light body .admin-shell .text-white\/45 { color: rgba(255, 255, 255, 0.45) !important; }
+html.light body .admin-shell .text-white\/45 { color: rgba(23, 32, 30, 0.48) !important; }
 html.light body .admin-login-shell > main .text-white\/50,
-html.light body .admin-shell .text-white\/50 { color: rgba(255, 255, 255, 0.5) !important; }
+html.light body .admin-shell .text-white\/50 { color: rgba(23, 32, 30, 0.56) !important; }
 html.light body .admin-login-shell > main .text-white\/60,
-html.light body .admin-shell .text-white\/60 { color: rgba(255, 255, 255, 0.6) !important; }
-html.light body .admin-shell .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
-html.light body .admin-shell .text-white\/65 { color: rgba(255, 255, 255, 0.65) !important; }
+html.light body .admin-shell .text-white\/60 { color: rgba(23, 32, 30, 0.68) !important; }
+html.light body .admin-shell .text-white\/55 { color: rgba(23, 32, 30, 0.62) !important; }
+html.light body .admin-shell .text-white\/65 { color: rgba(23, 32, 30, 0.74) !important; }
+html.light body .admin-shell .text-white\/70 { color: rgba(23, 32, 30, 0.78) !important; }
+html.light body .admin-shell .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
+
+html.light body .admin-shell header {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(23, 32, 30, 0.1) !important;
+}
+
+html body .admin-shell .admin-header {
+  background: transparent !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.light body .admin-shell aside {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(23, 32, 30, 0.1) !important;
+}
+
+html.light body .admin-shell .bg-white\/\[0\.025\],
+html.light body .admin-shell .bg-white\/\[0\.035\],
+html.light body .admin-shell .bg-white\/\[0\.04\],
+html.light body .admin-shell .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+html.light body .admin-shell .border-white\/10,
+html.light body .admin-shell .border-white\/15 {
+  border-color: rgba(23, 32, 30, 0.12) !important;
+}
 
 html.light body .admin-login-shell > main input,
-html.light body .admin-shell input {
-  background-color: rgba(0, 0, 0, 0.2) !important;
-  color: #f8fafc !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+html.light body .admin-shell input,
+html.light body .admin-shell textarea,
+html.light body .admin-shell select {
+  background-color: #ffffff !important;
+  color: #17201e !important;
+  border-color: rgba(23, 32, 30, 0.16) !important;
 }
 
 html.light body .admin-login-shell > main input::placeholder { color: rgba(255, 255, 255, 0.38) !important; }
+
+html.light body .admin-shell select option {
+  background: #ffffff;
+  color: #17201e;
+}
 
 /* Marketing navbar primary action stays a true rounded theme pill. */
 html body .liquid-nav-shell a.liquid-button-primary {
@@ -6397,4 +6601,70 @@ html body .liquid-nav-shell a.liquid-button-primary:hover {
   background: var(--primary-hover) !important;
   border-color: var(--primary-hover) !important;
   box-shadow: 0 10px 26px rgba(22, 199, 132, 0.28) !important;
+}
+
+/* Horizontal toolbars scroll by touch without exposing a scrollbar thumb. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Keep Admin light-mode navbar labels and icons readable. */
+html.light body .admin-shell .admin-topbar .dashboard-brand > div span:first-child,
+html.light body .admin-shell .admin-topbar .dashboard-brand > div span:last-child,
+html.light body .admin-shell .admin-topbar .nav-pill-link:not(.is-active),
+html.light body .admin-shell .admin-topbar .nav-pill-link:not(.is-active) svg,
+html.light body .admin-shell .admin-topbar .text-foreground {
+  color: #17201e !important;
+}
+
+html.light body .admin-shell .admin-topbar .nav-pill-link:not(.is-active):hover,
+html.light body .admin-shell .admin-topbar .nav-pill-link:not(.is-active):hover svg {
+  color: #0aaa6a !important;
+}
+
+/* Native dropdowns stay anchored and use the shared theme without hover reflow. */
+select,
+select:hover,
+select:focus {
+  transform: none !important;
+  outline: none !important;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease !important;
+}
+
+select {
+  cursor: pointer;
+  color-scheme: light dark;
+}
+
+select:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 32%, transparent);
+}
+
+html.light select option {
+  background-color: #ffffff;
+  color: #17201e;
+}
+
+html.light select option:hover,
+html.light select option:checked {
+  background: #16c784 linear-gradient(#16c784, #16c784) !important;
+  color: #06251b !important;
+}
+
+html.dark select option {
+  background-color: #111a1e;
+  color: #edf2ef;
+}
+
+html.dark select option:hover,
+html.dark select option:checked {
+  background: #16c784 linear-gradient(#16c784, #16c784) !important;
+  color: #06251b !important;
 }

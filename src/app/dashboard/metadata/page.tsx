@@ -31,23 +31,50 @@ interface ImageFile {
   };
 }
 
+const MAX_QUEUE_SIZE = 500;
+const INITIAL_VISIBLE_IMAGES = 60;
+const VISIBLE_IMAGE_STEP = 60;
+const COMPRESSION_CONCURRENCY = 3;
+
 export default function MetadataGeneratorPage() {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_IMAGES);
 
   const [currentKeyIndex, setCurrentKeyIndex] = useState(0);
 
   // Handle File Select
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files) return;
-    const newImages = Array.from(files).filter(f => f.type.startsWith('image/')).map(file => ({
-      id: crypto.randomUUID(),
-      file,
-      preview: URL.createObjectURL(file),
-      status: 'pending' as const
-    }));
-    setImages(prev => [...prev, ...newImages]);
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const availableSlots = MAX_QUEUE_SIZE - images.length;
+    const selectedImages = imageFiles.slice(0, availableSlots);
+    if (selectedImages.length) {
+      setIsPreparing(true);
+      try {
+        for (let index = 0; index < selectedImages.length; index += COMPRESSION_CONCURRENCY) {
+          const batch = selectedImages.slice(index, index + COMPRESSION_CONCURRENCY);
+          const compressedBatch = await Promise.all(batch.map(async (file) => {
+            const compressedFile = await compressImageForUpload(file);
+            return {
+              id: crypto.randomUUID(),
+              file: compressedFile,
+              preview: URL.createObjectURL(compressedFile),
+              status: 'pending' as const,
+            };
+          }));
+          setImages(prev => [...prev, ...compressedBatch]);
+          setVisibleCount((count) => Math.max(count, INITIAL_VISIBLE_IMAGES));
+        }
+      } finally {
+        setIsPreparing(false);
+      }
+    }
+    if (selectedImages.length < imageFiles.length) {
+      alert(`Only ${MAX_QUEUE_SIZE} images can be queued at once.`);
+    }
   };
 
   const generateMetadata = async (imgId?: string) => {
@@ -196,10 +223,10 @@ export default function MetadataGeneratorPage() {
         <div className="flex flex-col gap-4">
           <button
             onClick={() => generateMetadata()}
-            disabled={images.length === 0 || isGenerating}
+            disabled={images.length === 0 || isGenerating || isPreparing}
             className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed text-white force-white text-sm font-semibold rounded-lg py-2.5 flex items-center justify-center gap-2 transition-colors mt-2"
           >
-            <Play className="w-4 h-4" /> {isGenerating ? "Generating..." : "Generate Pending"}
+            <Play className="w-4 h-4" /> {isPreparing ? "Preparing images..." : isGenerating ? "Generating..." : "Generate Pending"}
           </button>
           <button
             onClick={exportCSV}
@@ -245,17 +272,25 @@ export default function MetadataGeneratorPage() {
               <ImageIcon className="w-5 h-5 text-gray-400" />
               Generation Queue
             </h3>
-            <button
-              onClick={() => setImages([])}
-              className="text-sm font-medium text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" /> Clear All
-            </button>
+            <div className="flex items-center gap-4">
+              {isPreparing && <span className="text-xs text-primary">Compressing upload...</span>}
+              <span className="text-xs text-gray-500">Showing {Math.min(visibleCount, images.length)} of {images.length}</span>
+              <button
+                onClick={() => {
+                  images.forEach((image) => URL.revokeObjectURL(image.preview));
+                  setImages([]);
+                  setVisibleCount(INITIAL_VISIBLE_IMAGES);
+                }}
+                className="text-sm font-medium text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Clear All
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <AnimatePresence mode="popLayout">
-              {images.map((img) => (
+              {images.slice(0, visibleCount).map((img) => (
                 <motion.div
                   key={img.id}
                   layout
@@ -320,6 +355,16 @@ export default function MetadataGeneratorPage() {
                 </motion.div>
               ))}
             </AnimatePresence>
+
+            {visibleCount < images.length && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((count) => Math.min(count + VISIBLE_IMAGE_STEP, images.length))}
+                className="min-h-[240px] rounded-2xl border-2 border-dashed border-white/10 p-8 text-sm font-semibold text-gray-400 transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+              >
+                Load next {Math.min(VISIBLE_IMAGE_STEP, images.length - visibleCount)} images
+              </button>
+            )}
 
             {/* Quick Add Card */}
             <motion.div

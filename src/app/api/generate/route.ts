@@ -10,6 +10,7 @@ import {
   resolveUserApiKey,
 } from '@/server/services/vision-service';
 import { incrementUsage } from '@/server/services/usage-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
 
 export const maxDuration = 60;
 
@@ -46,8 +47,11 @@ ${negativeKeywords ? `7. Do not use these keywords: ${negativeKeywords}.` : ''}
 }
 
 export async function POST(req: Request) {
+  let creditReserved = false;
+  let authenticatedUserId: string | null = null;
   try {
     const userId = await getAuthenticatedUserId(req);
+    authenticatedUserId = userId;
 
     const rateLimitError = enforceRateLimit(req, userId, {
       limit: 20,
@@ -96,6 +100,11 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await image.arrayBuffer());
     const { base64, dataUrl } = await prepareImage(buffer, 512, 65);
     const provider = detectProvider(apiKey, providerHint);
+
+    if (userId) {
+      await consumeCredits(userId, 1, 'AI metadata generation');
+      creditReserved = true;
+    }
 
     console.log(`[generate] provider=${provider}, model=${modelHint}, title=${titleLength}, description=${descriptionLength}, kw=${keywordsCount}, platform=${platform}`);
 
@@ -167,11 +176,18 @@ export async function POST(req: Request) {
       await Promise.all([
         incrementUsage(userId, 'metadataGenerated').catch((usageError) => console.error('[generate] usage metadata error:', usageError)),
         incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[generate] usage api error:', usageError)),
+        incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate] usage credits error:', usageError)),
       ]);
     }
 
     return NextResponse.json({ success: true, metadata });
   } catch (error) {
+    if (creditReserved && authenticatedUserId) {
+      await refundCredits(authenticatedUserId, 1).catch((refundError) => console.error('[generate] credit refund error:', refundError));
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
     const status = getStatusCode(error) || 500;
     console.error('[generate] error:', error instanceof Error ? error.message : error);
     return NextResponse.json(

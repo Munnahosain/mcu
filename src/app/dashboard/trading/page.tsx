@@ -40,6 +40,7 @@ import { chartCategories, chartTemplates, defaultTemplate } from "@/lib/trading/
 import { calculateIndicators, heikinAshi } from "@/lib/trading/indicators";
 import { buildChartSvg, downloadSvg } from "@/lib/trading/svgExporter";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import ThemedSelect from "@/components/ui/ThemedSelect";
 import type { Candle, CandleInterval, ChartTemplate, ChartType, IndicatorKey, MarketSymbol, TickInterval } from "@/lib/trading/types";
 
 const chartWidth = 1000;
@@ -260,17 +261,13 @@ export default function TradingPage() {
           <span className="text-[10px] font-extrabold uppercase tracking-widest text-foreground/45 shrink-0 pl-1">
             Symbol:
           </span>
-          <select
+          <ThemedSelect
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value as MarketSymbol)}
-            className="h-9 px-3 rounded-xl bg-foreground/[0.06] border border-foreground/10 text-xs font-bold text-foreground focus:outline-none focus:border-primary cursor-pointer"
-          >
-            {markets.map((m) => (
-              <option key={m} value={m} className="bg-[#111827] text-white">
-                {m}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setSymbol(value as MarketSymbol)}
+            ariaLabel="Market symbol"
+            className="w-32 shrink-0"
+            options={markets.map((market) => ({ value: market, label: market }))}
+          />
 
           <div className="h-5 w-[1px] bg-foreground/10 mx-1 shrink-0" />
 

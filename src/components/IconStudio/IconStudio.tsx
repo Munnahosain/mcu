@@ -197,10 +197,10 @@ const defaultControls: StudioControls = {
   color: "#16c784",
   colorMode: "svg",
   material: "glass",
-  depth: 18,
-  bevel: 2.5,
-  bevelSmoothing: 8,
-  roughness: 12,
+  depth: 26,
+  bevel: 4.5,
+  bevelSmoothing: 12,
+  roughness: 10,
   brightness: 110,
   artboardMode: "fit",
   customSize: 1024,
@@ -460,8 +460,8 @@ function makeMaterial(controls: StudioControls, pathHexColor?: string) {
   if (controls.material === "metallic") {
     return new THREE.MeshStandardMaterial({
       color: baseColor,
-      roughness: Math.max(0.08, roughness * 0.3),
-      metalness: 0.94,
+      roughness: Math.max(0.04, roughness * 0.18),
+      metalness: 0.97,
       side: THREE.DoubleSide,
     });
   }
@@ -506,12 +506,12 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
   const group = new THREE.Group();
   let shapeCount = 0;
 
-  const curveSegments = isExport ? 128 : controls.fastPreview ? 24 : 64;
+  const curveSegments = isExport ? 180 : controls.fastPreview ? 48 : 96;
   const bevelSegments = isExport
-    ? Math.max(12, Math.round(controls.bevel * 3.5))
+    ? Math.max(18, Math.round(controls.bevel * 4))
     : controls.fastPreview
-    ? Math.max(6, Math.min(12, Math.round(controls.bevel * 2.5)))
-    : Math.max(6, Math.round(controls.bevel * 2.5));
+    ? Math.max(10, Math.min(18, Math.round(controls.bevel * 3.2)))
+    : Math.max(12, Math.round(controls.bevel * 3.6));
 
   data.paths.forEach((path, pathIndex) => {
     const pathColor = parseColorFromPath(path, gradientMap, controls.color);
@@ -524,12 +524,13 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
     shapes.forEach((shape) => {
       const safeBevel = Math.min(controls.bevel, controls.depth * 0.35);
       const rawGeo = new THREE.ExtrudeGeometry(shape, {
-        depth: Math.max(0.5, controls.depth),
+        depth: Math.max(0.8, controls.depth),
         bevelEnabled: safeBevel > 0,
-        bevelSize: safeBevel,
-        bevelThickness: safeBevel,
+        bevelSize: safeBevel * 0.92,
+        bevelThickness: safeBevel * 0.92,
         bevelSegments: bevelSegments,
         curveSegments: curveSegments,
+        steps: isExport ? 2 : 1,
       });
 
       // Flip geometry vertically on the geometry level to avoid negative scale normal-inversion jitter!
@@ -682,7 +683,7 @@ const IconPreview = forwardRef<
       preserveDrawingBuffer: true,
       powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, controls.fastPreview ? 1.5 : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, controls.fastPreview ? 2 : 2.5));
     renderer.setClearColor(
       controls.alpha ? 0x000000 : new THREE.Color(controls.bgColor).getHex(),
       controls.alpha ? 0 : 1
@@ -970,7 +971,7 @@ const IconPreview = forwardRef<
           powerPreference: "high-performance",
         });
         offRenderer.setSize(size, size, false);
-        offRenderer.setPixelRatio(1);
+        offRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         offRenderer.outputColorSpace = THREE.SRGBColorSpace;
         offRenderer.toneMapping = THREE.ACESFilmicToneMapping;
         offRenderer.toneMappingExposure = 1.15;
@@ -1343,6 +1344,7 @@ export default function IconStudio() {
   const router = useRouter();
   const [assets, setAssets] = useState<IconAsset[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [controls, setControls] = useState<StudioControls>(defaultControls);
   const [hexDraft, setHexDraft] = useState(defaultControls.color);
   const [bgHexDraft, setBgHexDraft] = useState(defaultControls.bgColor);
@@ -1356,17 +1358,23 @@ export default function IconStudio() {
   const selectedAsset = assets.find((asset) => asset.id === selectedId);
 
   useEffect(() => {
-    const imported = readSessionValue<{ svg: string; name: string }>("mcustock_studio_import");
-    if (!imported?.svg || !imported.name) return;
-    removeSessionValue("mcustock_studio_import");
-    const asset: IconAsset = {
-      id: `splitter-${Date.now()}`,
-      name: imported.name,
-      text: imported.svg,
-      preview: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(imported.svg)}`,
-    };
-    setAssets((current) => [asset, ...current].slice(0, MAX_FILES));
-    setSelectedId(asset.id);
+    const importedValue = readSessionValue<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import");
+    if (!importedValue) return;
+
+    const imported = Array.isArray(importedValue) ? importedValue : [importedValue];
+    const batchImports = imported.filter((item) => item && typeof item.svg === "string" && typeof item.name === "string");
+    if (!batchImports.length) return;
+
+    const assetsToAdd: IconAsset[] = batchImports.map((item, index) => ({
+      id: `splitter-${Date.now()}-${index}`,
+      name: item.name,
+      text: item.svg,
+      preview: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.svg)}`,
+    }));
+
+    setAssets((current) => [...assetsToAdd, ...current].slice(0, MAX_FILES));
+    setSelectedId(assetsToAdd[0]?.id ?? "");
+    setSelectedIds(assetsToAdd.length > 0 ? [assetsToAdd[0].id] : []);
     setError("");
   }, []);
 
@@ -1399,6 +1407,7 @@ export default function IconStudio() {
       if (!parsed.length) return;
       setAssets((current) => [...current, ...parsed].slice(0, MAX_FILES));
       setSelectedId((current) => current || parsed[0].id);
+      setSelectedIds((current) => (current.length ? current : [parsed[0].id]));
       setError("");
     },
     [assets.length]
@@ -1426,7 +1435,39 @@ export default function IconStudio() {
     };
     setAssets((current) => [sample, ...current].slice(0, MAX_FILES));
     setSelectedId(sample.id);
+    setSelectedIds([sample.id]);
     setError("");
+  };
+
+  const handleAssetSelect = (id: string, event?: React.MouseEvent) => {
+    const isMultiSelect = event ? event.metaKey || event.ctrlKey : false;
+    const isRangeSelect = event ? event.shiftKey && !!selectedId : false;
+
+    if (isMultiSelect) {
+      setSelectedIds((current) => {
+        const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+        setSelectedId(next[next.length - 1] ?? "");
+        return next;
+      });
+      return;
+    }
+
+    if (isRangeSelect) {
+      const currentIndex = assets.findIndex((asset) => asset.id === id);
+      const anchorIndex = assets.findIndex((asset) => asset.id === selectedId);
+      if (currentIndex >= 0 && anchorIndex >= 0) {
+        const start = Math.min(anchorIndex, currentIndex);
+        const end = Math.max(anchorIndex, currentIndex);
+        const rangeIds = assets.slice(start, end + 1).map((asset) => asset.id);
+        const next = Array.from(new Set([...rangeIds, ...selectedIds]));
+        setSelectedIds(next);
+        setSelectedId(id);
+        return;
+      }
+    }
+
+    setSelectedIds([id]);
+    setSelectedId(id);
   };
 
   const removeAsset = (id: string, event?: React.MouseEvent) => {
@@ -1436,17 +1477,57 @@ export default function IconStudio() {
     }
     setAssets((current) => {
       const remaining = current.filter((asset) => asset.id !== id);
-      if (selectedId === id) {
-        setSelectedId(remaining.length > 0 ? remaining[0].id : "");
-      }
+      setSelectedIds((currentSelected) => {
+        const nextSelection = currentSelected.filter((item) => item !== id);
+        if (selectedId === id) {
+          setSelectedId(nextSelection[0] ?? remaining[0]?.id ?? "");
+        }
+        return nextSelection;
+      });
       return remaining;
     });
   };
 
+  const removeSelectedAssets = () => {
+    if (!selectedIds.length) return;
+
+    setAssets((current) => {
+      const remaining = current.filter((asset) => !selectedIds.includes(asset.id));
+      const nextSelectedId = remaining[0]?.id ?? "";
+      setSelectedId(nextSelectedId);
+      setSelectedIds(nextSelectedId ? [nextSelectedId] : []);
+      return remaining;
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isModifierPressed = event.metaKey || event.ctrlKey;
+      if ((event.key === "a" || event.key === "A") && isModifierPressed) {
+        event.preventDefault();
+        if (!assets.length) return;
+        const allIds = assets.map((asset) => asset.id);
+        setSelectedIds(allIds);
+        setSelectedId(allIds[allIds.length - 1] ?? "");
+        return;
+      }
+
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length > 0) {
+        event.preventDefault();
+        removeSelectedAssets();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [assets, selectedIds]);
+
   const clearAssets = () => {
     cancelBatch.current = true;
+    removeSessionValue("mcustock_studio_import");
     setAssets([]);
     setSelectedId("");
+    setSelectedIds([]);
     setBatch({ running: false, current: "", completed: 0, failed: 0 });
     setError("");
   };
@@ -1598,7 +1679,7 @@ export default function IconStudio() {
           <button
             type="button"
             onClick={() => router.push("/dashboard/splitter")}
-            className="!transform-none flex h-10 items-center gap-1.5 rounded-full border border-transparent bg-primary px-3.5 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_4px_16px_rgba(22,199,132,0.3)] transition-[background-color,box-shadow] duration-200 hover:!transform-none hover:border-transparent hover:bg-primary-hover hover:shadow-[0_5px_18px_rgba(22,199,132,0.42)]"
+            className="!transform-none -translate-x-2 flex h-10 items-center gap-1.5 rounded-full border border-transparent bg-primary px-4 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_4px_16px_rgba(22,199,132,0.3)] transition-[background-color,box-shadow,transform] duration-200 hover:!transform-none hover:border-transparent hover:bg-primary-hover hover:shadow-[0_5px_18px_rgba(22,199,132,0.42)]"
             title="Open Vector Sheet Splitter"
           >
             <Box className="h-4 w-4" />
@@ -1672,7 +1753,7 @@ export default function IconStudio() {
         <aside className="order-2 space-y-4 xl:order-1 xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto xl:pr-2 custom-scrollbar">
           {/* UPLOAD SVG & SAMPLES */}
           <section className="rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 space-y-3.5 shadow-xl">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-extrabold text-foreground">Upload SVG</h2>
                 <p className="text-xs text-[var(--text-secondary)]">
@@ -1684,7 +1765,7 @@ export default function IconStudio() {
                   type="button"
                   onClick={clearAssets}
                   disabled={batch.running}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-extrabold text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-2.5 py-1.5 text-[10px] font-extrabold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Remove all loaded SVGs"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1739,32 +1820,36 @@ export default function IconStudio() {
 
             {assets.length > 0 && (
               <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
-                {assets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    onClick={() => setSelectedId(asset.id)}
-                    className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all duration-150 cursor-pointer select-none ${
-                      asset.id === selectedId
-                        ? "border-primary bg-primary/15 shadow-sm"
-                        : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary/30"
-                    }`}
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 p-1 shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={asset.preview} alt="" className="max-h-full max-w-full object-contain" />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-xs font-bold text-foreground">{asset.name}</span>
-                    {asset.id === selectedId && <Check className="h-4 w-4 text-primary shrink-0" />}
-                    <button
-                      type="button"
-                      onClick={(event) => removeAsset(asset.id, event)}
-                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
-                      aria-label={`Remove ${asset.name}`}
+                {assets.map((asset) => {
+                  const isSelected = selectedIds.includes(asset.id);
+
+                  return (
+                    <div
+                      key={asset.id}
+                      onClick={(event) => handleAssetSelect(asset.id, event)}
+                      className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all duration-150 cursor-pointer select-none ${
+                        isSelected
+                          ? "border-primary bg-primary/15 shadow-sm"
+                          : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary/30"
+                      }`}
                     >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 p-1 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={asset.preview} alt="" className="max-h-full max-w-full object-contain" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-bold text-foreground">{asset.name}</span>
+                      {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                      <button
+                        type="button"
+                        onClick={(event) => removeAsset(asset.id, event)}
+                        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
+                        aria-label={`Remove ${asset.name}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>

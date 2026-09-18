@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { Upload, Download, RefreshCw, Palette, ImagePlus, ChevronDown, Copy, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
+import ThemedSelect from "@/components/ui/ThemedSelect";
 
 // --- Helpers ---
 function rgbToHex(r: number, g: number, b: number) {
@@ -400,13 +401,13 @@ export default function ColorPalettePage() {
                     <div className="flex items-center justify-between">
                          <div className="flex items-center gap-3">
                              <span className="text-sm font-bold text-primary/80">Colors</span>
-                             <select 
+                             <ThemedSelect
                                  value={colorsCount} 
-                                 onChange={(e) => setColorsCount(Number(e.target.value))}
-                                 className="appearance-none bg-background border border-primary/25 px-4 py-1.5 pr-8 rounded-lg text-sm font-bold text-primary cursor-pointer outline-none"
-                             >
-                                 {[2,3,4,5,6,7,8].map(n => <option key={n} value={n}>{n}</option>)}
-                             </select>
+                               onChange={(value) => setColorsCount(Number(value))}
+                               ariaLabel="Number of colors"
+                               className="w-14"
+                               options={[2, 3, 4, 5, 6, 7, 8].map((count) => ({ value: String(count), label: String(count) }))}
+                             />
                          </div>
                          <button onClick={() => processImage(imagePreview, colorsCount)} className="p-2 hover:bg-primary/5 rounded-lg text-primary/70 transition-colors" title="Regenerate Palette">
                              <RefreshCw className="w-4 h-4" />

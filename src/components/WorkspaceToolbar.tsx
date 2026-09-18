@@ -10,6 +10,7 @@ import {
   Grid,
   ChevronDown,
   Sparkles,
+  Box,
 } from 'lucide-react';
 
 interface WorkspaceToolbarProps {
@@ -17,6 +18,7 @@ interface WorkspaceToolbarProps {
   selectedCount: number;
   onSelectAll: () => void;
   onDeselectAll: () => void;
+  onOpenInStudio: () => void;
   onExportSelected: () => void;
   onExportAll: () => void;
   onReprocess: () => void;
@@ -35,6 +37,7 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
   selectedCount,
   onSelectAll,
   onDeselectAll,
+  onOpenInStudio,
   onExportSelected,
   onExportAll,
   onReprocess,
@@ -67,6 +70,8 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
     setIsGridMenuOpen(false);
   };
 
+  const isAllSelected = totalCount > 0 && selectedCount === totalCount;
+
   return (
     <div className="w-full border-b border-slate-200 bg-white shadow-xs transition-colors dark:border-slate-800 dark:bg-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3">
@@ -88,10 +93,18 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onSelectAll}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Shortcut: Ctrl+A or Cmd+A"
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                isAllSelected
+                  ? 'border-primary bg-primary/10 text-primary shadow-[0_0_0_1px_rgba(52,211,153,0.14)]'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+              title={isAllSelected ? 'All icons selected' : 'Shortcut: Ctrl+A or Cmd+A'}
             >
-              <CheckSquare className="w-3.5 h-3.5 text-primary" />
+              {isAllSelected ? (
+                <CheckSquare className="w-3.5 h-3.5 text-primary" />
+              ) : (
+                <Square className="w-3.5 h-3.5" />
+              )}
               <span>Select All</span>
             </button>
 
@@ -213,6 +226,16 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
               <span className="hidden sm:inline">Reprocess</span>
+            </button>
+
+            <button
+              onClick={onOpenInStudio}
+              disabled={selectedCount === 0}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#071b17] bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Open selected icons in 3D Studio"
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span>Open in 3D Studio</span>
             </button>
 
             {/* Export buttons */}

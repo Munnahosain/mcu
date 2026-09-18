@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, ensureAccessToken, getAuthUser } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
+import CreditSummary from "@/components/dashboard/CreditSummary";
 
 const navLinks = [
   { name: "Generator", href: "/dashboard/generator", icon: Sparkles },
@@ -136,16 +137,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="relative min-h-screen w-full flex flex-col bg-[var(--main-bg)] text-foreground selection:bg-primary selection:text-white">
         <Link
           href="/"
-          className="dashboard-mobile-home-logo fixed left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-2xl"
+          className="dashboard-mobile-home-logo fixed left-3 top-3 z-50 flex h-12 w-12 items-center justify-center rounded-2xl"
           aria-label="Go to MCUSTOCK home"
           title="MCUSTOCK home"
         >
           <Image
             src="/MCU-LOGO-0.2V-1.png"
             alt="MCUSTOCK"
-            width={24}
-            height={24}
-            className="h-6 w-6 object-contain"
+            width={36}
+            height={36}
+            className="h-9 w-9 object-contain"
             priority
           />
         </Link>
@@ -159,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* 1. TOP STICKY ALWAYS-VISIBLE LIQUID GLASS NAVBAR */}
         <header className="sticky top-0 z-50 relative hidden w-full px-2 py-2 sm:px-6 sm:py-3 pointer-events-none lg:flex justify-center">
           <div
-            className={`dashboard-topbar pointer-events-auto flex items-center rounded-full border border-[#1e4b44] bg-[#071b17]/78 p-1.5 shadow-[0_0_0_1px_rgba(18,79,70,0.55)] w-full max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5 ${isNavCompact ? "compact" : ""}`}
+            className={`dashboard-topbar pointer-events-auto flex items-center rounded-full bg-[#071b17]/78 p-1.5 w-full max-w-fit justify-center gap-2 sm:gap-3 px-3.5 py-1.5 ${isNavCompact ? "compact" : ""}`}
             style={{
               backdropFilter: "blur(24px) saturate(1.2)",
               WebkitBackdropFilter: "blur(24px) saturate(1.2)",
@@ -169,25 +170,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Left: Brand Logo & Title */}
             <Link
               href="/"
-              className="dashboard-brand flex items-center gap-2 rounded-full px-2 py-1 transition-opacity duration-150 shrink-0"
+              className="dashboard-brand group flex items-center gap-2.5 rounded-full px-2 py-2 transition-opacity duration-150 shrink-0"
               title="MCUSTOCK AI Home"
             >
-              <span className="liquid-icon-shell flex h-8 w-8 items-center justify-center rounded-2xl shrink-0">
+              <span className="liquid-icon-shell flex h-9 w-9 items-center justify-center rounded-xl shrink-0">
                 <Image
                   src="/MCU-LOGO-0.2V-1.png"
                   alt="MCUSTOCK Logo"
-                  width={22}
-                  height={22}
-                  className="h-4.5 w-4.5 object-contain"
+                  width={26}
+                  height={26}
+                  className="h-5 w-5 object-contain transition-transform duration-500 group-hover:scale-110"
                   priority
                 />
               </span>
               <div className="hidden min-[520px]:block leading-tight select-none">
-                <span className="block text-[8px] font-extrabold uppercase tracking-[0.24em] text-primary/70">
-                  Stock AI
+                <span className="block text-[9px] font-bold uppercase tracking-[0.38em] text-white/40">
+                  Stock Creator AI
                 </span>
-                <span className="text-[13px] font-extrabold tracking-tight text-foreground">
-                  MCU<span className="text-primary">STOCK</span>
+                <span className="liquid-wordmark text-[15px] font-bold tracking-[0.15em]">
+                  MCUSTOCK
                 </span>
               </div>
             </Link>
@@ -308,6 +309,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           </p>
                         </div>
                       </div>
+
+                      <CreditSummary compact />
 
                       {/* Quick Pro Plan Badge */}
                       <div className="space-y-1">

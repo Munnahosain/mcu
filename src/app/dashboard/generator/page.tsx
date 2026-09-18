@@ -28,6 +28,7 @@ import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext"
 import { compressImageForUpload } from "@/lib/client-image";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import ThemedSelect from "@/components/ui/ThemedSelect";
 
 type ImageFile = GeneratorImageFile;
 
@@ -374,29 +375,27 @@ export default function GeneratorPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-[10px] font-bold text-foreground/70 uppercase tracking-wider mb-1">AI Provider</label>
-              <select
+              <ThemedSelect
                 value={activeProvider}
-                onChange={e => {
-                  setActiveProvider(e.target.value);
-                  saveActiveProvider(e.target.value);
+                onChange={(value) => {
+                  setActiveProvider(value);
+                  saveActiveProvider(value);
                 }}
-                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground dark:text-white outline-none focus:border-primary cursor-pointer"
-              >
-                {AI_PROVIDER_NAMES.map(p => <option key={p} value={p} className="bg-[var(--card-bg)] text-foreground">{p}</option>)}
-              </select>
+                ariaLabel="AI provider"
+                options={AI_PROVIDER_NAMES.map((provider) => ({ value: provider, label: provider }))}
+              />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-foreground/70 uppercase tracking-wider mb-1">Model</label>
-              <select
+              <ThemedSelect
                 value={activeModel}
-                onChange={e => {
-                  setSelectedModels(prev => ({ ...prev, [activeProvider]: e.target.value }));
-                  saveProviderModel(activeProvider, e.target.value);
+                onChange={(value) => {
+                  setSelectedModels(prev => ({ ...prev, [activeProvider]: value }));
+                  saveProviderModel(activeProvider, value);
                 }}
-                className="w-full text-xs font-semibold bg-background border border-[var(--card-border)] rounded-xl px-3 py-2 text-foreground dark:text-white outline-none focus:border-primary cursor-pointer"
-              >
-                {(AI_PROVIDERS[activeProvider] || []).map(m => <option key={m.id} value={m.id} className="bg-[var(--card-bg)] text-foreground">{m.label}{m.badge ? ` - ${m.badge}` : ''}</option>)}
-              </select>
+                ariaLabel="AI model"
+                options={(AI_PROVIDERS[activeProvider] || []).map((model) => ({ value: model.id, label: `${model.label}${model.badge ? ` - ${model.badge}` : ''}` }))}
+              />
             </div>
             {activeProviderKeyObj ? (
                 <p className="text-[10px] font-bold text-primary flex items-center gap-1.5 pt-1">
@@ -729,16 +728,15 @@ export default function GeneratorPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-wider mb-1">Select Provider</label>
-                  <select
+                  <ThemedSelect
                     value={activeProvider}
-                    onChange={e => {
-                      setActiveProvider(e.target.value);
-                      saveActiveProvider(e.target.value);
+                    onChange={(value) => {
+                      setActiveProvider(value);
+                      saveActiveProvider(value);
                     }}
-                    className="w-full text-xs font-semibold bg-background border border-primary/20 rounded-xl px-3 py-2 outline-none text-primary"
-                  >
-                    {AI_PROVIDER_NAMES.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                    ariaLabel="Select provider"
+                    options={AI_PROVIDER_NAMES.map((provider) => ({ value: provider, label: provider }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
@@ -768,16 +766,16 @@ export default function GeneratorPage() {
                     <span className="text-[10px] font-bold uppercase tracking-wider text-primary/60">Active model</span>
                     <span className="text-[10px] font-bold text-primary">{activeProviderKeyObj ? 'Ready' : 'Needs API key'}</span>
                   </div>
-                  <select
+                  <ThemedSelect
                     value={activeModel}
-                    onChange={e => {
-                      setSelectedModels(prev => ({ ...prev, [activeProvider]: e.target.value }));
-                      saveProviderModel(activeProvider, e.target.value);
+                    onChange={(value) => {
+                      setSelectedModels(prev => ({ ...prev, [activeProvider]: value }));
+                      saveProviderModel(activeProvider, value);
                     }}
-                    className="mt-2 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs font-semibold text-primary outline-none"
-                  >
-                    {(AI_PROVIDERS[activeProvider] || []).map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
-                  </select>
+                    ariaLabel="Active model"
+                    className="mt-2"
+                    options={(AI_PROVIDERS[activeProvider] || []).map((model) => ({ value: model.id, label: model.label }))}
+                  />
                 </div>
 
                 {apiKeys.length > 0 && (
