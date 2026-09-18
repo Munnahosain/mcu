@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <nav className="dashboard-nav-segments hidden min-w-0 max-w-[calc(100vw-15rem)] flex-none items-center gap-1 overflow-x-auto px-1 py-1 lg:flex" aria-label="Admin navigation">
               {navigation.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
+                const isActive = pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(`${item.href}/`) === true);
                 return (
                   <Link
                     key={item.href}
@@ -79,7 +79,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="dashboard-mobile-nav-inner mx-auto flex max-w-lg items-center gap-1 overflow-x-auto px-2 no-scrollbar">
             {navigation.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(`${item.href}/`));
+              const isActive = pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(`${item.href}/`) === true);
               return <div key={item.href} className="shrink-0"><Link href={item.href} aria-current={isActive ? 'page' : undefined} aria-label={item.label} title={item.label} className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-colors ${isActive ? 'text-[#063b2c]' : 'text-foreground/55 hover:text-foreground'}`}>{isActive ? <span className="absolute inset-0 rounded-full bg-primary shadow-[0_4px_14px_rgba(22,199,132,0.3)]" aria-hidden="true" /> : null}<Icon className="relative z-10 h-[18px] w-[18px]" strokeWidth={isActive ? 2.5 : 2} /></Link></div>;
             })}
           </div>

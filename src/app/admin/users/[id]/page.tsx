@@ -9,6 +9,7 @@ type AdminUser = { _id: string; name: string; email: string; role: string; statu
 
 export default function AdminUserDetailsPage() {
   const params = useParams<{ id: string }>();
+  const userId = params?.id;
   const [user, setUser] = useState<AdminUser | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -16,12 +17,13 @@ export default function AdminUserDetailsPage() {
   const [plans, setPlans] = useState<Array<{ _id: string; name: string; slug: string; price: number; billingInterval: string }>>([]);
 
   useEffect(() => {
-    fetch(`/api/admin/users/${params.id}`, { credentials: 'include' }).then(async (response) => {
+    if (!userId) return;
+    fetch(`/api/admin/users/${userId}`, { credentials: 'include' }).then(async (response) => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to load user.');
       setUser(payload.user);
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load user.'));
-  }, [params.id]);
+  }, [userId]);
 
   useEffect(() => {
     fetch('/api/admin/plans', { credentials: 'include' }).then((response) => response.json()).then((payload) => setPlans(payload.plans || [])).catch(() => undefined);
@@ -31,9 +33,10 @@ export default function AdminUserDetailsPage() {
   if (!user) return <p className="text-sm text-white/50">Loading user...</p>;
 
   const changeCredits = async (action: 'add' | 'remove' | 'reset') => {
+    if (!userId) return;
     setError('');
     setMessage('');
-    const response = await fetch(`/api/admin/users/${params.id}/credits`, {
+    const response = await fetch(`/api/admin/users/${userId}/credits`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -49,16 +52,18 @@ export default function AdminUserDetailsPage() {
   };
 
   const assignPlan = async (planId: string) => {
+    if (!userId) return;
     setError(''); setMessage('');
-    const response = await fetch(`/api/admin/users/${params.id}/plan`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId }) });
+    const response = await fetch(`/api/admin/users/${userId}/plan`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId }) });
     const payload = await response.json();
     if (!response.ok) { setError(payload.error || 'Unable to assign plan.'); return; }
     setUser(payload.user); setMessage(`Plan changed to ${payload.plan.name}.`);
   };
 
   const changeStatus = async (status: 'active' | 'suspended' | 'banned' | 'pending') => {
+    if (!userId) return;
     setError(''); setMessage('');
-    const response = await fetch(`/api/admin/users/${params.id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    const response = await fetch(`/api/admin/users/${userId}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
     const payload = await response.json();
     if (!response.ok) { setError(payload.error || 'Unable to update account access.'); return; }
     setUser(payload.user); setMessage(`Account status changed to ${status}.`);

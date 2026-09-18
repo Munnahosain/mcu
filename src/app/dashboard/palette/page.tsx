@@ -402,7 +402,7 @@ export default function ColorPalettePage() {
                          <div className="flex items-center gap-3">
                              <span className="text-sm font-bold text-primary/80">Colors</span>
                              <ThemedSelect
-                                 value={colorsCount} 
+                                 value={String(colorsCount)} 
                                onChange={(value) => setColorsCount(Number(value))}
                                ariaLabel="Number of colors"
                                className="w-14"
