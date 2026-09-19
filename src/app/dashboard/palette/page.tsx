@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { Upload, Download, RefreshCw, Palette, ImagePlus, ChevronDown, Copy, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
 import ThemedSelect from "@/components/ui/ThemedSelect";
 
 // --- Helpers ---
@@ -235,24 +236,28 @@ export default function ColorPalettePage() {
       });
   };
 
-  const exportAsCSS = () => {
+  const exportAsCSS = async () => {
+    await consumeFeatureCredit("palette_generation");
     const cssVars = palette.map((c, i) => `  --color-${i + 1}: ${c.hex};`).join("\n");
     const css = `:root {\n${cssVars}\n}`;
     navigator.clipboard.writeText(css);
     alert("Palette copied to clipboard as CSS variables!");
   };
 
-  const downloadCssFile = () => {
+  const downloadCssFile = async () => {
+    await consumeFeatureCredit("palette_generation");
     const cssVars = palette.map((c, i) => `  --color-${i + 1}: ${c.hex};`).join("\n");
     const css = `/* MCUSTOCK Color Palette */\n:root {\n${cssVars}\n}`;
     downloadText(css, `palette-${Date.now()}.css`, "text/css;charset=utf-8");
   };
 
-  const downloadJsonFile = () => {
+  const downloadJsonFile = async () => {
+    await consumeFeatureCredit("palette_generation");
     downloadJson({ palette, exportedAt: new Date().toISOString() }, `palette-${Date.now()}.json`);
   };
 
-  const downloadSvgSwatches = () => {
+  const downloadSvgSwatches = async () => {
+    await consumeFeatureCredit("palette_generation");
     const swatchWidth = 100;
     const swatchHeight = 120;
     const totalWidth = palette.length * swatchWidth;

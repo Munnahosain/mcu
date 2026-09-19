@@ -206,7 +206,7 @@ export const IconCard: React.FC<IconCardProps> = ({
             <button
               type="button"
               onClick={() => onOpenIn3D(icon)}
-              className="flex-1 py-1 px-1.5 rounded-lg text-[11px] font-bold text-[#071b17] bg-primary hover:bg-primary-hover flex items-center justify-center gap-1 transition-colors"
+              className="flex-1 py-1 px-1.5 rounded-lg text-[11px] font-bold text-white bg-red-600 hover:bg-red-500 flex items-center justify-center gap-1 transition-colors"
               title="Open this icon in 3D Studio"
             >
               <Box className="w-3 h-3" />

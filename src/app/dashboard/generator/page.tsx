@@ -272,6 +272,9 @@ export default function GeneratorPage() {
         } : i));
       }
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mcustock:credits-updated'));
+      }
     } catch (err: unknown) {
       console.error(err);
       const errorMessage = err instanceof Error ? err.message : 'Generation failed';

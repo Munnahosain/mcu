@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     const provider = detectProvider(apiKey, providerHint);
 
     if (userId) {
-      await consumeCredits(userId, 1, 'AI prompt generation');
+      await consumeCredits(userId, 1, 'AI prompt generation', 'prompt_generation');
       creditReserved = true;
     }
 
@@ -126,7 +126,7 @@ OUTPUT RULES:
     return NextResponse.json({ success: true, prompt: responseText.trim() });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
-      await refundCredits(authenticatedUserId, 1).catch((refundError) => console.error('[generate-prompt] credit refund error:', refundError));
+      await refundCredits(authenticatedUserId, 1, 'Failed AI prompt generation refund', 'prompt_generation').catch((refundError) => console.error('[generate-prompt] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });

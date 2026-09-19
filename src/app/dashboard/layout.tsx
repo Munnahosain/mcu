@@ -19,9 +19,10 @@ import {
   ChevronDown,
   Type,
   Calendar,
+  CreditCard,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AuthUser, clearAuthUser, ensureAccessToken, getAuthUser } from "@/lib/auth";
+import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
 import CreditSummary from "@/components/dashboard/CreditSummary";
@@ -66,7 +67,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const token = await ensureAccessToken();
       if (cancelled) return;
 
-      const storedUser = getAuthUser();
+      let storedUser = getAuthUser();
+      if (token && storedUser && !storedUser.avatarUrl) {
+        const refreshedUser = await refreshAuthSession();
+        if (refreshedUser) storedUser = { ...refreshedUser, signedInAt: Date.now() };
+      }
       if (!token || !storedUser) {
         clearAuthUser();
         setUser(null);
@@ -117,8 +122,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
+    disableGoogleAutoSelect();
     clearAuthUser();
     setUser(null);
+    window.dispatchEvent(new Event("mcustock-auth-changed"));
     router.replace("/login");
   };
 
@@ -254,23 +261,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  className={`flex items-center gap-1.5 rounded-full border border-white/40 dark:border-primary/20 bg-foreground/[0.03] hover:bg-foreground/[0.06] p-1 pr-2 transition-all duration-150 active:scale-95 ${isProfileOpen ? "ring-2 ring-primary/40 bg-primary/10" : ""
+                  className={`flex items-center gap-1.5 rounded-full border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-0 hover:ring-0 active:ring-0 bg-foreground/[0.03] hover:bg-foreground/[0.07] p-1 pr-2 transition-all duration-150 active:scale-95 ${isProfileOpen ? "bg-primary/10" : ""
                     }`}
                   aria-label="User profile menu"
                 >
                   {/* 2-Letter Avatar Badge */}
                   <span className="relative flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#27e39a] text-[#071b17] font-extrabold text-xs shadow-sm ring-2 ring-white/50 dark:ring-[#071b17]/80 shrink-0">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt=""
-                        className="h-full w-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-[#071b17] font-extrabold tracking-tight">
-                        {userInitials}
-                      </span>
-                    )}
+                    <span className="text-[#071b17] font-extrabold tracking-tight">{userInitials}</span>
+                    {user.avatarUrl ? <img src={user.avatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full rounded-full object-cover" /> : null}
                     <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-white dark:ring-[#071b17]" />
                   </span>
 
@@ -297,8 +295,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     >
                       {/* User Info Header */}
                       <div className="flex items-center gap-3 p-1.5 border-b border-foreground/[0.08] pb-2.5 mb-2">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#27e39a] text-[#071b17] font-extrabold text-xs shadow shrink-0">
+                        <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#27e39a] text-[#071b17] font-extrabold text-xs shadow shrink-0">
                           {userInitials}
+                          {user.avatarUrl ? <img src={user.avatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover" /> : null}
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-extrabold text-foreground">
@@ -320,10 +319,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground/80 hover:bg-primary/10 hover:text-primary transition-colors"
                         >
                           <span className="flex items-center gap-2">
-                            <Crown className="h-3.5 w-3.5 text-primary" /> Pro Plan
+                            <Crown className="h-3.5 w-3.5 text-primary" /> Pricing &amp; Plans
                           </span>
-                          <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[9px] font-extrabold text-primary">
-                            Active
+                        </Link>
+                        <Link
+                          href="/dashboard/billing"
+                          onClick={() => setIsProfileOpen(false)}
+                          className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground/80 hover:bg-primary/10 hover:text-primary transition-colors"
+                        >
+                          <span className="flex items-center gap-2">
+                            <CreditCard className="h-3.5 w-3.5 text-primary" /> Billing &amp; Usage
                           </span>
                         </Link>
                         <div className="sm:hidden px-2.5 py-1.5 flex items-center justify-between">

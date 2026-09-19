@@ -3,44 +3,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  BarChart2,
   Check,
-  ChevronDown,
   Copy,
   Download,
-  Eye,
-  EyeOff,
-  Flame,
-  Globe,
-  Grid,
   Heart,
   Layers,
-  LineChart,
-  Maximize2,
-  Minimize2,
-  Moon,
   Pause,
   Play,
-  RefreshCw,
   RotateCcw,
   Save,
   Search,
-  Settings2,
-  Share2,
   Sliders,
-  Sparkles,
   Star,
   TrendingDown,
   TrendingUp,
-  Volume2,
-  Zap,
 } from "lucide-react";
-import { candleIntervals, markets, MockMarketDataProvider, tickIntervals } from "@/lib/trading/marketData";
+import { markets, MockMarketDataProvider } from "@/lib/trading/marketData";
 import { chartCategories, chartTemplates, defaultTemplate } from "@/lib/trading/chartTemplates";
 import { calculateIndicators, heikinAshi } from "@/lib/trading/indicators";
 import { buildChartSvg, downloadSvg } from "@/lib/trading/svgExporter";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ThemedSelect from "@/components/ui/ThemedSelect";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
 import type { Candle, CandleInterval, ChartTemplate, ChartType, IndicatorKey, MarketSymbol, TickInterval } from "@/lib/trading/types";
 
 const chartWidth = 1000;
@@ -62,7 +46,7 @@ export default function TradingPage() {
   const provider = useRef(new MockMarketDataProvider());
   const [symbol, setSymbol] = useState<MarketSymbol>("BTC/USD");
   const [interval, setInterval] = useState<CandleInterval>("2s");
-  const [tickInterval, setTickInterval] = useState<TickInterval>("1s");
+  const [tickInterval] = useState<TickInterval>("1s");
   const [candles, setCandles] = useState<Candle[]>([]);
   const [template, setTemplate] = useState<ChartTemplate>(defaultTemplate);
   const [chartType, setChartType] = useState<ChartType>(defaultTemplate.chartType);
@@ -106,14 +90,14 @@ export default function TradingPage() {
   }, []);
 
   useEffect(() => {
-    provider.current.subscribe(symbol, interval, tickInterval, setCandles);
-    return () => provider.current.unsubscribe();
-  }, [symbol, interval, tickInterval]);
+    const marketProvider = provider.current;
+    if (isPaused) {
+      marketProvider.unsubscribe();
+      return;
+    }
 
-  useEffect(() => {
-    if (isPaused) provider.current.unsubscribe();
-    else provider.current.subscribe(symbol, interval, tickInterval, setCandles);
-    return () => provider.current.unsubscribe();
+    marketProvider.subscribe(symbol, interval, tickInterval, setCandles);
+    return () => marketProvider.unsubscribe();
   }, [isPaused, symbol, interval, tickInterval]);
 
   useEffect(() => {
@@ -137,10 +121,7 @@ export default function TradingPage() {
   }, [candles, chartType]);
 
   const current = candles.at(-1);
-  const previous = candles.at(-2);
   const first = candles[0];
-  const change = current && previous ? current.close - previous.close : 0;
-  const changePercent = previous ? (change / previous.close) * 100 : 0;
   const sessionChange = current && first ? current.close - first.open : 0;
   const sessionChangePercent = first ? (sessionChange / first.open) * 100 : 0;
 
@@ -148,12 +129,12 @@ export default function TradingPage() {
   const low = candles.length ? Math.min(...candles.map((item) => item.low)) : 0;
   const totalVolume = candles.reduce((sum, item) => sum + item.volume, 0);
 
-  const activeConfig: ChartTemplate = {
+  const activeConfig = useMemo<ChartTemplate>(() => ({
     ...template,
     chartType,
     showVolume,
     showGrid,
-  };
+  }), [template, chartType, showVolume, showGrid]);
 
   const svgMarkup = useMemo(() => buildChartSvg(activeCandles, activeConfig), [activeCandles, activeConfig]);
   const indicatorValues = useMemo(() => calculateIndicators(activeCandles), [activeCandles]);
@@ -188,6 +169,7 @@ export default function TradingPage() {
 
   const copySvg = async () => {
     try {
+      await consumeFeatureCredit("trading_generation");
       await navigator.clipboard.writeText(svgMarkup);
       notify("Vector SVG copied to clipboard");
     } catch {
@@ -195,13 +177,13 @@ export default function TradingPage() {
     }
   };
 
-  const exportSvg = () => {
+  const exportSvg = async () => {
+    await consumeFeatureCredit("trading_generation");
     downloadSvg(svgMarkup, `${symbol.toLowerCase().replace("/", "-")}-${template.id}.svg`);
     notify("SVG exported successfully");
   };
 
   const displayCandle = hoveredCandle || current;
-  const isPositive = (displayCandle ? displayCandle.close >= displayCandle.open : change >= 0);
 
   return (
     <div className="space-y-5 pb-8">
@@ -525,10 +507,6 @@ export default function TradingPage() {
           {showSettings && (
             <SettingsPanel
               template={template}
-              showVolume={showVolume}
-              showGrid={showGrid}
-              setShowVolume={setShowVolume}
-              setShowGrid={setShowGrid}
               setTemplate={setTemplate}
               indicators={indicators}
               setIndicators={setIndicators}
@@ -696,19 +674,16 @@ function TradingChartCanvas({
       .filter(Boolean)
       .join(" ");
 
-  const color = (item: Candle) => (item.close >= item.open ? template.bullishColor : template.bearishColor);
-
-  // Area fill path
-  const areaPath = useMemo(() => {
-    if (candles.length < 2) return "";
-    const points = candles.map((c, i) => `${padding.left + i * gap + gap / 2},${y(c.close)}`);
-    const startX = padding.left + gap / 2;
-    const endX = padding.left + (candles.length - 1) * gap + gap / 2;
-    const bottomY = padding.top + plotHeight;
-    return `M${startX},${bottomY} L${points.join(" L")} L${endX},${bottomY} Z`;
-  }, [candles, gap, plotHeight, padding.left, padding.top]);
-
   const maxVolume = Math.max(...candles.map((c) => c.volume), 1);
+  const areaPath = candles.length >= 2
+    ? (() => {
+        const points = candles.map((c, i) => `${padding.left + i * gap + gap / 2},${y(c.close)}`);
+        const startX = padding.left + gap / 2;
+        const endX = padding.left + (candles.length - 1) * gap + gap / 2;
+        const bottomY = padding.top + plotHeight;
+        return `M${startX},${bottomY} L${points.join(" L")} L${endX},${bottomY} Z`;
+      })()
+    : "";
 
   return (
     <svg
@@ -1297,19 +1272,11 @@ function DynamicMiniPreview({ template }: { template: ChartTemplate }) {
 
 function SettingsPanel({
   template,
-  showVolume,
-  showGrid,
-  setShowVolume,
-  setShowGrid,
   setTemplate,
   indicators,
   setIndicators,
 }: {
   template: ChartTemplate;
-  showVolume: boolean;
-  showGrid: boolean;
-  setShowVolume: (value: boolean) => void;
-  setShowGrid: (value: boolean) => void;
   setTemplate: (value: ChartTemplate) => void;
   indicators: Record<IndicatorKey, boolean>;
   setIndicators: (value: (prev: Record<IndicatorKey, boolean>) => Record<IndicatorKey, boolean>) => void;

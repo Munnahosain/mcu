@@ -26,6 +26,7 @@ export async function POST(req: Request) {
       id: user._id ? String(user._id) : String(user.id),
       name: String(user.name ?? ''),
       email: String(user.email ?? ''),
+      avatarUrl: String(user.avatarUrl ?? ''),
     };
     const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });
     response.cookies.set(REFRESH_COOKIE, rotatedRefreshToken, refreshCookieOptions());

@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import * as htmlToImage from 'html-to-image';
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
 
 const STORAGE_KEY = "bento_layout_v6_pro";
 
@@ -98,8 +99,6 @@ interface BentoSettings {
   gridStyle: string;
 }
 
-type BentoExportFormat = 'png' | 'jpg' | 'svg';
-
 export default function BentoBuilderPage() {
   const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -133,7 +132,7 @@ export default function BentoBuilderPage() {
     "Advanced": false
   });
 
-  const [isEditing, setIsEditing] = useState(true);
+  const isEditing = true;
   const [zoom, setZoom] = useState(1);
   const gridRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -356,6 +355,7 @@ export default function BentoBuilderPage() {
 
   const exportLayout = async (format: 'png' | 'jpg' | 'svg') => {
     if (!gridRef.current) return;
+    await consumeFeatureCredit("bento_generation");
     setIsExporting(true); setShowExportMenu(false);
     try {
       let dataUrl = '';
@@ -372,7 +372,7 @@ export default function BentoBuilderPage() {
         dataUrl = generateCleanSvg();
       }
       const link = document.createElement('a'); link.download = `bento-layout-${Date.now()}.${format}`; link.href = dataUrl; link.click();
-    } catch (err) { alert('Export failed.'); } finally { setIsExporting(false); }
+    } catch { alert('Export failed.'); } finally { setIsExporting(false); }
   };
 
   // Generate clean SVG that Adobe Illustrator can open properly
@@ -415,7 +415,7 @@ ${rectangles}
   const rowHeight = useMemo(() => {
     const { canvasHeight, rows, gap, margins } = settings;
     return Math.max(1, (canvasHeight - (margins * 2) - (gap * (rows - 1))) / rows);
-  }, [settings.canvasHeight, settings.rows, settings.gap, settings.margins]);
+  }, [settings]);
 
   const getGridCoords = useCallback((clientX: number, clientY: number) => {
     if (!gridRef.current) return null;
@@ -434,7 +434,7 @@ ${rectangles}
       x: Math.max(0, Math.min(gridX, settings.cols - 1)),
       y: Math.max(0, Math.min(gridY, settings.rows - 1))
     };
-  }, [settings.canvasWidth, settings.margins, settings.cols, settings.gap, rowHeight]);
+  }, [settings, rowHeight]);
 
   const mergeWidgetsArea = useCallback((sourceId: string, currentCell: {x: number, y: number}) => {
     setWidgets(prev => {

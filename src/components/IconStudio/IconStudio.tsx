@@ -52,7 +52,8 @@ import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUti
 import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { downloadBlob, downloadText, copyBlobToClipboard } from "@/lib/downloadHelper";
-import { readSessionValue, removeSessionValue } from "@/lib/safeStorage";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
+import { idbGet, idbGetSync, idbSet, idbRemove, readSessionValue, removeSessionValue, writeSessionValue } from "@/lib/safeStorage";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 export type MaterialKind = "glass" | "plastic" | "glossy" | "frosted" | "metallic" | "iridescent";
@@ -197,8 +198,8 @@ const defaultControls: StudioControls = {
   color: "#16c784",
   colorMode: "svg",
   material: "glass",
-  depth: 26,
-  bevel: 4.5,
+  depth: 10,
+  bevel: 3.4,
   bevelSmoothing: 12,
   roughness: 10,
   brightness: 110,
@@ -506,12 +507,12 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
   const group = new THREE.Group();
   let shapeCount = 0;
 
-  const curveSegments = isExport ? 180 : controls.fastPreview ? 48 : 96;
+  const curveSegments = isExport ? 180 : controls.fastPreview ? 64 : 112;
   const bevelSegments = isExport
-    ? Math.max(18, Math.round(controls.bevel * 4))
+    ? Math.max(24, Math.round(controls.bevel * 5))
     : controls.fastPreview
-    ? Math.max(10, Math.min(18, Math.round(controls.bevel * 3.2)))
-    : Math.max(12, Math.round(controls.bevel * 3.6));
+    ? Math.max(18, Math.min(24, Math.round(controls.bevel * 5)))
+    : Math.max(20, Math.round(controls.bevel * 4.8));
 
   data.paths.forEach((path, pathIndex) => {
     const pathColor = parseColorFromPath(path, gradientMap, controls.color);
@@ -526,8 +527,8 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
       const rawGeo = new THREE.ExtrudeGeometry(shape, {
         depth: Math.max(0.8, controls.depth),
         bevelEnabled: safeBevel > 0,
-        bevelSize: safeBevel * 0.92,
-        bevelThickness: safeBevel * 0.92,
+        bevelSize: safeBevel * 0.84,
+        bevelThickness: safeBevel * 0.68,
         bevelSegments: bevelSegments,
         curveSegments: curveSegments,
         steps: isExport ? 2 : 1,
@@ -1355,28 +1356,81 @@ export default function IconStudio() {
   const [copySuccess, setCopySuccess] = useState(false);
   const cancelBatch = useRef(false);
   const previewRef = useRef<PreviewHandle | null>(null);
+  const restoredAssetsRef = useRef(false);
+  const initializationStartedRef = useRef(false);
   const selectedAsset = assets.find((asset) => asset.id === selectedId);
 
+  const STUDIO_ASSETS_KEY = "mcustock_studio_assets";
+
   useEffect(() => {
-    const importedValue = readSessionValue<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import");
-    if (!importedValue) return;
+    if (initializationStartedRef.current) return;
+    initializationStartedRef.current = true;
 
-    const imported = Array.isArray(importedValue) ? importedValue : [importedValue];
-    const batchImports = imported.filter((item) => item && typeof item.svg === "string" && typeof item.name === "string");
-    if (!batchImports.length) return;
+    const initAssets = async () => {
+      // 1. Restore existing assets from memory / IndexedDB
+      const existingAssets: IconAsset[] =
+        idbGetSync<IconAsset[]>(STUDIO_ASSETS_KEY) ||
+        readSessionValue<IconAsset[]>(STUDIO_ASSETS_KEY) ||
+        (await idbGet<IconAsset[]>(STUDIO_ASSETS_KEY)) ||
+        [];
 
-    const assetsToAdd: IconAsset[] = batchImports.map((item, index) => ({
-      id: `splitter-${Date.now()}-${index}`,
-      name: item.name,
-      text: item.svg,
-      preview: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.svg)}`,
-    }));
+      // 2. Check for imported icons from Vector Splitter
+      const importedValue =
+        idbGetSync<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import") ||
+        readSessionValue<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import") ||
+        (await idbGet<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import"));
 
-    setAssets((current) => [...assetsToAdd, ...current].slice(0, MAX_FILES));
-    setSelectedId(assetsToAdd[0]?.id ?? "");
-    setSelectedIds(assetsToAdd.length > 0 ? [assetsToAdd[0].id] : []);
-    setError("");
+      let finalAssets = [...existingAssets];
+      let newSelectedId = existingAssets[0]?.id || "";
+
+      if (importedValue) {
+        const imported = Array.isArray(importedValue) ? importedValue : [importedValue];
+        const batchImports = imported.filter((item) => item && typeof item.svg === "string" && typeof item.name === "string");
+
+        if (batchImports.length > 0) {
+          const assetsToAdd: IconAsset[] = batchImports.map((item, index) => ({
+            id: `splitter-${Date.now()}-${index}`,
+            name: item.name,
+            text: item.svg,
+            preview: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.svg)}`,
+          }));
+
+          // Avoid duplicates while PRESERVING existing 3D studio files!
+          const nonDuplicateExisting = existingAssets.filter(
+            (existing) => !assetsToAdd.some((added) => added.name === existing.name && added.text === existing.text)
+          );
+
+          finalAssets = [...assetsToAdd, ...nonDuplicateExisting].slice(0, MAX_FILES);
+          newSelectedId = assetsToAdd[0]?.id || "";
+
+          // Clear the one-time import queue so it doesn't re-import on refresh
+          removeSessionValue("mcustock_studio_import");
+          void idbRemove("mcustock_studio_import");
+        }
+      }
+
+      setAssets(finalAssets);
+      if (newSelectedId) {
+        setSelectedId(newSelectedId);
+        setSelectedIds([newSelectedId]);
+      }
+      restoredAssetsRef.current = true;
+    };
+
+    void initAssets();
   }, []);
+
+  // Save assets to storage whenever they change
+  useEffect(() => {
+    if (!restoredAssetsRef.current) return;
+    if (!assets.length) {
+      removeSessionValue(STUDIO_ASSETS_KEY);
+      void idbRemove(STUDIO_ASSETS_KEY);
+      return;
+    }
+    writeSessionValue(STUDIO_ASSETS_KEY, assets);
+    void idbSet(STUDIO_ASSETS_KEY, assets);
+  }, [assets]);
 
   const addAssets = useCallback(
     async (files: FileList | File[]) => {
@@ -1525,6 +1579,9 @@ export default function IconStudio() {
   const clearAssets = () => {
     cancelBatch.current = true;
     removeSessionValue("mcustock_studio_import");
+    void idbRemove("mcustock_studio_import");
+    removeSessionValue(STUDIO_ASSETS_KEY);
+    void idbRemove(STUDIO_ASSETS_KEY);
     setAssets([]);
     setSelectedId("");
     setSelectedIds([]);
@@ -1559,6 +1616,7 @@ export default function IconStudio() {
   const exportCurrent = async (format: ExportFormat) => {
     if (!selectedAsset || !previewRef.current) return;
     try {
+      await consumeFeatureCredit("three_d_generation");
       const baseName = selectedAsset.name.replace(/\.svg$/i, "");
       if (format === "png" || format === "webp") {
         const blob = await previewRef.current.exportBlob(selectedAsset, format, controls.resolution);
@@ -1613,6 +1671,7 @@ export default function IconStudio() {
     cancelBatch.current = false;
     setBatch({ running: true, current: "", completed: 0, failed: 0 });
     try {
+      await consumeFeatureCredit("three_d_generation");
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       let completed = 0;
@@ -1765,7 +1824,7 @@ export default function IconStudio() {
                   type="button"
                   onClick={clearAssets}
                   disabled={batch.running}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-2.5 py-1.5 text-[10px] font-extrabold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 px-2.5 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-500/20 hover:border-red-500/40 dark:border-red-400/30 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 transition-all duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Remove all loaded SVGs"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

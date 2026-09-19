@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
 import { Subscription } from '@/server/models/Subscription';
+import '@/server/models/Plan';
+import { consumeCredits, InsufficientCreditsError } from '@/server/services/credit-service';
 
 export async function GET(req: Request) {
   try {
@@ -35,6 +37,29 @@ export async function GET(req: Request) {
       } : null,
     });
   } catch (error) {
+    return authorizationErrorResponse(error);
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const user = await requireAuthenticatedUser(req);
+    const body = await req.json().catch(() => ({}));
+    const feature = typeof body.feature === 'string' ? body.feature : '';
+    const allowedFeatures = new Set([
+      'three_d_generation', 'grid_generation', 'palette_generation', 'typebox_generation',
+      'bento_generation', 'ascii_generation', 'trading_generation', 'splitter_export',
+    ]);
+    if (!allowedFeatures.has(feature)) {
+      return NextResponse.json({ success: false, error: 'Invalid metered feature.' }, { status: 400 });
+    }
+
+    await consumeCredits(user._id.toString(), 1, `${feature} usage`, feature as Parameters<typeof consumeCredits>[3]);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
     return authorizationErrorResponse(error);
   }
 }

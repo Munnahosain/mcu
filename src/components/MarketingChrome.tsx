@@ -37,7 +37,11 @@ const AUTH_EVENT = "mcustock-auth-changed";
 
 function subscribeToAuth(callback: () => void) {
   window.addEventListener(AUTH_EVENT, callback);
-  return () => window.removeEventListener(AUTH_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(AUTH_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
 }
 
 function getClientAuthSnapshot() {

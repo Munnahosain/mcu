@@ -34,6 +34,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { downloadDataUrl, downloadText } from "@/lib/downloadHelper";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ThemedSelect from "@/components/ui/ThemedSelect";
 import {
@@ -358,6 +359,7 @@ export default function TypeboxStudioPage() {
   const handleSavePng = async () => {
     setIsExporting(true);
     try {
+      await consumeFeatureCredit("typebox_generation");
       const exportCanvas = document.createElement("canvas");
       await renderTypeboxToCanvas(exportCanvas, state, state.exportScale);
 
@@ -375,8 +377,9 @@ export default function TypeboxStudioPage() {
   };
 
   // Save SVG Vector Export
-  const handleSaveSvg = () => {
+  const handleSaveSvg = async () => {
     try {
+      await consumeFeatureCredit("typebox_generation");
       const svgStr = generateSvgExport(state);
       const filename = `typebox-${state.activeEffect}.svg`;
       downloadText(svgStr, filename, "image/svg+xml;charset=utf-8");

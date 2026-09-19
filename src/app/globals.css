@@ -1321,7 +1321,7 @@ html.light .text-gray-300 {
   color: var(--text-secondary) !important;
 }
 
-html.light .text-white {
+html.light .text-white:not([class*="bg-red-"]):not([class*="bg-primary"]):not([class*="bg-emerald-"]):not([class*="bg-indigo-"]):not([class*="bg-black"]):not([class*="bg-slate-900"]):not(.force-white) {
   color: var(--foreground) !important;
 }
 
@@ -1580,7 +1580,7 @@ html.light .text-gray-300 {
   color: var(--neutral-700) !important;
 }
 
-html.light .text-white {
+html.light .text-white:not([class*="bg-red-"]):not([class*="bg-primary"]):not([class*="bg-emerald-"]):not([class*="bg-indigo-"]):not([class*="bg-black"]):not([class*="bg-slate-900"]):not(.force-white) {
   color: var(--neutral-900) !important;
 }
 
@@ -6144,6 +6144,125 @@ html body .liquid-icon-shell {
   -webkit-backdrop-filter: none !important;
 }
 
+/* Keep admin light mode readable; legacy theme overrides above otherwise wash out the workspace. */
+html.light body:has(.admin-shell),
+html.light body .admin-shell {
+  background: #edf7f3 !important;
+  color: #17201e !important;
+}
+
+html.light body .admin-shell .admin-header,
+html.light body .admin-shell .dashboard-topbar {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #17201e !important;
+}
+
+html.light body .admin-shell .text-white,
+html.light body .admin-shell .text-foreground {
+  color: #17201e !important;
+}
+
+html.light body .admin-shell .text-white\/40 { color: rgba(23, 32, 30, 0.62) !important; }
+html.light body .admin-shell .text-white\/45 { color: rgba(23, 32, 30, 0.66) !important; }
+html.light body .admin-shell .text-white\/50 { color: rgba(23, 32, 30, 0.7) !important; }
+html.light body .admin-shell .text-white\/55 { color: rgba(23, 32, 30, 0.74) !important; }
+html.light body .admin-shell .text-white\/60 { color: rgba(23, 32, 30, 0.78) !important; }
+html.light body .admin-shell .text-white\/65,
+html.light body .admin-shell .text-white\/70,
+html.light body .admin-shell .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
+
+html.light body .admin-shell .bg-white\/\[0\.025\],
+html.light body .admin-shell .bg-white\/\[0\.035\],
+html.light body .admin-shell .bg-white\/\[0\.04\],
+html.light body .admin-shell .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+}
+
+html.light body .admin-shell .border-white\/5,
+html.light body .admin-shell .border-white\/10,
+html.light body .admin-shell .border-white\/15 {
+  border-color: rgba(23, 32, 30, 0.14) !important;
+}
+
+html.light body .admin-shell input,
+html.light body .admin-shell textarea,
+html.light body .admin-shell select {
+  background-color: #ffffff !important;
+  border-color: rgba(23, 32, 30, 0.18) !important;
+  color: #17201e !important;
+}
+
+html.light body .admin-shell input::placeholder,
+html.light body .admin-shell textarea::placeholder {
+  color: rgba(23, 32, 30, 0.52) !important;
+}
+
+/* Admin follows the selected theme without inheriting the public page's low-contrast overrides. */
+html.light body .admin-shell[data-admin-theme="adaptive"],
+html.light body .admin-shell[data-admin-theme="adaptive"] main,
+html.light body .admin-shell[data-admin-theme="adaptive"] nav {
+  background-color: #edf7f3 !important;
+  color: #17201e !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-header,
+html.light body .admin-shell[data-admin-theme="adaptive"] .dashboard-topbar {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: #17201e !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white,
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-foreground { color: #17201e !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/40 { color: rgba(23, 32, 30, 0.62) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/45 { color: rgba(23, 32, 30, 0.66) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/50 { color: rgba(23, 32, 30, 0.7) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/55 { color: rgba(23, 32, 30, 0.74) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/60 { color: rgba(23, 32, 30, 0.78) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/65,
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/70,
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border: 1px solid rgba(23, 32, 30, 0.12) !important;
+  box-shadow: 0 12px 30px rgba(42, 58, 80, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav a:not([aria-current="page"]),
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav a:not([aria-current="page"]) svg {
+  color: rgba(23, 32, 30, 0.72) !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav a:not([aria-current="page"]):hover,
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav a:not([aria-current="page"]):hover svg {
+  color: #0aaa6a !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav a[aria-current="page"] {
+  color: #063b2c !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .bg-white\/\[0\.025\],
+html.light body .admin-shell[data-admin-theme="adaptive"] .bg-white\/\[0\.035\],
+html.light body .admin-shell[data-admin-theme="adaptive"] .bg-white\/\[0\.04\],
+html.light body .admin-shell[data-admin-theme="adaptive"] .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .border-white\/5,
+html.light body .admin-shell[data-admin-theme="adaptive"] .border-white\/10,
+html.light body .admin-shell[data-admin-theme="adaptive"] .border-white\/15 {
+  border-color: rgba(23, 32, 30, 0.14) !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] input,
+html.light body .admin-shell[data-admin-theme="adaptive"] textarea,
+html.light body .admin-shell[data-admin-theme="adaptive"] select {
+  background-color: #ffffff !important;
+  border-color: rgba(23, 32, 30, 0.18) !important;
+  color: #17201e !important;
+}
+
 html body .liquid-icon-shell:hover {
   transform: none !important;
   background: transparent !important;
@@ -6668,3 +6787,98 @@ html.dark select option:checked {
   background: #16c784 linear-gradient(#16c784, #16c784) !important;
   color: #06251b !important;
 }
+
+/* Marketing navigation labels stay white across themes, while inactive dark-mode labels retain muted contrast. */
+html body .liquid-nav-shell .liquid-nav-link,
+html body .liquid-nav-shell .liquid-nav-link .nav-label,
+html body .liquid-nav-mobile-row .liquid-nav-link,
+html body .liquid-nav-mobile-row .liquid-nav-link span {
+  color: #ffffff !important;
+}
+
+html.dark body .liquid-nav-shell .liquid-nav-link:not(.is-active),
+html.dark body .liquid-nav-mobile-row .liquid-nav-link:not(.is-active) {
+  color: rgba(236, 241, 252, 0.72) !important;
+}
+
+html.dark body .liquid-nav-shell .liquid-nav-link:not(.is-active):hover,
+html.dark body .liquid-nav-mobile-row .liquid-nav-link:not(.is-active):hover {
+  color: #ffffff !important;
+}
+
+html body .liquid-nav-shell .liquid-nav-link.is-active,
+html body .liquid-nav-mobile-row .liquid-nav-link.is-active {
+  color: #ffffff !important;
+}
+
+/* Admin login content needs explicit contrast in light mode. */
+html.light body .admin-login-shell > main h1 {
+  color: #17201e !important;
+}
+
+html.light body .admin-login-shell > main p.text-white\/50 {
+  color: rgba(23, 32, 30, 0.68) !important;
+}
+
+html.light body .admin-login-shell > main a.text-white\/50 {
+  color: rgba(23, 32, 30, 0.68) !important;
+}
+
+/* Auth actions are separate from the feature navigation and need readable contrast on light surfaces. */
+html.light body .liquid-nav-shell .liquid-nav-link:not(:has(.nav-icon)),
+html.light body .liquid-nav-mobile-row .liquid-nav-link:not(:has(.nav-icon)) {
+  color: rgba(24, 34, 51, 0.72) !important;
+}
+
+html.dark body .liquid-nav-shell .liquid-nav-link:not(:has(.nav-icon)),
+html.dark body .liquid-nav-mobile-row .liquid-nav-link:not(:has(.nav-icon)) {
+  color: rgba(236, 241, 252, 0.72) !important;
+}
+
+html body .liquid-nav-shell .liquid-nav-link:not(:has(.nav-icon)):hover,
+html body .liquid-nav-mobile-row .liquid-nav-link:not(:has(.nav-icon)):hover {
+  color: #16c784 !important;
+}
+
+/* Keep inactive marketing icons legible like the dashboard navigation. */
+html.light body .liquid-nav-shell .liquid-nav-link:not(.is-active) .nav-icon svg,
+html.light body .liquid-nav-mobile-row .liquid-nav-link:not(.is-active) svg {
+  color: rgba(24, 34, 51, 0.68) !important;
+  stroke: currentColor !important;
+}
+
+html.dark body .liquid-nav-shell .liquid-nav-link:not(.is-active) .nav-icon svg,
+html.dark body .liquid-nav-mobile-row .liquid-nav-link:not(.is-active) svg {
+  color: rgba(236, 241, 252, 0.7) !important;
+  stroke: currentColor !important;
+}
+
+html body .liquid-nav-shell .liquid-nav-link:not(.is-active):hover .nav-icon svg,
+html body .liquid-nav-mobile-row .liquid-nav-link:not(.is-active):hover svg {
+  color: #16c784 !important;
+}
+
+/* Final admin light-mode contrast override. Keep this at the end so legacy theme rules cannot win. */
+html.light body .admin-shell[data-admin-theme="adaptive"].text-white:not([class*="bg-red-"]):not([class*="bg-primary"]):not([class*="bg-emerald-"]):not([class*="bg-indigo-"]):not([class*="bg-black"]):not([class*="bg-slate-900"]):not(.force-white) {
+  --white: #17201e !important;
+  --foreground: #17201e !important;
+  --color-white: #17201e !important;
+  color: #17201e !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] h1,
+html.light body .admin-shell[data-admin-theme="adaptive"] h2,
+html.light body .admin-shell[data-admin-theme="adaptive"] h3,
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white:not([class*="bg-red-"]):not([class*="bg-primary"]):not([class*="bg-emerald-"]):not([class*="bg-indigo-"]):not([class*="bg-black"]):not([class*="bg-slate-900"]):not(.force-white),
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-foreground {
+  color: #17201e !important;
+}
+
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/40 { color: rgba(23, 32, 30, 0.62) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/45 { color: rgba(23, 32, 30, 0.66) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/50 { color: rgba(23, 32, 30, 0.7) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/55 { color: rgba(23, 32, 30, 0.74) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/60 { color: rgba(23, 32, 30, 0.78) !important; }
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/65,
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/70,
+html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }

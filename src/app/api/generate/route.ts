@@ -102,7 +102,7 @@ export async function POST(req: Request) {
     const provider = detectProvider(apiKey, providerHint);
 
     if (userId) {
-      await consumeCredits(userId, 1, 'AI metadata generation');
+      await consumeCredits(userId, 1, 'AI metadata generation', 'metadata_generation');
       creditReserved = true;
     }
 
@@ -183,7 +183,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, metadata });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
-      await refundCredits(authenticatedUserId, 1).catch((refundError) => console.error('[generate] credit refund error:', refundError));
+      await refundCredits(authenticatedUserId, 1, 'Failed AI metadata generation refund', 'metadata_generation').catch((refundError) => console.error('[generate] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });

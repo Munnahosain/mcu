@@ -22,6 +22,10 @@ const UserSchema = new Schema({
     lowercase: true,
     trim: true,
   },
+  avatarUrl: {
+    type: String,
+    default: '',
+  },
   password: {
     type: String,
     required: [true, 'Please provide a password'],

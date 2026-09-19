@@ -229,9 +229,10 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={onOpenInStudio}
               disabled={selectedCount === 0}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#071b17] bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
               title="Open selected icons in 3D Studio"
             >
               <Box className="w-3.5 h-3.5" />

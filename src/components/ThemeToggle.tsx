@@ -91,21 +91,21 @@ export default function ThemeToggle({ className = "", iconOnly = false }: ThemeT
     >
       {/* Sliding Pill Indicator */}
       <span
-        className={`absolute h-7 w-7 rounded-full bg-primary text-background shadow-[0_4px_10px_rgba(15,174,116,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center justify-center will-change-transform ${
+        className={`absolute z-10 h-7 w-7 rounded-full bg-primary text-white shadow-[0_4px_10px_rgba(15,174,116,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center justify-center will-change-transform ${
           isLight ? "translate-x-[42px]" : "translate-x-0"
         }`}
       >
-        {isLight ? (
-          <Sun className="h-3.5 w-3.5 text-white transition-transform duration-300 rotate-0" />
+          {isLight ? (
+          <Sun className="relative z-10 h-3.5 w-3.5 !text-white transition-transform duration-300 rotate-0" strokeWidth={2.5} />
         ) : (
-          <Moon className="h-3.5 w-3.5 text-white transition-transform duration-300 rotate-0" />
+          <Moon className="relative z-10 h-3.5 w-3.5 !text-white transition-transform duration-300 rotate-0" strokeWidth={2.5} />
         )}
       </span>
 
       {/* Label Text behind thumb */}
-      <span className="flex w-full justify-between px-2 text-[10px] font-extrabold uppercase tracking-wider select-none text-[var(--text-muted)]">
-        <span className={`transition-opacity duration-200 ${!isLight ? "opacity-0" : "opacity-80"}`}>Dark</span>
-        <span className={`transition-opacity duration-200 ${isLight ? "opacity-0" : "opacity-80"}`}>Light</span>
+      <span className="relative z-0 flex w-full justify-between px-2 text-[10px] font-extrabold uppercase tracking-wider select-none !text-foreground">
+        <span className={`!text-foreground transition-opacity duration-200 ${!isLight ? "opacity-0" : "opacity-80"}`}>Dark</span>
+        <span className={`!text-foreground transition-opacity duration-200 ${isLight ? "opacity-0" : "opacity-80"}`}>Light</span>
       </span>
     </button>
   );

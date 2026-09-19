@@ -42,6 +42,7 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import { GridConfig, GridType, LineStyle, BgMode, CanvasPreset, CompositionScores, ReferenceAnalysis } from "@/lib/grid/types";
 import { CANVAS_PRESETS, GRID_COLOR_PALETTES } from "@/lib/grid/presets";
 import { downloadText, downloadBlob } from "@/lib/downloadHelper";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
 import {
   createDefaultConfig,
   generateSeed,
@@ -260,7 +261,8 @@ export default function GridStudio() {
   };
 
   // Export SVG vector file
-  const handleExportSvg = () => {
+  const handleExportSvg = async () => {
+    await consumeFeatureCredit("grid_generation");
     const fullSvg = buildGridSvg(config, width, height, { isExport: true });
     const filename = `smart-grid-${config.type}-${width}x${height}-${config.seed.toLowerCase()}.svg`;
     downloadText(fullSvg, filename, "image/svg+xml;charset=utf-8");
@@ -279,7 +281,8 @@ export default function GridStudio() {
   };
 
   // Export high-res PNG
-  const handleExportPng = () => {
+  const handleExportPng = async () => {
+    await consumeFeatureCredit("grid_generation");
     const fullSvg = buildGridSvg(config, width, height, { isExport: true });
     const svgBlob = new Blob([fullSvg], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);

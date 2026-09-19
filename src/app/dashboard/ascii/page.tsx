@@ -1,37 +1,29 @@
 "use client";
 
 import NextImage from "next/image";
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { 
-  Upload, 
-  Trash2, 
-  Copy, 
-  Download, 
-  RefreshCw, 
-  Maximize, 
-  Minus, 
-  Plus, 
-  Image as ImageIcon,
-  Type,
-  Baseline,
-  Palette,
-  Monitor,
-  FileOutput,
-  FileText,
+import React, { useState, useRef, useEffect } from "react";
+import {
+  Upload,
+  Copy,
+  RefreshCw,
+  Maximize,
   Terminal,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  ChevronDown,
   X,
   FileImage,
   Layers,
-  RotateCcw,
-  Languages,
-  IterationCcw
+  ChevronDown,
+  IterationCcw,
+  Palette,
+  FileText,
+  FileOutput,
+  ZoomOut,
+  ZoomIn,
+  Maximize2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import { consumeFeatureCredit } from "@/lib/feature-credits";
 
 // --- Types ---
 type CharSet = "standard" | "blocks" | "light" | "dense" | "custom";
@@ -91,6 +83,7 @@ export default function ASCIIVisionPage() {
   };
 
   const loadImage = (file: File) => {
+    setIsProcessing(true);
     setOptions(prev => ({
       ...prev,
       colored: false,
@@ -113,20 +106,20 @@ export default function ASCIIVisionPage() {
     reader.readAsDataURL(file);
   };
 
-  const processImage = useCallback(() => {
+  useEffect(() => {
     if (!image) return;
-    setIsProcessing(true);
+
+    let cancelled = false;
 
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx || cancelled) return;
 
       const aspect = img.height / img.width;
       const width = options.gridWidth;
-      // Multiply by 0.55 to compensate for monospace character height-to-width ratio
       const height = Math.floor(width * aspect * 0.55);
       canvas.width = width;
       canvas.height = height;
@@ -136,49 +129,44 @@ export default function ASCIIVisionPage() {
       const pixels = imageData.data;
 
       const charset = options.charSet === "custom" ? options.customChars || " " : CHAR_SETS[options.charSet];
-      let rows: string[] = [];
-      let coloredRows: { char: string; color: string }[][] = [];
+      const rows: string[] = [];
+      const processedRows: { char: string; color: string }[][] = [];
 
       for (let y = 0; y < height; y++) {
         let row = "";
-        let coloredRow: { char: string; color: string }[] = [];
+        const coloredRow: { char: string; color: string }[] = [];
         for (let x = 0; x < width; x++) {
           const i = (y * width + x) * 4;
           const r = pixels[i];
           const g = pixels[i + 1];
           const b = pixels[i + 2];
-          const a = pixels[i + 3];
 
-          // Grayscale
-          let gray = (0.299 * r + 0.587 * g + 0.114 * b);
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
           if (options.invert) gray = 255 - gray;
 
           const charIndex = Math.floor((gray / 255) * (charset.length - 1));
           const char = charset[charIndex] || " ";
-          
+
           row += char;
-          coloredRow.push({
-            char,
-            color: `rgb(${r},${g},${b})`
-          });
+          coloredRow.push({ char, color: `rgb(${r},${g},${b})` });
         }
         rows.push(row);
-        coloredRows.push(coloredRow);
+        processedRows.push(coloredRow);
       }
 
-      setAsciiArt(rows.join("\n"));
-      setColoredIRows(coloredRows);
-      setIsProcessing(false);
+      if (!cancelled) {
+        setAsciiArt(rows.join("\n"));
+        setColoredIRows(processedRows);
+        setIsProcessing(false);
+      }
     };
-    img.src = image;
-  }, [image, options]);
 
-  // --- Effects ---
-  useEffect(() => {
-    if (image) {
-      processImage();
-    }
-  }, [image, options, processImage]);
+    img.src = image;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [image, options]);
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -211,7 +199,8 @@ export default function ASCIIVisionPage() {
     showToast("Text copied to clipboard!");
   };
 
-  const handleDownloadTxt = () => {
+  const handleDownloadTxt = async () => {
+    await consumeFeatureCredit("ascii_generation");
     const blob = new Blob([asciiArt], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -256,6 +245,7 @@ export default function ASCIIVisionPage() {
   };
 
   const handleSavePNG = async () => {
+    await consumeFeatureCredit("ascii_generation");
     const canvas = await getExportCanvas();
     if (!canvas) return;
     const link = document.createElement("a");
@@ -275,14 +265,15 @@ export default function ASCIIVisionPage() {
             new ClipboardItem({ "image/png": blob })
           ]);
           showToast("PNG copied to clipboard!");
-        } catch (err) {
+        } catch {
           showToast("Copy failed", "error");
         }
       }
     });
   };
 
-  const handleSaveSVG = () => {
+  const handleSaveSVG = async () => {
+    await consumeFeatureCredit("ascii_generation");
     const isLightTheme = document.documentElement.classList.contains("light");
     const resolvedBg = options.backgroundColor === "transparent" ? (isLightTheme ? "#00E5FF" : "#090D16") : options.backgroundColor;
     const resolvedText = options.textColor === "inherit" ? (isLightTheme ? "#090D16" : "#00E5FF") : options.textColor;

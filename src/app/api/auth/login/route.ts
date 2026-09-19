@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       id: String(user._id ?? user.id),
       name: user.name,
       email: user.email,
+      avatarUrl: user.avatarUrl || '',
     };
 
     const accessToken = await createAccessToken(normalizedUser.id);

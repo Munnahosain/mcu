@@ -9,6 +9,13 @@ export type AuthUser = {
 const USER_KEY = "mcustock_user";
 let accessToken: string | null = null;
 
+export function disableGoogleAutoSelect() {
+  if (typeof window === "undefined") return;
+  const googleApi = (window as Window & { google?: { accounts?: { id?: { disableAutoSelect?: () => void } } } }).google;
+  googleApi?.accounts?.id?.disableAutoSelect?.();
+  document.cookie = "g_state=; Max-Age=0; path=/";
+}
+
 export const getAccessToken = () => accessToken;
 
 export const setAccessToken = (token: string) => {
@@ -36,6 +43,21 @@ export async function ensureAccessToken() {
     }
   } catch {
     // The user may be logged out or the refresh cookie may be expired.
+  }
+  return null;
+}
+
+export async function refreshAuthSession() {
+  try {
+    const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+    const data = await response.json() as { accessToken?: string; user?: Omit<AuthUser, 'signedInAt'> };
+    if (response.ok && data.accessToken && data.user) {
+      accessToken = data.accessToken;
+      setAuthUser({ ...data.user, signedInAt: Date.now() });
+      return data.user;
+    }
+  } catch {
+    // Keep the current session when the refresh endpoint is temporarily unavailable.
   }
   return null;
 }
