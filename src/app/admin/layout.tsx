@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Activity, BarChart3, Coins, CreditCard, Flag, Gauge, LayoutDashboard, Settings, Shield, Users } from 'lucide-react';
+import { Activity, BarChart3, Coins, CreditCard, Flag, Gauge, LayoutDashboard, LifeBuoy, Receipt, Settings, ShieldCheck, Users } from 'lucide-react';
 import Image from 'next/image';
 import ThemeToggle from '@/components/ThemeToggle';
 import { ensureAccessToken, getAuthUser } from '@/lib/auth';
@@ -12,11 +12,13 @@ const navigation = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/plans', label: 'Plans', icon: CreditCard },
+  { href: '/admin/payments', label: 'Payments', icon: Receipt },
+  { href: '/admin/support', label: 'Support', icon: LifeBuoy },
   { href: '/admin/credits', label: 'Credits', icon: Coins },
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/usage', label: 'Usage', icon: Gauge },
   { href: '/admin/features', label: 'Feature flags', icon: Flag },
-  { href: '/admin/security', label: 'Security', icon: Shield },
+  { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

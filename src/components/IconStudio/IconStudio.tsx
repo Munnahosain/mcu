@@ -96,6 +96,7 @@ export type StudioControls = {
   alpha: boolean;
   bgColor: string;
   showShadow: boolean;
+  exportShadow: boolean;
   // Performance
   fastPreview: boolean;
   // Animations & Video
@@ -197,12 +198,12 @@ const resolutionSize: Record<Resolution, number> = {
 const defaultControls: StudioControls = {
   color: "#16c784",
   colorMode: "svg",
-  material: "glass",
-  depth: 10,
-  bevel: 3.4,
+  material: "glossy",
+  depth: 8,
+  bevel: 5.5,
   bevelSmoothing: 12,
-  roughness: 10,
-  brightness: 110,
+  roughness: 18,
+  brightness: 104,
   artboardMode: "fit",
   customSize: 1024,
   resolution: "2K",
@@ -217,6 +218,7 @@ const defaultControls: StudioControls = {
   alpha: true,
   bgColor: "#101116",
   showShadow: true,
+  exportShadow: true,
   fastPreview: true,
   animation: "none",
   animSpeed: 1,
@@ -393,7 +395,7 @@ function makeMaterial(controls: StudioControls, pathHexColor?: string) {
   const baseColor = new THREE.Color(hex).multiplyScalar(controls.brightness / 100);
   const roughness = controls.roughness / 100;
 
-  if (controls.material === "glass") {
+    if (controls.material === "glass") {
     return new THREE.MeshPhysicalMaterial({
       color: baseColor,
       transmission: 0.55,
@@ -420,9 +422,13 @@ function makeMaterial(controls: StudioControls, pathHexColor?: string) {
       roughness: Math.max(0.1, roughness * 0.45),
       metalness: 0.0,
       clearcoat: 0.85,
-      clearcoatRoughness: 0.06,
-      specularIntensity: 0.95,
+      clearcoatRoughness: 0.1,
+      specularIntensity: 0.8,
       reflectivity: 0.65,
+      sheen: 0.18,
+      sheenColor: new THREE.Color(0xffffff),
+      sheenRoughness: 0.2,
+      envMapIntensity: 0.9,
       side: THREE.DoubleSide,
     });
   }
@@ -433,10 +439,14 @@ function makeMaterial(controls: StudioControls, pathHexColor?: string) {
       roughness: Math.max(0.03, roughness * 0.12),
       metalness: 0.08,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.02,
-      specularIntensity: 1.0,
+      clearcoatRoughness: 0.06,
+      specularIntensity: 0.82,
       specularColor: new THREE.Color(0xffffff),
       reflectivity: 0.95,
+      sheen: 0.28,
+      sheenColor: new THREE.Color(0xffffff),
+      sheenRoughness: 0.12,
+      envMapIntensity: 1.0,
       side: THREE.DoubleSide,
     });
   }
@@ -523,12 +533,12 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
     const zElevation = pathIndex * 0.04;
 
     shapes.forEach((shape) => {
-      const safeBevel = Math.min(controls.bevel, controls.depth * 0.35);
+      const safeBevel = Math.min(controls.bevel, controls.depth * 0.7);
       const rawGeo = new THREE.ExtrudeGeometry(shape, {
         depth: Math.max(0.8, controls.depth),
         bevelEnabled: safeBevel > 0,
-        bevelSize: safeBevel * 0.84,
-        bevelThickness: safeBevel * 0.68,
+        bevelSize: safeBevel * 0.58,
+        bevelThickness: safeBevel * 0.52,
         bevelSegments: bevelSegments,
         curveSegments: curveSegments,
         steps: isExport ? 2 : 1,
@@ -564,7 +574,7 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
   });
 
   const largest = Math.max(size.x, size.y, size.z, 1);
-  const baseScale = controls.artboardMode === "fit" ? 3.4 / largest : Math.min(3.4 / largest, controls.customSize / 1024);
+  const baseScale = controls.artboardMode === "fit" ? 2.7 / largest : Math.min(2.7 / largest, controls.customSize / 1024);
   const userScale = (controls.scale / 100) * baseScale;
 
   // Keep all scales POSITIVE to prevent backface normal culling flicker!
@@ -639,6 +649,7 @@ const IconPreview = forwardRef<
   const iconRef = useRef<THREE.Group | null>(null);
   const lightsGroupRef = useRef<THREE.Group | null>(null);
   const shadowMeshRef = useRef<THREE.Mesh | null>(null);
+  const framedAssetIdRef = useRef<string | null>(null);
   const frameRef = useRef<number | null>(null);
   const clockRef = useRef<THREE.Clock>(new THREE.Clock());
   const controlsRefCurrent = useRef<StudioControls>(controls);
@@ -661,6 +672,15 @@ const IconPreview = forwardRef<
       const group = await createIconGroup(nextAsset, nextControls, false);
       sceneRef.current.add(group);
       iconRef.current = group;
+      if (framedAssetIdRef.current !== nextAsset.id && cameraRef.current && controlsRef.current) {
+        const bounds = new THREE.Box3().setFromObject(group);
+        const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+        const fitDistance = sphere.radius / Math.tan(THREE.MathUtils.degToRad(cameraRef.current.fov * 0.5)) * 1.35;
+        cameraRef.current.position.set(0, 0, Math.max(7.2, fitDistance));
+        controlsRef.current.target.set(0, 0, 0);
+        controlsRef.current.update();
+        framedAssetIdRef.current = nextAsset.id;
+      }
       onError("");
     },
     [clearIcon, onError]
@@ -996,7 +1016,7 @@ const IconPreview = forwardRef<
         offScene.add(new THREE.AmbientLight(0xffffff, 0.85));
         offScene.add(new THREE.HemisphereLight(0xffffff, 0x091a16, 1.1));
 
-        if (controls.showShadow) {
+        if (controls.exportShadow) {
           const shadowGeo = new THREE.PlaneGeometry(6, 6);
           const shadowCanvas = document.createElement("canvas");
           shadowCanvas.width = 128;
@@ -1671,7 +1691,7 @@ export default function IconStudio() {
     cancelBatch.current = false;
     setBatch({ running: true, current: "", completed: 0, failed: 0 });
     try {
-      await consumeFeatureCredit("three_d_generation");
+      await consumeFeatureCredit("three_d_generation", assets.length);
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       let completed = 0;
@@ -1738,11 +1758,11 @@ export default function IconStudio() {
           <button
             type="button"
             onClick={() => router.push("/dashboard/splitter")}
-            className="!transform-none -translate-x-2 flex h-10 items-center gap-1.5 rounded-full border border-transparent bg-primary px-4 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_4px_16px_rgba(22,199,132,0.3)] transition-[background-color,box-shadow,transform] duration-200 hover:!transform-none hover:border-transparent hover:bg-primary-hover hover:shadow-[0_5px_18px_rgba(22,199,132,0.42)]"
+            className="!transform-none flex h-10 items-center gap-1.5 rounded-full border border-transparent bg-primary px-4 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_4px_16px_rgba(22,199,132,0.3)] transition-[background-color,box-shadow,transform] duration-200 hover:!transform-none hover:border-transparent hover:bg-primary-hover hover:shadow-[0_5px_18px_rgba(22,199,132,0.42)]"
             title="Open Vector Sheet Splitter"
           >
             <Box className="h-4 w-4" />
-            <span>Vector Splitter</span>
+            <span>Icon Splitter</span>
           </button>
 
           <div className="flex items-center gap-2" title="Fast Preview: 60 FPS viewport. Exports still render ultra high-quality.">
@@ -1760,17 +1780,6 @@ export default function IconStudio() {
               ariaLabel="Fast preview"
             />
           </div>
-
-          {/* Align Center Button */}
-          <button
-            type="button"
-            onClick={centerAndAlignObject}
-            className="flex h-11 items-center gap-2 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3.5 text-xs font-bold text-[var(--text-secondary)] hover:text-primary hover:border-primary/40 transition-all duration-200"
-            title="Align and center 3D object to viewport origin"
-          >
-            <Crosshair className="h-4 w-4 text-primary" />
-            <span>Center Object</span>
-          </button>
 
           {/* 360 Video Turntable MP4 Export */}
           <button
@@ -2059,25 +2068,49 @@ export default function IconStudio() {
                 onClick={() => setControls((c) => ({ ...c, rotX: 0, rotY: 0, rotZ: 0 }))}
                 className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
               >
-                Front (0°)
+                Front
               </button>
               <button
-                onClick={() => setControls((c) => ({ ...c, rotX: -25, rotY: 35, rotZ: 0 }))}
+                onClick={() => setControls((c) => ({ ...c, rotX: -22, rotY: 34, rotZ: 0 }))}
+                className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
+              >
+                Hero
+              </button>
+              <button
+                onClick={() => setControls((c) => ({ ...c, rotX: -36, rotY: 48, rotZ: 0 }))}
                 className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
               >
                 Isometric
               </button>
               <button
-                onClick={() => setControls((c) => ({ ...c, rotX: -90, rotY: 0, rotZ: 0 }))}
+                onClick={() => setControls((c) => ({ ...c, rotX: -28, rotY: -52, rotZ: 0 }))}
                 className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
               >
-                Top-Down
+                Iso Side
               </button>
               <button
-                onClick={() => setControls((c) => ({ ...c, rotY: (c.rotY + 180) % 360 }))}
+                onClick={() => setControls((c) => ({ ...c, rotX: -88, rotY: 0, rotZ: 0 }))}
                 className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
               >
-                Flip 180°
+                Top
+              </button>
+              <button
+                onClick={() => setControls((c) => ({ ...c, rotX: 0, rotY: 90, rotZ: 0 }))}
+                className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
+              >
+                Side
+              </button>
+              <button
+                onClick={() => setControls((c) => ({ ...c, rotX: 26, rotY: 56, rotZ: 0 }))}
+                className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
+              >
+                Low
+              </button>
+              <button
+                onClick={() => setControls((c) => ({ ...c, rotX: -14, rotY: -150, rotZ: 0 }))}
+                className="rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] py-1.5 text-[11px] font-bold text-[var(--text-secondary)] hover:text-foreground"
+              >
+                Back
               </button>
             </div>
 
@@ -2188,7 +2221,7 @@ export default function IconStudio() {
           <section className="space-y-4 rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl">
             <h2 className="text-sm font-extrabold text-foreground">Extrusion & Bevel Smoothing</h2>
             <Slider label="Depth (Thickness)" min={1} max={60} value={controls.depth} onChange={(value) => updateControl("depth", value)} />
-            <Slider label="Bevel Sharpness" min={0} max={8} step={0.1} value={controls.bevel} onChange={(value) => updateControl("bevel", value)} />
+            <Slider label="Bevel Sharpness" min={0} max={20} step={0.1} value={controls.bevel} onChange={(value) => updateControl("bevel", value)} />
             <p className="text-[10px] text-[var(--text-muted)]">Preview keeps bevel detail in Fast Preview; final exports use maximum geometry quality.</p>
             <Slider label="Surface Roughness" min={0} max={100} suffix="%" value={controls.roughness} onChange={(value) => updateControl("roughness", value)} />
             <Slider label="Brightness" min={50} max={180} suffix="%" value={controls.brightness} onChange={(value) => updateControl("brightness", value)} />
@@ -2224,6 +2257,15 @@ export default function IconStudio() {
                 className="accent-primary cursor-pointer h-4 w-4 rounded"
               />
               <span>Soft Ambient Ground Shadow</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold text-[var(--text-secondary)] pt-1 cursor-pointer border-t border-[var(--card-border)] pt-3">
+              <input
+                type="checkbox"
+                checked={Boolean(controls.exportShadow ?? true)}
+                onChange={(e) => updateControl("exportShadow", e.target.checked)}
+                className="accent-primary cursor-pointer h-4 w-4 rounded"
+              />
+              <span>Export shadow in transparent PNG/WebP</span>
             </label>
           </section>
 
@@ -2273,13 +2315,6 @@ export default function IconStudio() {
                 className="flex items-center gap-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] hover:bg-primary/10 hover:text-primary px-3 py-2 text-xs font-bold transition-all disabled:opacity-40"
               >
                 <FileImage className="h-3.5 w-3.5 text-primary" /> WebP
-              </button>
-              <button
-                onClick={() => void exportCurrent("svg")}
-                disabled={!selectedAsset}
-                className="flex items-center gap-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] hover:bg-primary/10 hover:text-primary px-3 py-2 text-xs font-bold transition-all disabled:opacity-40"
-              >
-                <FileCode className="h-3.5 w-3.5 text-primary" /> SVG
               </button>
               <button
                 onClick={() => void exportCurrent("gltf")}

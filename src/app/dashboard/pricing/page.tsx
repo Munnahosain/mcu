@@ -9,15 +9,12 @@ import {
   Star,
   Zap,
   ArrowRight,
-  HelpCircle,
   Layers,
-  ChevronDown,
   CreditCard,
   Loader2,
   Minus,
   X,
   ShieldCheck,
-  Smartphone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
@@ -247,8 +244,12 @@ export default function DashboardPricingPage() {
 
   // Checkout Modal State
   const [checkoutModalPlan, setCheckoutModalPlan] = useState<IPlanData | null>(null);
-  const [checkoutSession, setCheckoutSession] = useState<{ subscriptionId: string; invoiceId: string; amount: number } | null>(null);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("bKash");
+  const [checkoutSession, setCheckoutSession] = useState<{ amount: number; planId: string } | null>(null);
+  const [paymentSettings, setPaymentSettings] = useState<{ enabled: boolean; accountNumber: string; accountType: string; instructions: string } | null>(null);
+  const [senderNumber, setSenderNumber] = useState("");
+  const [transactionId, setTransactionId] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
 
   useEffect(() => {
@@ -301,26 +302,21 @@ export default function DashboardPricingPage() {
       return;
     }
 
-    // Paid Plan: Create server-side checkout session and show checkout modal
+    // Paid plans use manual bKash verification; the server remains the source of truth.
     setSubscribingSlug(plan.slug);
     try {
-      const res = await fetch("/api/plans/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "checkout",
-          planSlug: plan.slug,
-          billingInterval: billingCycle === "yearly" ? "year" : "month",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to initialize checkout");
-
+      const settingsRes = await fetch("/api/payments/settings");
+      const settingsData = await settingsRes.json();
+      if (!settingsRes.ok || !settingsData.success) throw new Error(settingsData.error || "Unable to load payment settings");
+      const amount = billingCycle === "yearly" ? Number(plan.yearlyPrice ?? plan.price ?? 0) : Number(plan.monthlyPrice ?? plan.price ?? 0);
       setCheckoutSession({
-        subscriptionId: data.subscriptionId,
-        invoiceId: data.invoiceId,
-        amount: data.plan.amount,
+        planId: plan._id || "",
+        amount,
       });
+      setPaymentSettings(settingsData.settings);
+      setSenderNumber("");
+      setTransactionId("");
+      setTermsAccepted(false);
       setCheckoutModalPlan(plan);
     } catch (err) {
       setFeedbackMessage({ type: "error", text: err instanceof Error ? err.message : "Checkout initialization failed" });
@@ -330,31 +326,30 @@ export default function DashboardPricingPage() {
   };
 
   const handleConfirmPayment = async () => {
-    if (!checkoutSession || !checkoutModalPlan) return;
+    if (!checkoutSession || !checkoutModalPlan || !termsAccepted) return;
 
     setIsProcessingPayment(true);
     try {
-      const res = await fetch("/api/plans/subscribe", {
+      const res = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "verify_payment",
-          subscriptionId: checkoutSession.subscriptionId,
-          paymentMethod: selectedPaymentMethod,
-          transactionRef: `TXN-${Date.now()}`,
+          planId: checkoutSession.planId,
+          billingInterval: billingCycle === "yearly" ? "year" : "month",
+          senderNumber,
+          transactionId,
+          termsAccepted,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Payment verification failed");
+      if (!res.ok || !data.success) throw new Error(data.error || "Payment submission failed");
 
-      setCurrentPlanSlug(checkoutModalPlan.slug);
       setFeedbackMessage({
         type: "success",
-        text: `Payment verified! ${checkoutModalPlan.name} plan is active with ${data.plan.totalCredits.toLocaleString()} credits.`,
+        text: `Payment submitted. Payment ID: ${data.payment.paymentId}. It is waiting for admin verification.`,
       });
       setCheckoutModalPlan(null);
       setCheckoutSession(null);
-      window.dispatchEvent(new CustomEvent("mcustock:credits-updated"));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Payment verification failed");
     } finally {
@@ -621,8 +616,8 @@ export default function DashboardPricingPage() {
                     <CreditCard className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-white">Subscribe to {checkoutModalPlan.name}</h3>
-                    <p className="text-xs text-white/50">Invoice: {checkoutSession.invoiceId}</p>
+                    <h3 className="text-lg font-black text-white">Secure Checkout</h3>
+                    <p className="text-xs text-white/50">You are subscribing to the {checkoutModalPlan.name} plan for ৳{checkoutSession.amount.toLocaleString()}.</p>
                   </div>
                 </div>
                 <button
@@ -633,56 +628,26 @@ export default function DashboardPricingPage() {
                 </button>
               </div>
 
-              {/* Order Summary */}
-              <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-3">
-                <div className="flex justify-between text-xs text-white/70">
-                  <span>Plan:</span>
-                  <span className="font-bold text-white">{checkoutModalPlan.name} ({billingCycle === "yearly" ? "Yearly" : "Monthly"})</span>
+              {!paymentSettings?.enabled ? <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200">bKash payment is temporarily unavailable.</div> : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3">
+                  <p className="text-xs font-black uppercase tracking-wider text-primary">1. Send Money</p>
+                  <p className="text-xs text-white/60">Provider <strong className="block text-white">bKash ({paymentSettings?.accountType || "merchant"})</strong></p>
+                  <p className="text-xs text-white/60">Number <span className="flex items-center gap-2"><strong className="text-white">{paymentSettings?.accountNumber || "Not configured"}</strong><button type="button" aria-label="Copy bKash number" onClick={() => { if (paymentSettings?.accountNumber) { void navigator.clipboard.writeText(paymentSettings.accountNumber); setCopied(true); setTimeout(() => setCopied(false), 1500); } }} className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-primary">{copied ? "Copied" : "Copy"}</button></span></p>
+                  <p className="text-xs text-white/60">Amount <strong className="block text-lg text-white">৳{checkoutSession.amount.toLocaleString()}</strong></p>
+                  {paymentSettings?.instructions ? <p className="whitespace-pre-line text-[11px] leading-relaxed text-white/50">{paymentSettings.instructions}</p> : null}
                 </div>
-                <div className="flex justify-between text-xs text-white/70">
-                  <span>Credits Allocation:</span>
-                  <span className="font-bold text-primary">{checkoutModalPlan.monthlyCredits.toLocaleString()} AI Credits / mo</span>
-                </div>
-                <div className="flex justify-between text-xs text-white/70">
-                  <span>Device Limit:</span>
-                  <span className="font-bold text-white">{checkoutModalPlan.activeDeviceLimit} Devices</span>
-                </div>
-                <div className="pt-2 border-t border-white/10 flex justify-between text-sm">
-                  <span className="font-bold text-white">Total Payable:</span>
-                  <span className="text-lg font-black text-primary">৳{checkoutSession.amount.toLocaleString()} BDT</span>
+                <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3">
+                  <p className="text-xs font-black uppercase tracking-wider text-primary">2. Verify Payment</p>
+                  <label className="block text-xs font-semibold text-white/70">Sender Number (Your Number)<input value={senderNumber} onChange={(event) => setSenderNumber(event.target.value)} placeholder="017XXXXXXXX" className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-primary" /></label>
+                  <label className="block text-xs font-semibold text-white/70">Transaction ID (TrxID)<input value={transactionId} onChange={(event) => setTransactionId(event.target.value)} placeholder="8A7B6C5D4E" className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-primary" /></label>
                 </div>
               </div>
-
-              {/* Payment Methods */}
-              <div className="space-y-3">
-                <label className="block text-xs font-bold text-white/70">
-                  Select Payment Method:
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { id: "bKash", name: "bKash", color: "border-pink-500/40 bg-pink-500/10 text-pink-300" },
-                    { id: "Nagad", name: "Nagad", color: "border-orange-500/40 bg-orange-500/10 text-orange-300" },
-                    { id: "Card", name: "Card / Bank", color: "border-blue-500/40 bg-blue-500/10 text-blue-300" },
-                  ].map((method) => (
-                    <button
-                      key={method.id}
-                      type="button"
-                      onClick={() => setSelectedPaymentMethod(method.id)}
-                      className={`p-3 rounded-xl border text-center transition-all ${
-                        selectedPaymentMethod === method.id
-                          ? `${method.color} ring-2 ring-primary`
-                          : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
-                      }`}
-                    >
-                      <span className="text-xs font-bold block">{method.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <label className="flex items-start gap-2 text-xs text-white/70"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className="mt-0.5 accent-primary" /> I accept the Terms and Conditions</label>
 
               <div className="rounded-xl bg-white/5 p-3 text-[11px] text-white/50 flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-                <span>Secure SSL encrypted checkout. Credits and plan benefits activate immediately upon verification.</span>
+                <span>Your payment remains pending until an administrator verifies the transaction.</span>
               </div>
 
               {/* Action Buttons */}
@@ -696,18 +661,18 @@ export default function DashboardPricingPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={isProcessingPayment}
+                  disabled={isProcessingPayment || !paymentSettings?.enabled || !termsAccepted || !senderNumber || !transactionId}
                   onClick={handleConfirmPayment}
                   className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-bold text-[#06251b] hover:bg-primary-hover active:scale-[0.98] transition-all shadow-lg shadow-primary/25"
                 >
                   {isProcessingPayment ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Verifying Payment...</span>
+                        <span>Processing...</span>
                     </>
                   ) : (
                     <>
-                      <span>Confirm &amp; Pay ৳{checkoutSession.amount.toLocaleString()}</span>
+                      <span>Confirm Payment</span>
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}

@@ -75,3 +75,34 @@ export async function PATCH(req: Request, context: RouteContext) {
     return authorizationErrorResponse(error);
   }
 }
+
+export async function DELETE(req: Request, context: RouteContext) {
+  try {
+    const actor = await requireRole(req, ['super_admin', 'admin']);
+    const { id } = await context.params;
+    if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
+
+    await connectToDatabase();
+    const target = await User.findById(id).select('name email role').lean();
+    if (!target) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
+    if (id === String(actor._id)) return NextResponse.json({ success: false, error: 'You cannot delete your own account.' }, { status: 400 });
+    if (target.role === 'super_admin' && actor.role !== 'super_admin') {
+      return NextResponse.json({ success: false, error: 'Super Admin accounts cannot be deleted by this role.' }, { status: 403 });
+    }
+
+    await User.findByIdAndDelete(id);
+    await AuditLog.create({
+      actorId: actor._id,
+      actorRole: actor.role,
+      action: 'DELETE_USER',
+      targetUserId: id,
+      metadata: { email: target.email, name: target.name, role: target.role },
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '',
+      userAgent: req.headers.get('user-agent') || '',
+    });
+
+    return NextResponse.json({ success: true, message: 'User deleted successfully.' });
+  } catch (error) {
+    return authorizationErrorResponse(error);
+  }
+}

@@ -91,6 +91,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [payments, setPayments] = useState<Array<{ paymentId: string; planNameSnapshot: string; amount: number; provider: string; status: string; createdAt: string; rejectionReason?: string }>>([]);
 
   const fetchBilling = async () => {
     try {
@@ -100,6 +101,9 @@ export default function BillingPage() {
       if (json.success) {
         setData(json);
       }
+      const paymentResponse = await fetch("/api/payments");
+      const paymentJson = await paymentResponse.json();
+      if (paymentJson.success) setPayments(paymentJson.payments || []);
     } catch {
       // ignore
     } finally {
@@ -193,11 +197,17 @@ export default function BillingPage() {
 
         <div className="flex items-center gap-3">
           <Link
-            href="/dashboard/pricing"
+            href="/pricing"
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-background shadow-md shadow-primary/20 hover:bg-primary-hover active:scale-[0.98] transition-all"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>Upgrade / Change Plan</span>
+          </Link>
+          <Link
+            href="/support/tickets/new"
+            className="inline-flex items-center gap-2 rounded-xl border border-foreground/15 px-4 py-2.5 text-xs font-bold text-foreground/70 hover:border-primary/40 hover:text-primary transition-all"
+          >
+            Need help with a payment?
           </Link>
         </div>
       </div>
@@ -225,7 +235,7 @@ export default function BillingPage() {
             </div>
           </div>
           <Link
-            href="/dashboard/pricing"
+            href="/pricing"
             className="shrink-0 rounded-xl bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600 transition-colors"
           >
             Upgrade Plan
@@ -241,7 +251,7 @@ export default function BillingPage() {
             </div>
           </div>
           <Link
-            href="/dashboard/pricing"
+            href="/pricing"
             className="shrink-0 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-background hover:bg-amber-600 transition-colors"
           >
             View Plans
@@ -374,13 +384,23 @@ export default function BillingPage() {
               )
             )}
             <Link
-              href="/dashboard/pricing"
+              href="/pricing"
               className="w-full rounded-xl border border-foreground/10 bg-foreground/5 py-2 text-xs font-bold text-foreground/80 hover:bg-foreground/10 transition-all text-center"
             >
               Change Billing Plan
             </Link>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-3xl border border-foreground/10 bg-foreground/[0.02] p-6 sm:p-8 space-y-5 shadow-xl">
+        <div>
+          <h2 className="text-lg sm:text-xl font-black text-foreground">Payment History</h2>
+          <p className="text-xs text-foreground/50">Manual bKash submissions and verification results.</p>
+        </div>
+        {payments.length === 0 ? <p className="rounded-2xl border border-dashed border-foreground/10 p-8 text-center text-xs text-foreground/40">No payments submitted yet.</p> : (
+          <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><thead className="text-[10px] uppercase tracking-wider text-foreground/50"><tr><th className="py-3">Payment ID</th><th>Plan</th><th>Amount</th><th>Provider</th><th>Date</th><th>Status</th></tr></thead><tbody>{payments.map((payment) => <tr key={payment.paymentId} className="border-t border-foreground/10"><td className="py-3 font-semibold">{payment.paymentId}</td><td>{payment.planNameSnapshot}</td><td>৳{payment.amount.toLocaleString()}</td><td>{payment.provider}</td><td>{new Date(payment.createdAt).toLocaleDateString()}</td><td><span className="rounded-full bg-primary/10 px-2 py-1 font-bold text-primary">{payment.status}</span>{payment.rejectionReason ? <p className="mt-1 max-w-[180px] text-[10px] text-red-400">{payment.rejectionReason}</p> : null}</td></tr>)}</tbody></table></div>
+        )}
       </div>
 
       {/* Credit Ledger / Transaction History */}

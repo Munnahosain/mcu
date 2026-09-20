@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import MarketingChrome from "../../components/MarketingChrome";
 import MarketingFooter from "../../components/MarketingFooter";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import { ensureAccessToken, getAuthUser } from "@/lib/auth";
+import PaymentCheckoutModal from "@/components/PaymentCheckoutModal";
 
 interface IPlanData {
   _id?: string;
@@ -15,6 +17,7 @@ interface IPlanData {
   description: string;
   monthlyPrice: number;
   yearlyPrice: number;
+  price?: number;
   currency?: string;
   monthlyCredits: number;
   batchLimit?: number;
@@ -260,13 +263,14 @@ export default function PricingPage() {
   const [plans, setPlans] = useState<IPlanData[]>(FALLBACK_PLANS);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<IPlanData | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => {
-        if (res.ok) setIsLoggedIn(true);
-      })
-      .catch(() => {});
+    let cancelled = false;
+    void ensureAccessToken().then((token) => {
+      if (!cancelled) setIsLoggedIn(Boolean(token && getAuthUser()));
+    });
 
     fetch("/api/plans")
       .then((res) => res.json())
@@ -276,6 +280,10 @@ export default function PricingPage() {
         }
       })
       .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggleFaq = (idx: number) => {
@@ -326,7 +334,7 @@ export default function PricingPage() {
         {/* Pricing Cards Grid (4 Plans) */}
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
           {plans.map((plan) => {
-            const monthlyPrice = Number(plan.monthlyPrice ?? (plan as any).price ?? 0);
+            const monthlyPrice = Number(plan.monthlyPrice ?? plan.price ?? 0);
             const yearlyPrice = Number(plan.yearlyPrice ?? (monthlyPrice * 10));
             const isFree = monthlyPrice === 0;
             const price = billingCycle === "yearly" ? yearlyPrice : monthlyPrice;
@@ -337,9 +345,9 @@ export default function PricingPage() {
             const yearlySavings = monthlyEquivalent - yearlyPrice;
             const savingsPercent = monthlyEquivalent > 0 ? Math.round((yearlySavings / monthlyEquivalent) * 100) : 0;
 
-            const ctaHref = isFree 
+            const ctaHref = isFree
               ? (isLoggedIn ? "/dashboard" : "/signup")
-              : (isLoggedIn ? `/dashboard/pricing?select=${plan.slug}&cycle=${billingCycle}` : `/signup?plan=${plan.slug}&cycle=${billingCycle}`);
+              : `/signup?plan=${plan.slug}&cycle=${billingCycle}`;
 
             return (
               <div
@@ -407,7 +415,7 @@ export default function PricingPage() {
                   </div>
 
                   {/* CTA Button */}
-                  <Link
+                  {isFree || !isLoggedIn ? <Link
                     href={ctaHref}
                     className={`mt-4 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-bold transition-all ${
                       isPopular
@@ -417,7 +425,13 @@ export default function PricingPage() {
                   >
                     <span>{plan.ctaText || (isFree ? "Get Started Free" : "Start Creating")}</span>
                     <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  </Link> : <button
+                    type="button"
+                    onClick={() => { setPaymentMessage(""); setCheckoutPlan(plan); }}
+                    className={`mt-4 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-xs font-bold transition-all ${isPopular ? "bg-primary text-background shadow-lg shadow-primary/30 hover:bg-primary-hover active:scale-[0.98]" : "border border-primary/30 text-primary hover:bg-primary/10 active:scale-[0.98]"}`}
+                  >
+                    <span>{plan.ctaText || "Start Creating"}</span><ArrowRight className="h-4 w-4" />
+                  </button>}
 
                   {/* Explicit Features List */}
                   <div className="mt-6 space-y-2.5">
@@ -445,6 +459,10 @@ export default function PricingPage() {
             );
           })}
         </div>
+
+        {paymentMessage ? <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-sm font-bold text-primary">Payment submitted successfully. Payment ID: {paymentMessage}. Verification is pending.</div> : null}
+
+        {checkoutPlan ? <PaymentCheckoutModal plan={checkoutPlan} billingCycle={billingCycle} onClose={() => setCheckoutPlan(null)} onSubmitted={(paymentId) => { setPaymentMessage(paymentId); setCheckoutPlan(null); }} /> : null}
 
         {/* Feature Comparison Section */}
         <div className="mx-auto max-w-6xl rounded-3xl border border-foreground/10 bg-foreground/[0.02] p-6 sm:p-10 space-y-8 shadow-xl">

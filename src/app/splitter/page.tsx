@@ -84,7 +84,7 @@ function SplitterWorkspace() {
   const applyGrid = (columns: number, rows: number) => { if (document) replaceIcons(splitDocumentIntoGrid(document, columns, rows)); };
   const exportSelected = async (all = false) => {
     const target = all ? icons.map((icon) => ({ ...icon, selected: true })) : selectedIcons; if (!target.length) return; setBusy(true);
-    try { await consumeFeatureCredit("splitter_export"); await batchExportIcons(target, { ...settings, multiFormat: false }, `${prefix || "icons"}.zip`); }
+    try { await consumeFeatureCredit("splitter_export", target.length); await batchExportIcons(target, { ...settings, multiFormat: false }, `${prefix || "icons"}.zip`); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Export failed."); }
     finally { setBusy(false); }
   };

@@ -79,6 +79,13 @@ export async function POST(req: Request) {
       });
     }
 
+    if (action === 'checkout' || action === 'verify_payment') {
+      return NextResponse.json(
+        { success: false, error: 'Paid plans use manual bKash payment verification. Submit the payment from the pricing checkout.' },
+        { status: 410 },
+      );
+    }
+
     // 2. CHECKOUT SESSION CREATION (Initiates payment gateway flow)
     if (action === 'checkout') {
       if (!planSlug) {

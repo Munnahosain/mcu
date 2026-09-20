@@ -24,7 +24,7 @@ async function resolveCreditAmount(amount: number, costKey?: CreditCostKey) {
   if (!costKey) return amount;
   const setting = await SystemSetting.findOne({ key: 'credit_costs' }).lean();
   const configured = Number((setting?.value as Record<string, unknown> | undefined)?.[costKey]);
-  return Number.isFinite(configured) && configured >= 0 ? Math.floor(configured) : amount;
+  return Number.isFinite(configured) && configured >= 0 ? amount * Math.floor(configured) : amount;
 }
 
 export class InsufficientCreditsError extends Error {

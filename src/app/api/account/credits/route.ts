@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     const user = await requireAuthenticatedUser(req);
     const body = await req.json().catch(() => ({}));
     const feature = typeof body.feature === 'string' ? body.feature : '';
+    const amount = body.amount === undefined ? 1 : Number(body.amount);
     const allowedFeatures = new Set([
       'three_d_generation', 'grid_generation', 'palette_generation', 'typebox_generation',
       'bento_generation', 'ascii_generation', 'trading_generation', 'splitter_export',
@@ -53,8 +54,11 @@ export async function POST(req: Request) {
     if (!allowedFeatures.has(feature)) {
       return NextResponse.json({ success: false, error: 'Invalid metered feature.' }, { status: 400 });
     }
+    if (!Number.isInteger(amount) || amount <= 0) {
+      return NextResponse.json({ success: false, error: 'Amount must be a positive integer.' }, { status: 400 });
+    }
 
-    await consumeCredits(user._id.toString(), 1, `${feature} usage`, feature as Parameters<typeof consumeCredits>[3]);
+    await consumeCredits(user._id.toString(), amount, `${feature} usage (${amount} creation${amount === 1 ? '' : 's'})`, feature as Parameters<typeof consumeCredits>[3]);
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof InsufficientCreditsError) {

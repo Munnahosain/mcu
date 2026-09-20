@@ -20,6 +20,7 @@ import {
   Type,
   Calendar,
   CreditCard,
+  LifeBuoy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
@@ -39,7 +40,6 @@ const navLinks = [
   { name: "ASCII", href: "/dashboard/ascii", icon: Binary },
   { name: "Events", href: "/dashboard/events", icon: Calendar },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  { name: "Pricing", href: "/dashboard/pricing", icon: Crown },
 ];
 
 function getInitials(nameOrEmail: string): string {
@@ -55,10 +55,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [activePlan, setActivePlan] = useState<{ name: string; slug: string } | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNavCompact, setIsNavCompact] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const mobileProfileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +79,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUser(null);
       } else {
         setUser(storedUser);
+        const billingResponse = await fetch('/api/account/billing', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+        if (billingResponse?.ok) {
+          const billingData = await billingResponse.json().catch(() => null) as { plan?: { name?: string; slug?: string } } | null;
+          if (billingData?.plan?.name && billingData.plan.slug) setActivePlan({ name: billingData.plan.name, slug: billingData.plan.slug });
+        }
       }
       setIsHydrated(true);
     };
@@ -104,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Close profile dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node) && mobileProfileRef.current && !mobileProfileRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
       }
     };
@@ -138,6 +145,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const userInitials = getInitials(user.name || user.email || "mcu");
+  const planBadge = activePlan?.slug === 'free'
+    ? { label: 'FREE', className: 'dashboard-plan-badge dashboard-plan-badge-free' }
+    : { label: (activePlan?.name || 'PRO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${activePlan?.slug || 'pro'}` };
 
   return (
     <GeneratorStateProvider>
@@ -157,6 +167,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             priority
           />
         </Link>
+
+        <div ref={mobileProfileRef} className="fixed right-3 top-3 z-[60] lg:hidden">
+          <button type="button" onClick={() => setIsProfileOpen((current) => !current)} className="relative flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-background/90 p-1 shadow-lg backdrop-blur-xl" aria-label="Open account menu">
+            <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#27e39a] text-xs font-extrabold text-[#071b17]">
+              {userInitials}
+              {user.avatarUrl ? <img src={user.avatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover" /> : null}
+              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-white" />
+            </span>
+            <span className={`${planBadge.className} dashboard-plan-badge-mobile`}>{planBadge.label}</span>
+          </button>
+          <AnimatePresence>
+            {isProfileOpen ? <motion.div initial={{ opacity: 0, y: -6, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.96 }} className="absolute right-0 mt-2 w-64 rounded-2xl border border-foreground/10 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl">
+              <div className="flex items-center gap-3 border-b border-foreground/[0.08] px-1.5 pb-3"><span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary to-[#27e39a] text-xs font-extrabold text-[#071b17]">{userInitials}{user.avatarUrl ? <img src={user.avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}</span><div className="min-w-0"><p className="truncate text-xs font-extrabold">{user.name || "mcu"}</p><p className="truncate text-[10px] text-foreground/60">{user.email}</p></div></div>
+              <CreditSummary compact />
+              <div className="space-y-1"><Link href="/pricing" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><Crown className="h-3.5 w-3.5 text-primary" /> Pricing &amp; Plans</Link><Link href="/support" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><LifeBuoy className="h-3.5 w-3.5 text-primary" /> Support</Link><Link href="/dashboard/billing" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><CreditCard className="h-3.5 w-3.5 text-primary" /> Billing &amp; Usage</Link></div>
+              <div className="mt-2 border-t border-foreground/[0.08] pt-2"><button type="button" onClick={handleSignOut} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-500 hover:bg-red-500/10"><LogOut className="h-3.5 w-3.5" /> Sign Out</button></div>
+            </motion.div> : null}
+          </AnimatePresence>
+        </div>
 
         {/* Subtle Ambient Aurora Background Glow */}
         <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -261,16 +290,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  className={`flex items-center gap-1.5 rounded-full border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-0 hover:ring-0 active:ring-0 bg-foreground/[0.03] hover:bg-foreground/[0.07] p-1 pr-2 transition-all duration-150 active:scale-95 ${isProfileOpen ? "bg-primary/10" : ""
+                  className={`relative flex items-center gap-1.5 rounded-full border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-0 hover:ring-0 active:ring-0 bg-foreground/[0.03] hover:bg-foreground/[0.07] p-1 pr-2 transition-all duration-150 active:scale-95 ${isProfileOpen ? "bg-primary/10" : ""
                     }`}
                   aria-label="User profile menu"
                 >
                   {/* 2-Letter Avatar Badge */}
-                  <span className="relative flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#27e39a] text-[#071b17] font-extrabold text-xs shadow-sm ring-2 ring-white/50 dark:ring-[#071b17]/80 shrink-0">
+                  <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#27e39a] text-[#071b17] font-extrabold text-xs shadow-sm ring-2 ring-white/50 dark:ring-[#071b17]/80 shrink-0">
                     <span className="text-[#071b17] font-extrabold tracking-tight">{userInitials}</span>
                     {user.avatarUrl ? <img src={user.avatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full rounded-full object-cover" /> : null}
                     <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-white dark:ring-[#071b17]" />
                   </span>
+                  <span className={`${planBadge.className} dashboard-plan-badge-desktop`}>{planBadge.label}</span>
 
                   <div className="hidden md:flex items-center gap-1 overflow-hidden whitespace-nowrap">
                     <span className="max-w-[75px] truncate text-xs font-bold text-foreground">
@@ -314,12 +344,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       {/* Quick Pro Plan Badge */}
                       <div className="space-y-1">
                         <Link
-                          href="/dashboard/pricing"
+                          href="/pricing"
                           onClick={() => setIsProfileOpen(false)}
                           className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground/80 hover:bg-primary/10 hover:text-primary transition-colors"
                         >
                           <span className="flex items-center gap-2">
                             <Crown className="h-3.5 w-3.5 text-primary" /> Pricing &amp; Plans
+                          </span>
+                        </Link>
+                        <Link
+                          href="/support"
+                          onClick={() => setIsProfileOpen(false)}
+                          className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground/80 hover:bg-primary/10 hover:text-primary transition-colors"
+                        >
+                          <span className="flex items-center gap-2">
+                            <LifeBuoy className="h-3.5 w-3.5 text-primary" /> Support
                           </span>
                         </Link>
                         <Link

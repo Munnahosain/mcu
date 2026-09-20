@@ -71,6 +71,46 @@
   min-height: 34px;
 }
 
+.dashboard-plan-badge {
+  position: absolute;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(245, 196, 81, 0.65);
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #251f15, #5c431e);
+  color: #f8d477 !important;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--background), 0 0 12px rgba(245, 196, 81, 0.45);
+}
+
+.dashboard-plan-badge::after {
+  position: absolute;
+  inset: 0 auto 0 -55%;
+  width: 38%;
+  content: "";
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.78), transparent);
+  transform: skewX(-18deg) translateX(0);
+  animation: dashboardPlanBadgeLightSweep 2.8s linear infinite;
+  pointer-events: none;
+}
+
+.dashboard-plan-badge-desktop { top: -6px; left: -5px; min-width: 28px; padding: 3px 5px; }
+.dashboard-plan-badge-mobile { top: -5px; right: -5px; min-width: 27px; padding: 3px 4px; }
+.dashboard-plan-badge-free { border-color: rgba(148, 163, 184, 0.65); background: #334155; color: #e2e8f0 !important; box-shadow: 0 0 0 2px var(--background); }
+.dashboard-plan-badge-agency { border-color: rgba(167, 139, 250, 0.8); background: linear-gradient(135deg, #31205d, #7c3aed); color: #f3e8ff !important; }
+
+@keyframes dashboardPlanBadgeLightSweep {
+  0% { transform: skewX(-18deg) translateX(0); opacity: 0; }
+  12% { opacity: 0.9; }
+  42%, 100% { transform: skewX(-18deg) translateX(360%); opacity: 0; }
+}
+
 .nav-pill-link .collapsible {
   display: grid;
   grid-template-columns: 0fr;
@@ -1589,10 +1629,17 @@ html.light .force-white {
 }
 
 html.light input,
-html.light select {
+html.light select,
+html.light textarea {
   color: var(--neutral-900) !important;
   background-color: var(--white) !important;
   border-color: var(--neutral-300) !important;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  color: var(--foreground) !important;
 }
 
 /* Bento Grid Builder Styles */
@@ -5949,7 +5996,7 @@ html.light body:has(.admin-shell) {
 }
 
 html.light .admin-shell header {
-  background: rgba(255, 255, 255, 0.88) !important;
+  background: transparent !important;
   border-color: rgba(23, 32, 30, 0.1) !important;
   color: #17201e !important;
 }
@@ -6205,7 +6252,11 @@ html.light body .admin-shell[data-admin-theme="adaptive"] nav {
   color: #17201e !important;
 }
 
-html.light body .admin-shell[data-admin-theme="adaptive"] .admin-header,
+html.light body .admin-shell[data-admin-theme="adaptive"] .admin-header {
+  background-color: transparent !important;
+  color: #17201e !important;
+}
+
 html.light body .admin-shell[data-admin-theme="adaptive"] .dashboard-topbar {
   background-color: rgba(255, 255, 255, 0.9) !important;
   color: #17201e !important;
@@ -6660,7 +6711,7 @@ html.light body .admin-shell .text-white\/70 { color: rgba(23, 32, 30, 0.78) !im
 html.light body .admin-shell .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
 
 html.light body .admin-shell header {
-  background: rgba(255, 255, 255, 0.88) !important;
+  background: transparent !important;
   border-color: rgba(23, 32, 30, 0.1) !important;
 }
 
@@ -6669,6 +6720,20 @@ html body .admin-shell .admin-header {
   border: 0 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+html.light body .admin-shell header.admin-header {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Keep the light-mode admin navbar pill isolated from the page edges. */
+html.light body .admin-shell .admin-header {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 html.light body .admin-shell aside {
