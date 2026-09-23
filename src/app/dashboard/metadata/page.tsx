@@ -4,8 +4,8 @@ import { useState } from "react";
 import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken, getAuthUser, getDownloadsKey } from "@/lib/auth";
-import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
-import { compressImageForUpload } from "@/lib/client-image";
+import { getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
+import { prepareImageForUpload } from "@/lib/client-image";
 import { downloadText } from "@/lib/downloadHelper";
 
 type DownloadRecord = {
@@ -35,6 +35,15 @@ const MAX_QUEUE_SIZE = 500;
 const INITIAL_VISIBLE_IMAGES = 60;
 const VISIBLE_IMAGE_STEP = 60;
 const COMPRESSION_CONCURRENCY = 3;
+const VECTOR_EXTENSIONS = /\.(ai|eps|epsf|svg|pdf)$/i;
+
+function isVectorFile(file: File) {
+  return VECTOR_EXTENSIONS.test(file.name);
+}
+
+async function prepareMetadataFile(file: File) {
+  return prepareImageForUpload(file);
+}
 
 export default function MetadataGeneratorPage() {
   const [images, setImages] = useState<ImageFile[]>([]);
@@ -48,7 +57,7 @@ export default function MetadataGeneratorPage() {
   // Handle File Select
   const handleFiles = async (files: FileList | null) => {
     if (!files) return;
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/') || isVectorFile(f));
     const availableSlots = MAX_QUEUE_SIZE - images.length;
     const selectedImages = imageFiles.slice(0, availableSlots);
     if (selectedImages.length) {
@@ -57,17 +66,20 @@ export default function MetadataGeneratorPage() {
         for (let index = 0; index < selectedImages.length; index += COMPRESSION_CONCURRENCY) {
           const batch = selectedImages.slice(index, index + COMPRESSION_CONCURRENCY);
           const compressedBatch = await Promise.all(batch.map(async (file) => {
-            const compressedFile = await compressImageForUpload(file);
+            const compressedFile = await prepareMetadataFile(file);
             return {
               id: crypto.randomUUID(),
               file: compressedFile,
-              preview: URL.createObjectURL(compressedFile),
+              preview: isVectorFile(compressedFile) ? '' : URL.createObjectURL(compressedFile),
               status: 'pending' as const,
             };
           }));
           setImages(prev => [...prev, ...compressedBatch]);
           setVisibleCount((count) => Math.max(count, INITIAL_VISIBLE_IMAGES));
         }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Some selected files could not be decoded.';
+        alert(message);
       } finally {
         setIsPreparing(false);
       }
@@ -105,7 +117,7 @@ export default function MetadataGeneratorPage() {
 
       try {
         const formData = new FormData();
-        formData.append("image", await compressImageForUpload(img.file));
+        formData.append("image", await prepareMetadataFile(img.file));
         const keyVal = providerKeys[keyIdx]?.key;
         if (keyVal) {
           formData.append("apiKey", keyVal);
@@ -255,7 +267,7 @@ export default function MetadataGeneratorPage() {
             id="file-upload"
             className="hidden"
             multiple
-            accept="image/*"
+            accept="image/*,.ai,.eps,.epsf,.svg,.pdf"
             onChange={(e) => handleFiles(e.target.files)}
           />
           <div className="p-5 bg-white/5 rounded-full mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:bg-primary/20">
@@ -301,13 +313,20 @@ export default function MetadataGeneratorPage() {
                   className="glass-card overflow-hidden flex flex-col group relative"
                 >
                   <div className="relative aspect-video bg-black shrink-0 overflow-hidden">
-                    <motion.img
-                      whileHover={{ scale: 1.05 }}
-                      transition={{ duration: 0.4 }}
-                      src={img.preview}
-                      alt="preview"
-                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                    />
+                    {isVectorFile(img.file) ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-500">
+                        <FileImage className="h-10 w-10 text-primary/70" />
+                        <span className="text-[10px] font-bold uppercase tracking-[0.18em]">Safe preview on generate</span>
+                      </div>
+                    ) : (
+                      <motion.img
+                        whileHover={{ scale: 1.05 }}
+                        transition={{ duration: 0.4 }}
+                        src={img.preview}
+                        alt="preview"
+                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                      />
+                    )}
                     <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 backdrop-blur-md rounded border border-white/10 text-[10px] uppercase font-bold text-yellow-500 tracking-wider">
                       {img.status}
                     </div>
@@ -374,7 +393,7 @@ export default function MetadataGeneratorPage() {
               onClick={() => document.getElementById('file-upload-add')?.click()}
               className="border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center p-8 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all text-gray-500 hover:text-primary min-h-[240px]"
             >
-              <input type="file" id="file-upload-add" className="hidden" multiple accept="image/*" onChange={(e) => handleFiles(e.target.files)} />
+                <input type="file" id="file-upload-add" className="hidden" multiple accept="image/*,.ai,.eps,.epsf,.svg,.pdf" onChange={(e) => handleFiles(e.target.files)} />
               <UploadCloud className="w-8 h-8 mb-3" />
               <span className="text-sm font-medium">Add more images</span>
             </motion.div>

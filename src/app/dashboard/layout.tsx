@@ -130,11 +130,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname]);
 
   const handleSignOut = async () => {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
     disableGoogleAutoSelect();
     clearAuthUser();
     setUser(null);
     window.dispatchEvent(new Event("mcustock-auth-changed"));
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include", keepalive: true }).catch(() => undefined);
     router.replace("/login");
   };
 

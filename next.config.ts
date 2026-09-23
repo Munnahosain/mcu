@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizeCss: true,
   },
+  serverExternalPackages: ['@resvg/resvg-js'],
 };
 
 export default nextConfig;

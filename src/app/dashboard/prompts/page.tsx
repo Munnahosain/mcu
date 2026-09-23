@@ -5,7 +5,7 @@ import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIc
 import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken } from "@/lib/auth";
 import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
-import { compressImageForUpload } from "@/lib/client-image";
+import { prepareImageForUpload } from "@/lib/client-image";
 import { downloadText } from "@/lib/downloadHelper";
 
 interface ImageFile {
@@ -65,7 +65,7 @@ export default function PromptsPage() {
       
       try {
         const formData = new FormData();
-        formData.append("image", await compressImageForUpload(img.file));
+        formData.append("image", await prepareImageForUpload(img.file));
         const keyVal = providerKeys[keyIdx]?.key;
         if (keyVal) {
           formData.append("apiKey", keyVal);

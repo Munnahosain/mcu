@@ -11,6 +11,7 @@ import {
 } from '@/server/services/vision-service';
 import { incrementUsage } from '@/server/services/usage-service';
 import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { getVectorFormat, prepareVectorPreview, VectorPreviewError } from '@/server/services/vector-preview';
 
 export const maxDuration = 60;
 
@@ -98,7 +99,11 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await image.arrayBuffer());
-    const { base64, dataUrl } = await prepareImage(buffer, 512, 65);
+    const vectorFormat = getVectorFormat(image.name);
+    const imageBuffer = vectorFormat
+      ? (await prepareVectorPreview(buffer, image.name)).buffer
+      : buffer;
+    const { base64, dataUrl } = await prepareImage(imageBuffer, 512, 65);
     const provider = detectProvider(apiKey, providerHint);
 
     if (userId) {
@@ -180,13 +185,16 @@ export async function POST(req: Request) {
       ]);
     }
 
-    return NextResponse.json({ success: true, metadata });
+    return NextResponse.json({ success: true, metadata, previewDataUrl: vectorFormat ? dataUrl : undefined });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
       await refundCredits(authenticatedUserId, 1, 'Failed AI metadata generation refund', 'metadata_generation').catch((refundError) => console.error('[generate] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
+    if (error instanceof VectorPreviewError) {
+      return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 422 });
     }
     const status = getStatusCode(error) || 500;
     console.error('[generate] error:', error instanceof Error ? error.message : error);

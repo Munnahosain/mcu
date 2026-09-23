@@ -51,6 +51,8 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { downloadBlob, downloadText, copyBlobToClipboard } from "@/lib/downloadHelper";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
 import { idbGet, idbGetSync, idbSet, idbRemove, readSessionValue, removeSessionValue, writeSessionValue } from "@/lib/safeStorage";
@@ -1179,11 +1181,12 @@ const IconPreview = forwardRef<
 
         if (typeof MediaRecorder !== "undefined") {
           const candidateTypes = [
+            { mime: "video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext: "mp4" },
+            { mime: "video/mp4", ext: "mp4" },
             { mime: "video/webm;codecs=vp9,opus", ext: "webm" },
             { mime: "video/webm;codecs=vp9", ext: "webm" },
             { mime: "video/webm;codecs=vp8", ext: "webm" },
             { mime: "video/webm", ext: "webm" },
-            { mime: "video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext: "mp4" },
           ];
 
           for (const cand of candidateTypes) {
@@ -1205,7 +1208,7 @@ const IconPreview = forwardRef<
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
 
-        const fps = 30;
+        const fps = 60;
         const duration = Math.max(1, Math.min(20, durationSeconds || 4));
         const totalFrames = Math.round(duration * fps);
         const baseRotX = THREE.MathUtils.degToRad(controls.rotX);
@@ -1218,7 +1221,7 @@ const IconPreview = forwardRef<
         const currentScale = (controls.scale / 100) * baseScale;
         const speed = controls.animSpeed || 1;
 
-        mediaRecorder.start(250);
+        mediaRecorder.start(100);
 
         const frameInterval = 1000 / fps;
         const startRecordTime = performance.now();
@@ -1375,10 +1378,49 @@ export default function IconStudio() {
   const [videoProgress, setVideoProgress] = useState(0);
   const [copySuccess, setCopySuccess] = useState(false);
   const cancelBatch = useRef(false);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const ffmpegLoadRef = useRef<Promise<FFmpeg> | null>(null);
   const previewRef = useRef<PreviewHandle | null>(null);
   const restoredAssetsRef = useRef(false);
   const initializationStartedRef = useRef(false);
   const selectedAsset = assets.find((asset) => asset.id === selectedId);
+
+  const convertVideoToMp4 = async (blob: Blob, format: string) => {
+    if (format === "mp4") return { blob, format };
+    if (typeof window === "undefined") return { blob, format };
+
+    if (!ffmpegLoadRef.current) {
+      ffmpegLoadRef.current = (async () => {
+        const ffmpeg = new FFmpeg();
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+        ffmpegRef.current = ffmpeg;
+        return ffmpeg;
+      })();
+    }
+
+    const ffmpeg = await ffmpegLoadRef.current;
+    await ffmpeg.writeFile("input.webm", await fetchFile(blob));
+    await ffmpeg.exec([
+      "-i", "input.webm",
+      "-c:v", "libx264",
+      "-pix_fmt", "yuv420p",
+      "-movflags", "+faststart",
+      "output.mp4",
+    ]);
+    const output = await ffmpeg.readFile("output.mp4");
+    if (typeof output === "string") throw new Error("FFmpeg returned invalid MP4 data.");
+    const mp4Bytes = new Uint8Array(output);
+    const mp4Buffer = new ArrayBuffer(mp4Bytes.byteLength);
+    new Uint8Array(mp4Buffer).set(mp4Bytes);
+    const mp4 = new Blob([mp4Buffer], { type: "video/mp4" });
+    await ffmpeg.deleteFile("input.webm").catch(() => undefined);
+    await ffmpeg.deleteFile("output.mp4").catch(() => undefined);
+    return { blob: mp4, format: "mp4" };
+  };
 
   const STUDIO_ASSETS_KEY = "mcustock_studio_assets";
 
@@ -1661,12 +1703,72 @@ export default function IconStudio() {
           controls.videoDuration,
           setVideoProgress
         );
-        downloadBlob(blob, `${baseName}-3d-${controls.videoDuration}s-turntable.${vidExt}`);
+        let videoOutput = { blob, format: vidExt };
+        if (vidExt !== "mp4") {
+          try {
+            videoOutput = await convertVideoToMp4(blob, vidExt);
+          } catch {
+            setError("MP4 conversion was unavailable, so the 60 FPS WebM version was downloaded instead.");
+          }
+        }
+        downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-60fps.${videoOutput.format}`);
         setVideoRecording(false);
       }
     } catch (exportError) {
       setVideoRecording(false);
       setError(exportError instanceof Error ? exportError.message : "Export failed.");
+    }
+  };
+
+  const exportSelectedVideos = async () => {
+    if (!previewRef.current || videoRecording || batch.running) return;
+    const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
+    const targets = selectedAssets.length ? selectedAssets : selectedAsset ? [selectedAsset] : [];
+    if (!targets.length) return;
+
+    cancelBatch.current = false;
+    setBatch({ running: true, current: "", completed: 0, failed: 0 });
+    setVideoRecording(true);
+    setVideoProgress(0);
+
+    try {
+      await consumeFeatureCredit("three_d_generation", targets.length);
+      let completed = 0;
+      let failed = 0;
+      for (const asset of targets) {
+        if (cancelBatch.current) break;
+        setBatch({ running: true, current: asset.name, completed, failed });
+        try {
+          const { blob, format } = await previewRef.current.record360Video(
+            asset,
+            controls.videoDuration,
+            (progress) => setVideoProgress(progress)
+          );
+          let videoOutput = { blob, format };
+          if (format !== "mp4") {
+            try {
+              videoOutput = await convertVideoToMp4(blob, format);
+            } catch {
+              setError("MP4 conversion was unavailable, so a 60 FPS WebM file was downloaded.");
+            }
+          }
+          const baseName = asset.name.replace(/\.svg$/i, "");
+          downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-60fps.${videoOutput.format}`);
+          completed += 1;
+        } catch {
+          failed += 1;
+        }
+        setBatch({ running: true, current: asset.name, completed, failed });
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+      }
+      if (failed > 0) setError(`${failed} selected video export${failed === 1 ? "" : "s"} failed.`);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Selected video export failed.");
+    } finally {
+      setVideoRecording(false);
+      setVideoProgress(0);
+      setBatch((current) => ({ ...current, running: false, current: "" }));
+      cancelBatch.current = false;
     }
   };
 
@@ -1966,7 +2068,7 @@ export default function IconStudio() {
                 onChange={(v) => updateControl("videoDuration", v)}
               />
               <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Output: {controls.videoDuration} seconds @ 30 FPS ({controls.videoDuration * 30} frames, WebM for reliable playback)
+                Output: {controls.videoDuration} seconds @ 60 FPS ({controls.videoDuration * 60} frames, MP4 when supported; WebM fallback)
               </p>
             </div>
 
@@ -2339,6 +2441,15 @@ export default function IconStudio() {
               >
                 {batch.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileArchive className="h-3.5 w-3.5" />}
                 <span>ZIP ({assets.length})</span>
+              </button>
+              <button
+                onClick={() => void exportSelectedVideos()}
+                disabled={!selectedIds.length || batch.running || videoRecording}
+                className="flex items-center gap-1.5 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2 text-xs font-bold text-primary transition-all hover:bg-primary/20 disabled:opacity-40"
+                title="Download selected icons as individual 60 FPS videos"
+              >
+                {videoRecording ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
+                <span>Videos ({selectedIds.length})</span>
               </button>
               {batch.running && (
                 <button

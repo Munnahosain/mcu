@@ -8,6 +8,7 @@ export type AuthUser = {
 
 const USER_KEY = "mcustock_user";
 let accessToken: string | null = null;
+let logoutRequested = false;
 
 export function disableGoogleAutoSelect() {
   if (typeof window === "undefined") return;
@@ -19,6 +20,7 @@ export function disableGoogleAutoSelect() {
 export const getAccessToken = () => accessToken;
 
 export const setAccessToken = (token: string) => {
+  logoutRequested = false;
   accessToken = token;
 };
 
@@ -27,6 +29,7 @@ export const clearAccessToken = () => {
 };
 
 export async function ensureAccessToken() {
+  if (logoutRequested) return null;
   if (accessToken) return accessToken;
   try {
     const response = await fetch('/api/auth/refresh', {
@@ -34,7 +37,7 @@ export async function ensureAccessToken() {
       credentials: 'include',
     });
     const data = await response.json() as { accessToken?: string; user?: Omit<AuthUser, 'signedInAt'> };
-    if (response.ok && data.accessToken) {
+    if (!logoutRequested && response.ok && data.accessToken) {
       accessToken = data.accessToken;
       if (data.user) {
         setAuthUser({ ...data.user, signedInAt: Date.now() });
@@ -48,10 +51,11 @@ export async function ensureAccessToken() {
 }
 
 export async function refreshAuthSession() {
+  if (logoutRequested) return null;
   try {
     const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
     const data = await response.json() as { accessToken?: string; user?: Omit<AuthUser, 'signedInAt'> };
-    if (response.ok && data.accessToken && data.user) {
+    if (!logoutRequested && response.ok && data.accessToken && data.user) {
       accessToken = data.accessToken;
       setAuthUser({ ...data.user, signedInAt: Date.now() });
       return data.user;
@@ -87,6 +91,7 @@ export const setAuthUser = (user: AuthUser): boolean => {
 
 export const clearAuthUser = () => {
   if (typeof window === "undefined") return;
+  logoutRequested = true;
   localStorage.removeItem(USER_KEY);
   clearAccessToken();
 };

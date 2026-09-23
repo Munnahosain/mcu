@@ -11,6 +11,7 @@ import {
 } from '@/server/services/vision-service';
 import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
 import { incrementUsage } from '@/server/services/usage-service';
+import { getVectorFormat, prepareVectorPreview, VectorPreviewError } from '@/server/services/vector-preview';
 
 export const maxDuration = 60;
 
@@ -67,7 +68,11 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await image.arrayBuffer());
-    const { base64, dataUrl } = await prepareImage(buffer, 768, 75);
+    const vectorFormat = getVectorFormat(image.name);
+    const imageBuffer = vectorFormat
+      ? (await prepareVectorPreview(buffer, image.name)).buffer
+      : buffer;
+    const { base64, dataUrl } = await prepareImage(imageBuffer, 768, 75);
     const provider = detectProvider(apiKey, providerHint);
 
     if (userId) {
@@ -130,6 +135,9 @@ OUTPUT RULES:
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
+    if (error instanceof VectorPreviewError) {
+      return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 422 });
     }
     const status = getStatusCode(error) || 500;
     console.error('[generate-prompt] error:', error instanceof Error ? error.message : error);

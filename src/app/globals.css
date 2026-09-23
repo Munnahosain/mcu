@@ -4426,6 +4426,48 @@ textarea {
   background-color: var(--input-bg);
 }
 
+.generator-extension-select {
+  color-scheme: light;
+  border-color: rgba(22, 199, 132, 0.38) !important;
+  background-color: var(--input-bg) !important;
+  box-shadow: 0 0 0 1px rgba(22, 199, 132, 0.06), 0 6px 18px rgba(22, 199, 132, 0.08);
+}
+
+.generator-extension-select:hover,
+.generator-extension-select:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(22, 199, 132, 0.14), 0 8px 22px rgba(22, 199, 132, 0.12);
+}
+
+.generator-extension-select option {
+  color: var(--foreground);
+  background: var(--card-bg);
+  font-weight: 600;
+}
+
+.generator-extension-select option:checked,
+.generator-extension-select option:hover {
+  color: #ffffff;
+  background: var(--primary);
+}
+
+.generator-extension-menu {
+  border-color: rgba(22, 199, 132, 0.3);
+  background: var(--card-bg);
+}
+
+.generator-extension-option {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.generator-extension-option:hover,
+.generator-extension-option:focus-visible,
+.generator-extension-option.is-selected {
+  color: #ffffff;
+  background: var(--primary);
+}
+
 /* Final control overrides: keep legacy theme rules from changing the brand UI. */
 .liquid-theme-switch,
 html.dark .liquid-theme-switch,

@@ -86,9 +86,9 @@ export default function MarketingChrome({
   }, []);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
     clearAuthUser();
     window.dispatchEvent(new Event(AUTH_EVENT));
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include", keepalive: true }).catch(() => undefined);
   };
 
   const prefetchRoute = (href: string) => {

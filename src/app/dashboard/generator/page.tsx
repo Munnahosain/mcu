@@ -5,6 +5,7 @@ import {
   UploadCloud,
   Zap,
   Download,
+  Pause,
   Lock,
   Wrench,
   X,
@@ -17,7 +18,8 @@ import {
   Plus,
   Check,
   FileJson,
-  ExternalLink
+  ExternalLink,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken, getAuthUser, AuthUser } from "@/lib/auth";
@@ -25,12 +27,37 @@ import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-mod
 import PremiumSlider from "@/components/PremiumSlider";
 import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
-import { compressImageForUpload } from "@/lib/client-image";
+import { isVectorFile, prepareImageForUpload } from "@/lib/client-image";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ThemedSelect from "@/components/ui/ThemedSelect";
 
 type ImageFile = GeneratorImageFile;
+type ExportExtension = 'Default' | 'jpg' | 'jpeg' | 'png' | 'svg' | 'eps' | 'ai' | 'mp4';
+const SETTINGS_KEY = 'mcustock_generator_settings';
+
+type GeneratorSettings = {
+  activeTab: 'Metadata' | 'Prompt';
+  platform: string;
+  titleLength: number;
+  descriptionLength: number;
+  keywordsCount: number;
+  additionalKeywords: string;
+  negativeTitleWords: string;
+  negativeKeywords: string;
+  autoCsvDownload: boolean;
+  whiteBg: boolean;
+  cameraParams: boolean;
+  promptLength: number;
+  usePrefix: boolean;
+  prefixText: string;
+  useSuffix: boolean;
+  suffixText: string;
+  useNegativePrompt: boolean;
+  negativePromptText: string;
+  batchMode: boolean;
+  exportExtension: ExportExtension;
+};
 
 const PROVIDER_KEY_URLS: Record<string, string> = {
   Groq: 'https://console.groq.com/keys',
@@ -51,6 +78,12 @@ export default function GeneratorPage() {
   const [negativeTitleWords, setNegativeTitleWords] = useState('');
   const [negativeKeywords, setNegativeKeywords] = useState('');
   const [autoCsvDownload, setAutoCsvDownload] = useState(false);
+  const [exportExtension, setExportExtension] = useState<ExportExtension>('Default');
+  const [isExtensionMenuOpen, setIsExtensionMenuOpen] = useState(false);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const pauseRef = useRef(false);
+  const autoExportRef = useRef(false);
 
   // Prompt States
   const [whiteBg, setWhiteBg] = useState(false);
@@ -93,6 +126,53 @@ export default function GeneratorPage() {
       setApiKeys(syncedKeys);
     });
   }, [setImages]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      if (saved) {
+        const settings = JSON.parse(saved) as Partial<GeneratorSettings>;
+        if (settings.activeTab === 'Metadata' || settings.activeTab === 'Prompt') setActiveTab(settings.activeTab);
+        if (typeof settings.platform === 'string') setPlatform(settings.platform);
+        if (typeof settings.titleLength === 'number') setTitleLength(settings.titleLength);
+        if (typeof settings.descriptionLength === 'number') setDescriptionLength(settings.descriptionLength);
+        if (typeof settings.keywordsCount === 'number') setKeywordsCount(settings.keywordsCount);
+        if (typeof settings.additionalKeywords === 'string') setAdditionalKeywords(settings.additionalKeywords);
+        if (typeof settings.negativeTitleWords === 'string') setNegativeTitleWords(settings.negativeTitleWords);
+        if (typeof settings.negativeKeywords === 'string') setNegativeKeywords(settings.negativeKeywords);
+        if (typeof settings.autoCsvDownload === 'boolean') setAutoCsvDownload(settings.autoCsvDownload);
+        if (typeof settings.whiteBg === 'boolean') setWhiteBg(settings.whiteBg);
+        if (typeof settings.cameraParams === 'boolean') setCameraParams(settings.cameraParams);
+        if (typeof settings.promptLength === 'number') setPromptLength(settings.promptLength);
+        if (typeof settings.usePrefix === 'boolean') setUsePrefix(settings.usePrefix);
+        if (typeof settings.prefixText === 'string') setPrefixText(settings.prefixText);
+        if (typeof settings.useSuffix === 'boolean') setUseSuffix(settings.useSuffix);
+        if (typeof settings.suffixText === 'string') setSuffixText(settings.suffixText);
+        if (typeof settings.useNegativePrompt === 'boolean') setUseNegativePrompt(settings.useNegativePrompt);
+        if (typeof settings.negativePromptText === 'string') setNegativePromptText(settings.negativePromptText);
+        if (typeof settings.batchMode === 'boolean') setBatchMode(settings.batchMode);
+        if (['Default', 'jpg', 'jpeg', 'png', 'svg', 'eps', 'ai', 'mp4'].includes(settings.exportExtension || '')) {
+          setExportExtension(settings.exportExtension as ExportExtension);
+        }
+      }
+    } catch {
+      localStorage.removeItem(SETTINGS_KEY);
+    } finally {
+      setSettingsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    const settings: GeneratorSettings = {
+      activeTab, platform, titleLength, descriptionLength, keywordsCount,
+      additionalKeywords, negativeTitleWords, negativeKeywords, autoCsvDownload,
+      whiteBg, cameraParams, promptLength, usePrefix, prefixText, useSuffix,
+      suffixText, useNegativePrompt, negativePromptText, batchMode,
+      exportExtension,
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }, [settingsHydrated, activeTab, platform, titleLength, descriptionLength, keywordsCount, additionalKeywords, negativeTitleWords, negativeKeywords, autoCsvDownload, whiteBg, cameraParams, promptLength, usePrefix, prefixText, useSuffix, suffixText, useNegativePrompt, negativePromptText, batchMode, exportExtension]);
 
   const saveKey = async () => {
     const trimmed = apiKeyInput.trim();
@@ -150,10 +230,10 @@ export default function GeneratorPage() {
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     const remainingSlots = Math.max(500 - images.length, 0);
-    const newImages = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, remainingSlots).map(file => ({
+    const newImages = Array.from(files).filter(f => f.type.startsWith('image/') || isVectorFile(f)).slice(0, remainingSlots).map(file => ({
       id: crypto.randomUUID(),
       file,
-      preview: URL.createObjectURL(file),
+      preview: isVectorFile(file) ? '' : URL.createObjectURL(file),
       status: 'pending' as const,
     }));
     setImages(prev => [...prev, ...newImages]);
@@ -185,7 +265,7 @@ export default function GeneratorPage() {
 
     try {
       const fd = new FormData();
-      const uploadImage = await compressImageForUpload(img.file);
+      const uploadImage = await prepareImageForUpload(img.file);
       fd.append('image', uploadImage);
       if (keyToUse) {
         fd.append('apiKey', keyToUse);
@@ -239,7 +319,9 @@ export default function GeneratorPage() {
         setImages(prev => prev.map(i => i.id === img.id ? {
           ...i,
           status: 'done',
-          metadata: data.metadata
+          metadata: data.metadata,
+          preview: data.previewDataUrl || i.preview,
+          previewDataUrl: data.previewDataUrl,
         } : i));
 
         // Save to MongoDB history
@@ -297,6 +379,8 @@ export default function GeneratorPage() {
       setApiKeyModalOpen(true);
       return;
     }
+    pauseRef.current = false;
+    setIsPaused(false);
     setIsGenerating(true);
     const targets = images.filter(i => i.status !== 'done').slice(0, 500);
     const providerKeyCount = apiKeys.filter(key => key.provider === activeProvider).length;
@@ -304,18 +388,28 @@ export default function GeneratorPage() {
       ? (batchMode ? 2 : 1)
       : Math.min(Math.max(providerKeyCount, 1) * (batchMode ? 2 : 1), batchMode ? 8 : 3);
     for (let i = 0; i < targets.length; i += CONCURRENCY) {
+      if (pauseRef.current) break;
       const batch = targets.slice(i, i + CONCURRENCY);
       await Promise.all(batch.map(img => generateSingle(img)));
     }
     setIsGenerating(false);
-    if (autoCsvDownload) exportCSV();
+    autoExportRef.current = !pauseRef.current && autoCsvDownload;
   };
 
-  const exportCSV = () => {
+  const togglePause = () => {
+    pauseRef.current = !pauseRef.current;
+    setIsPaused(pauseRef.current);
+  };
+
+  const exportCSV = useCallback(() => {
     const done = images.filter(i => i.status === 'done');
     if (!done.length) return;
 
     const esc = (value: string) => `"${(value || '').replace(/"/g, '""')}"`;
+    const exportFilename = (filename: string) => {
+      if (exportExtension === 'Default') return filename;
+      return `${filename.replace(/\.[^.]+$/, '')}.${exportExtension}`;
+    };
     let lines = [];
 
     if (activeTab === 'Metadata') {
@@ -324,20 +418,27 @@ export default function GeneratorPage() {
         ...done.map((img) => {
           const { title, keywords, category, description } = img.metadata!;
           const kws = Array.isArray(keywords) ? keywords.join(", ") : String(keywords ?? "");
-          return [esc(img.file.name), esc(title), esc(kws), esc(category), esc(description)].join(",");
+          return [esc(exportFilename(img.file.name)), esc(title), esc(kws), esc(category), esc(description)].join(",");
         })
       ];
     } else {
       lines = [
         "Filename,Generated Prompt",
-        ...done.map((img) => [esc(img.file.name), esc(img.prompt!)].join(","))
+        ...done.map((img) => [esc(exportFilename(img.file.name)), esc(img.prompt!)].join(","))
       ];
     }
 
     const csvContent = lines.join("\r\n");
     const filename = `mcustock_${activeTab.toLowerCase()}_${Date.now()}.csv`;
     downloadText(csvContent, filename, "text/csv;charset=utf-8");
-  };
+  }, [activeTab, exportExtension, images]);
+
+  useEffect(() => {
+    if (!isGenerating && autoExportRef.current && images.some((image) => image.status === 'done')) {
+      autoExportRef.current = false;
+      exportCSV();
+    }
+  }, [exportCSV, images, isGenerating]);
 
   return (
     <div className="grid grid-cols-1 gap-5 pb-20 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -531,10 +632,10 @@ export default function GeneratorPage() {
              onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
              onClick={() => fileInputRef.current?.click()}
           >
-            <input ref={fileInputRef} type="file" className="hidden" multiple accept="image/*" onChange={(e) => handleFiles(e.target.files)} />
+            <input ref={fileInputRef} type="file" className="hidden" multiple accept="image/*,.ai,.eps,.epsf,.svg,.pdf" onChange={(e) => handleFiles(e.target.files)} />
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-primary/25 text-primary"><UploadCloud className="h-5 w-5" /></div>
             <p className="text-sm font-bold text-foreground mb-1">Drop your assets here</p>
-            <p className="text-xs text-[var(--text-secondary)]">or browse files · PNG · JPG · JPEG · WEBP</p>
+            <p className="text-xs text-[var(--text-secondary)]">or browse files · PNG · JPG · SVG · EPS · AI · PDF</p>
           </div>
         </div>
 
@@ -548,6 +649,35 @@ export default function GeneratorPage() {
               <button onClick={clearAllImages} className="px-4 py-2 bg-transparent border border-primary/30 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 transition-all">
                 Clear Queue
               </button>
+              <div className="relative flex items-center gap-2 text-xs font-bold text-primary">
+                <span className="sr-only">Change file extension</span>
+                <button
+                  type="button"
+                  aria-label="Change file extension for CSV"
+                  aria-expanded={isExtensionMenuOpen}
+                  onClick={() => setIsExtensionMenuOpen((open) => !open)}
+                  className="generator-extension-select inline-flex min-w-[104px] items-center justify-between gap-3 rounded-xl border px-3 py-2 text-xs font-bold outline-none"
+                >
+                  {exportExtension}<ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExtensionMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isExtensionMenuOpen && (
+                  <div className="generator-extension-menu absolute right-0 top-full z-30 mt-2 min-w-[104px] overflow-hidden rounded-xl border p-1 shadow-[0_16px_35px_rgba(7,27,23,0.18)]">
+                    {(['Default', 'jpg', 'jpeg', 'png', 'svg', 'eps', 'ai', 'mp4'] as ExportExtension[]).map((extension) => (
+                      <button
+                        key={extension}
+                        type="button"
+                        onClick={() => {
+                          setExportExtension(extension);
+                          setIsExtensionMenuOpen(false);
+                        }}
+                        className={`generator-extension-option block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold ${exportExtension === extension ? 'is-selected' : ''}`}
+                      >
+                        {extension}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button onClick={exportCSV} disabled={images.filter(i => i.status === 'done').length === 0} className="px-4 py-2 bg-transparent border border-primary/30 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center gap-1.5">
                 <Download className="w-3.5 h-3.5" /> Export CSV
               </button>
@@ -563,6 +693,15 @@ export default function GeneratorPage() {
                 <Zap className="w-3.5 h-3.5" />
                 {isGenerating ? 'Processing batch...' : batchMode ? 'Generate batch' : 'Generate All'}
               </button>
+              {isGenerating && (
+                <button
+                  type="button"
+                  onClick={togglePause}
+                  className="px-4 py-2 rounded-xl border border-amber-500/40 text-xs font-bold text-amber-600 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
+                >
+                  <Pause className="w-3.5 h-3.5" /> {isPaused ? 'Paused' : 'Pause'}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -584,7 +723,14 @@ export default function GeneratorPage() {
                 <div key={img.id} className="border border-[var(--card-border)] rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row gap-5 bg-[var(--input-bg)]">
               <div className="w-full md:w-48 shrink-0 flex flex-col gap-2">
                 <div className="relative aspect-video md:h-32 bg-primary/5 rounded-xl border border-primary/15 overflow-hidden flex items-center justify-center">
-                  <img src={img.preview} alt="preview" className="object-contain w-full h-full p-1.5" />
+                  {img.preview ? (
+                    <img src={img.preview} alt="preview" className="object-contain w-full h-full p-1.5" />
+                  ) : isVectorFile(img.file) ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-1 text-primary/70">
+                      <FileJson className="h-8 w-8" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Vector preview on generate</span>
+                    </div>
+                  ) : null}
                   <button onClick={() => removeImage(img.id)} className="absolute top-2 right-2 bg-background/80 hover:bg-background text-primary border border-primary/25 p-1.5 rounded-full shadow-md transition-colors">
                     <X className="w-3.5 h-3.5" />
                   </button>

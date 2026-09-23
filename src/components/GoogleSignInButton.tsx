@@ -29,6 +29,7 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
   const buttonRef = useRef<HTMLDivElement>(null);
   const [clientId, setClientId] = useState("");
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [configError, setConfigError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -36,8 +37,8 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
     let active = true;
     fetch("/api/auth/google/config")
       .then((response) => response.json())
-      .then((data: { clientId?: string }) => { if (active) { setClientId(data.clientId || ""); setConfigLoaded(true); if (!data.clientId) setError("Google sign-in is not configured on this server."); } })
-      .catch(() => { if (active) { setConfigLoaded(true); setError("Google sign-in is unavailable right now."); } });
+      .then((data: { clientId?: string }) => { if (active) { setClientId(data.clientId || ""); setConfigLoaded(true); if (!data.clientId) setConfigError("Google sign-in is not configured on this server."); } })
+      .catch(() => { if (active) { setConfigLoaded(true); setConfigError("Google sign-in is unavailable right now."); } });
     return () => { active = false; };
   }, []);
 
@@ -77,17 +78,25 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
 
     if (window.google) initialize();
     else {
+      const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-gsi="true"]');
+      if (existingScript) {
+        existingScript.addEventListener("load", initialize, { once: true });
+        existingScript.addEventListener("error", () => setConfigError("Google sign-in is unavailable right now."), { once: true });
+        return () => existingScript.removeEventListener("load", initialize);
+      }
       const script = document.createElement("script");
       script.src = "https://accounts.google.com/gsi/client";
       script.async = true;
       script.defer = true;
+      script.dataset.googleGsi = "true";
       script.onload = initialize;
+      script.onerror = () => setConfigError("Google sign-in is unavailable right now.");
       document.head.appendChild(script);
     }
   }, [clientId, mode, router]);
 
-  if (configLoaded && error) {
-    return <div className="space-y-2"><div ref={buttonRef} className="hidden" /><p className="text-center text-xs font-semibold text-red-500">{error}</p></div>;
+  if (configLoaded && configError) {
+    return <div className="space-y-2"><p className="text-center text-xs font-semibold text-red-500">{configError}</p></div>;
   }
 
   return (
@@ -103,6 +112,7 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
         </button>
         <div ref={buttonRef} className="absolute inset-0 z-10 min-h-11 opacity-0" />
       </div>
+      {error && <p className="text-center text-xs font-semibold text-red-500">{error}</p>}
     </div>
   );
 }
