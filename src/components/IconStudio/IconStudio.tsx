@@ -65,6 +65,7 @@ export type ExportFormat = "png" | "webp" | "svg" | "obj" | "gltf" | "mp4";
 export type ColorMode = "svg" | "custom";
 export type LightingPreset = "studio" | "softbox" | "rim" | "warm" | "cyber";
 export type AnimationKind = "none" | "turntable" | "floating" | "wobble" | "pulse" | "swing" | "orbit" | "tilt" | "bob";
+export type ExportQuality = "smooth" | "balanced";
 
 export type IconAsset = {
   id: string;
@@ -102,6 +103,7 @@ export type StudioControls = {
   exportShadow: boolean;
   // Performance
   fastPreview: boolean;
+  exportQuality: ExportQuality;
   // Animations & Video
   animation: AnimationKind;
   animSpeed: number;
@@ -130,7 +132,7 @@ type PreviewHandle = {
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
-const VIDEO_EXPORT_FPS = 30;
+const VIDEO_EXPORT_FPS = 24;
 const VIDEO_EXPORT_VISIBILITY_ERROR = "Keep the 3D Icon Studio tab visible during video export, then try again.";
 
 function yieldToBrowser(): Promise<void> {
@@ -225,6 +227,7 @@ const defaultControls: StudioControls = {
   showShadow: true,
   exportShadow: true,
   fastPreview: true,
+  exportQuality: "smooth",
   animation: "none",
   animSpeed: 1,
   videoDuration: 10,
@@ -1180,8 +1183,11 @@ const IconPreview = forwardRef<
         }
       },
       record360Video: async (targetAsset, durationSeconds, onProgress) => {
-        const recordWidth = 1920;
-        const recordHeight = 1080;
+        const qualityProfile = controls.exportQuality === "balanced"
+          ? { width: 1280, height: 720, fps: VIDEO_EXPORT_FPS, bitrate: 8_000_000 }
+          : { width: 960, height: 540, fps: 20, bitrate: 4_000_000 };
+        const recordWidth = qualityProfile.width;
+        const recordHeight = qualityProfile.height;
         const offCanvas = document.createElement("canvas");
         offCanvas.width = recordWidth;
         offCanvas.height = recordHeight;
@@ -1283,7 +1289,7 @@ const IconPreview = forwardRef<
 
         const recorder = new MediaRecorder(stream, {
           mimeType: selectedMimeType,
-          videoBitsPerSecond: 16000000,
+          videoBitsPerSecond: qualityProfile.bitrate,
         });
         mediaRecorder = recorder;
 
@@ -1292,7 +1298,7 @@ const IconPreview = forwardRef<
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
 
-        const fps = VIDEO_EXPORT_FPS;
+        const fps = qualityProfile.fps;
         const duration = Math.max(5, Math.min(60, durationSeconds || 10));
         const totalFrames = Math.round(duration * fps);
         const baseRotX = THREE.MathUtils.degToRad(controls.rotX);
@@ -1506,9 +1512,9 @@ export default function IconStudio() {
         "-profile:v", "high",
         "-level:v", "4.0",
         "-r", String(VIDEO_EXPORT_FPS),
-        "-b:v", "16M",
-        "-maxrate", "16M",
-        "-bufsize", "32M",
+        "-b:v", "8M",
+        "-maxrate", "8M",
+        "-bufsize", "16M",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         "output.mp4",
@@ -2187,6 +2193,21 @@ export default function IconStudio() {
 
             {/* Stock video duration */}
             <div className="pt-2 border-t border-[var(--card-border)]">
+              <div className="mb-2">
+                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Export Quality</span>
+                <SegmentedToggle<ExportQuality>
+                  options={[
+                    { id: "smooth", label: "Smooth" },
+                    { id: "balanced", label: "Balanced" },
+                  ]}
+                  value={controls.exportQuality}
+                  onChange={(val) => updateControl("exportQuality", val)}
+                  size="sm"
+                  className="w-full"
+                  ariaLabel="Export quality"
+                />
+              </div>
+
               <Slider
                 label="Video Duration (5–60s)"
                 min={5}
@@ -2197,7 +2218,7 @@ export default function IconStudio() {
                 onChange={(v) => updateControl("videoDuration", v)}
               />
               <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Stock video: 1920×1080, {controls.videoDuration}s @ {VIDEO_EXPORT_FPS} FPS, MP4
+                Stock video: {controls.exportQuality === "balanced" ? "1280×720" : "960×540"}, {controls.videoDuration}s @ {controls.exportQuality === "balanced" ? VIDEO_EXPORT_FPS : 20} FPS, MP4
               </p>
             </div>
 
@@ -2535,7 +2556,7 @@ export default function IconStudio() {
                 onClick={() => void exportCurrent("mp4")}
                 disabled={!selectedAsset || videoRecording}
                 className="flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/20 px-3 py-2 text-xs font-bold text-primary transition-all disabled:opacity-40 shadow-sm"
-                title={`Download ${controls.videoDuration}s 1080p MP4 video`}
+                title={`Download ${controls.videoDuration}s 720p MP4 video`}
               >
                 {videoRecording ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
                 <span>{controls.videoDuration}s Video</span>
