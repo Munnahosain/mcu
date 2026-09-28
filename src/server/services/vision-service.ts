@@ -5,6 +5,7 @@ import { decryptSecret } from '@/server/auth/secret-encryption';
 
 export const AI_MAX_RETRIES = 2;
 export const AI_RETRY_DELAY_MS = 1000;
+export const AI_PROVIDER_TIMEOUT_MS = 25_000;
 export const MAX_IMAGE_SIZE = 768;
 export const JPEG_QUALITY = 75;
 export const MAX_PROVIDER_IMAGE_BYTES = 900_000;
@@ -32,7 +33,7 @@ export function isRetryableProviderError(error: unknown): boolean {
   return (
     status === 429 || status === 500 || status === 502 || status === 503 || status === 504 ||
     message.includes('capacity') || message.includes('overloaded') ||
-    message.includes('unavailable') || message.includes('timeout') ||
+    message.includes('unavailable') || message.includes('timeout') || message.includes('aborted') ||
     message.includes('rate limit')
   );
 }
@@ -166,7 +167,7 @@ export async function callVisionProvider(options: CallVisionOptions): Promise<st
     jsonMode = false,
     maxTokens = 2048,
     temperature = 0.1,
-    timeoutMs = 55000,
+    timeoutMs = AI_PROVIDER_TIMEOUT_MS,
   } = options;
 
   let responseText: string | null = null;

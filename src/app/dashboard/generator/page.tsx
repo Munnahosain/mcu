@@ -5,6 +5,7 @@ import {
   UploadCloud,
   Zap,
   Download,
+  Play,
   Pause,
   Lock,
   Wrench,
@@ -12,6 +13,7 @@ import {
   Copy,
   RefreshCw,
   ImagePlus,
+  Trash2,
   Layers,
   Type,
   Pencil,
@@ -27,7 +29,7 @@ import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-mod
 import PremiumSlider from "@/components/PremiumSlider";
 import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
-import { isVectorFile, prepareImageForUpload } from "@/lib/client-image";
+import { createVideoContactSheet, isVectorFile, isVideoFile, prepareImageForUpload } from "@/lib/client-image";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ThemedSelect from "@/components/ui/ThemedSelect";
@@ -78,12 +80,14 @@ export default function GeneratorPage() {
   const [negativeTitleWords, setNegativeTitleWords] = useState('');
   const [negativeKeywords, setNegativeKeywords] = useState('');
   const [autoCsvDownload, setAutoCsvDownload] = useState(false);
+  const [isCsvReadyModalOpen, setIsCsvReadyModalOpen] = useState(false);
   const [exportExtension, setExportExtension] = useState<ExportExtension>('Default');
   const [isExtensionMenuOpen, setIsExtensionMenuOpen] = useState(false);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const pauseRef = useRef(false);
   const autoExportRef = useRef(false);
+  const csvPromptRef = useRef(false);
 
   // Prompt States
   const [whiteBg, setWhiteBg] = useState(false);
@@ -116,6 +120,7 @@ export default function GeneratorPage() {
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [keywordDrafts, setKeywordDrafts] = useState<Record<string, string>>({});
+  const [expandedKeywordCards, setExpandedKeywordCards] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setUser(getAuthUser());
@@ -230,13 +235,23 @@ export default function GeneratorPage() {
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     const remainingSlots = Math.max(500 - images.length, 0);
-    const newImages = Array.from(files).filter(f => f.type.startsWith('image/') || isVectorFile(f)).slice(0, remainingSlots).map(file => ({
-      id: crypto.randomUUID(),
-      file,
-      preview: isVectorFile(file) ? '' : URL.createObjectURL(file),
-      status: 'pending' as const,
-    }));
+    const selectedFiles = Array.from(files);
+    const supportedFiles = selectedFiles.filter(file => file.type.startsWith('image/') || isVectorFile(file) || isVideoFile(file));
+    if (supportedFiles.length < selectedFiles.length) {
+      alert(`${selectedFiles.length - supportedFiles.length} file(s) were skipped. Use an image or a browser-compatible MP4, MOV, WebM, or M4V video.`);
+    }
+    const newImages = supportedFiles.slice(0, remainingSlots).map(file => {
+      const canRenderAsPreview = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+      return {
+        id: crypto.randomUUID(),
+        file,
+        preview: canRenderAsPreview ? URL.createObjectURL(file) : isVectorFile(file) ? '' : URL.createObjectURL(file),
+        isVideo: isVideoFile(file),
+        status: 'pending' as const,
+      };
+    });
     setImages(prev => [...prev, ...newImages]);
+    if (newImages.length < supportedFiles.length) alert('The queue is full. Only 500 assets can be queued at once.');
   }, [images.length, setImages]);
 
   const removeImage = (id: string) => {
@@ -265,8 +280,11 @@ export default function GeneratorPage() {
 
     try {
       const fd = new FormData();
-      const uploadImage = await prepareImageForUpload(img.file);
+      const uploadImage = img.isVideo
+        ? await createVideoContactSheet(img.file)
+        : await prepareImageForUpload(img.file);
       fd.append('image', uploadImage);
+      if (img.isVideo) fd.append('contentType', 'video');
       if (keyToUse) {
         fd.append('apiKey', keyToUse);
       }
@@ -305,14 +323,19 @@ export default function GeneratorPage() {
       }
 
       const controller = new AbortController();
-      const requestTimeout = window.setTimeout(() => controller.abort(), 60000);
+      const requestTimeout = window.setTimeout(
+        () => controller.abort(new DOMException('Generation timed out. Try again or switch providers.', 'TimeoutError')),
+        58000
+      );
       const res = await fetch(endpoint, { method: 'POST', headers, body: fd, signal: controller.signal }).finally(() => {
         window.clearTimeout(requestTimeout);
       });
       const data = await res.json().catch(() => ({ success: false, error: `Generation service returned HTTP ${res.status}` }));
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Generation failed');
+        const requestError = new Error(data.error || 'Generation failed') as Error & { status: number };
+        requestError.status = res.status;
+        throw requestError;
       }
 
       if (activeTab === 'Metadata' && data.metadata) {
@@ -360,15 +383,22 @@ export default function GeneratorPage() {
     } catch (err: unknown) {
       console.error(err);
       const errorMessage = err instanceof Error ? err.message : 'Generation failed';
-      const isRateLimited = errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('quota');
-      if (isRateLimited && providerKeys.some(key => key.id !== keyObject.id && !attemptedKeyIds.has(key.id))) {
+      const normalizedError = errorMessage.toLowerCase();
+      const errorStatus = typeof err === 'object' && err !== null && 'status' in err
+        ? Number(err.status)
+        : undefined;
+      const isKeyFailure = errorStatus === 401 || errorStatus === 403 || errorStatus === 429 ||
+        normalizedError.includes('rate limit') || normalizedError.includes('quota') ||
+        (normalizedError.includes('api key') && /(invalid|expired|unauthorized|not valid|no api key)/.test(normalizedError));
+      const hasAnotherProviderKey = providerKeys.some(key => key.id !== keyObject?.id && !attemptedKeyIds.has(key.id));
+      if (isKeyFailure && hasAnotherProviderKey) {
         const nextAttempts = new Set(attemptedKeyIds);
-        nextAttempts.add(keyObject.id);
+        if (keyObject?.id) nextAttempts.add(keyObject.id);
         await generateSingle(img, nextAttempts);
         return;
       }
-      const message = err instanceof DOMException && err.name === 'AbortError'
-        ? 'Generation timed out after 35 seconds. Check the provider, model, and API key, then retry.'
+      const message = err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError')
+        ? 'Generation timed out after 58 seconds. Check the provider and model, then retry.'
         : err instanceof Error ? err.message : 'Generation failed';
       setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: message } : i));
     }
@@ -384,16 +414,18 @@ export default function GeneratorPage() {
     setIsGenerating(true);
     const targets = images.filter(i => i.status !== 'done').slice(0, 500);
     const providerKeyCount = apiKeys.filter(key => key.provider === activeProvider).length;
-    const CONCURRENCY = activeProvider === 'Google Gemini'
-      ? (batchMode ? 2 : 1)
-      : Math.min(Math.max(providerKeyCount, 1) * (batchMode ? 2 : 1), batchMode ? 8 : 3);
-    for (let i = 0; i < targets.length; i += CONCURRENCY) {
+    const concurrency = activeProvider === 'Google Gemini'
+      ? (batchMode ? 3 : 1)
+      : Math.min(Math.max(providerKeyCount, 1) * (batchMode ? 3 : 1), batchMode ? 8 : 3);
+    for (let i = 0; i < targets.length; i += concurrency) {
       if (pauseRef.current) break;
-      const batch = targets.slice(i, i + CONCURRENCY);
+      const batch = targets.slice(i, i + concurrency);
       await Promise.all(batch.map(img => generateSingle(img)));
     }
     setIsGenerating(false);
-    autoExportRef.current = !pauseRef.current && autoCsvDownload;
+    const completedMetadataRun = !pauseRef.current && activeTab === 'Metadata' && targets.length > 0;
+    autoExportRef.current = completedMetadataRun && autoCsvDownload;
+    csvPromptRef.current = completedMetadataRun && !autoCsvDownload;
   };
 
   const togglePause = () => {
@@ -402,7 +434,7 @@ export default function GeneratorPage() {
   };
 
   const exportCSV = useCallback(() => {
-    const done = images.filter(i => i.status === 'done');
+    const done = images.filter(i => i.status === 'done' && (activeTab === 'Metadata' ? i.metadata : i.prompt));
     if (!done.length) return;
 
     const esc = (value: string) => `"${(value || '').replace(/"/g, '""')}"`;
@@ -434,15 +466,82 @@ export default function GeneratorPage() {
   }, [activeTab, exportExtension, images]);
 
   useEffect(() => {
-    if (!isGenerating && autoExportRef.current && images.some((image) => image.status === 'done')) {
+    if (!isGenerating && autoExportRef.current && images.some((image) => image.status === 'done' && image.metadata)) {
       autoExportRef.current = false;
       exportCSV();
     }
   }, [exportCSV, images, isGenerating]);
 
+  useEffect(() => {
+    if (!isGenerating && csvPromptRef.current) {
+      csvPromptRef.current = false;
+      if (images.some(image => image.status === 'done' && image.metadata)) {
+        setIsCsvReadyModalOpen(true);
+      }
+    }
+  }, [images, isGenerating]);
+
   return (
     <div className="grid grid-cols-1 gap-5 pb-20 xl:grid-cols-[300px_minmax(0,1fr)]">
-      
+      <section className="col-span-full grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Generation overview">
+        <div className="flex items-center justify-between rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-[0_18px_45px_rgba(0,0,0,.08)]">
+          <div>
+            <p className="text-sm text-[var(--text-secondary)]">Total Assets</p>
+            <p className="text-2xl font-bold text-foreground">{images.length}</p>
+          </div>
+          <Layers className="h-5 w-5 text-primary" />
+        </div>
+        <div className="flex items-center justify-between rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-[0_18px_45px_rgba(0,0,0,.08)]">
+          <div>
+            <p className="text-sm text-[var(--text-secondary)]">Pending</p>
+            <p className="text-2xl font-bold text-foreground">{images.filter(image => image.status === 'pending').length}</p>
+          </div>
+          <RefreshCw className="h-5 w-5 text-amber-500" />
+        </div>
+        <div className="flex items-center justify-between rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-[0_18px_45px_rgba(0,0,0,.08)]">
+          <div>
+            <p className="text-sm text-[var(--text-secondary)]">Generated</p>
+            <p className="text-2xl font-bold text-foreground">{images.filter(image => image.status === 'done').length}</p>
+          </div>
+          <Check className="h-5 w-5 text-emerald-500" />
+        </div>
+        <div className="flex flex-col justify-center gap-2 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-[0_18px_45px_rgba(0,0,0,.08)]">
+          <button
+            onClick={generateAll}
+            disabled={isGenerating || images.length === 0}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-bold text-background transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Zap className="h-4 w-4" /> {isGenerating ? 'Processing...' : batchMode ? 'Generate batch' : 'Generate Pending'}
+          </button>
+          <button
+            onClick={exportCSV}
+            disabled={images.filter(image => image.status === 'done').length === 0}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3 py-2 text-sm font-bold text-foreground transition-colors hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Download className="h-4 w-4" /> Export CSV
+          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={clearAllImages}
+              disabled={!images.length || isGenerating}
+              className="flex min-w-0 items-center justify-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/5 px-2 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300"
+            >
+              <Trash2 className="h-4 w-4 shrink-0" /> <span className="truncate">Clear Queue</span>
+            </button>
+            <button
+              type="button"
+              onClick={togglePause}
+              disabled={!isGenerating}
+              className="flex min-w-0 items-center justify-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/5 px-2 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300"
+            >
+              {isPaused ? <Play className="h-4 w-4 shrink-0" /> : <Pause className="h-4 w-4 shrink-0" />}
+              <span className="truncate">{isPaused ? 'Resume' : 'Pause'}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Settings Side Pane */}
       <div className="flex w-full flex-col gap-4">
         
@@ -528,6 +627,53 @@ export default function GeneratorPage() {
                 />
               </div>
 
+              <div className="space-y-4 border-t border-[var(--card-border)] pt-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground/60">Export extension</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      aria-label="Change file extension for CSV"
+                      aria-expanded={isExtensionMenuOpen}
+                      onClick={() => setIsExtensionMenuOpen(open => !open)}
+                      className="generator-extension-select inline-flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-xs font-semibold outline-none"
+                    >
+                      {exportExtension}<ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExtensionMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isExtensionMenuOpen && (
+                      <div className="generator-extension-menu absolute left-0 right-0 top-full z-30 mt-2 max-h-56 overflow-y-auto rounded-xl border p-1 shadow-[0_16px_35px_rgba(7,27,23,0.18)]">
+                        {(['Default', 'jpg', 'jpeg', 'png', 'svg', 'eps', 'ai', 'mp4'] as ExportExtension[]).map(extension => (
+                          <button
+                            key={extension}
+                            type="button"
+                            onClick={() => {
+                              setExportExtension(extension);
+                              setIsExtensionMenuOpen(false);
+                            }}
+                            className={`generator-extension-option block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold ${exportExtension === extension ? 'is-selected' : ''}`}
+                          >
+                            {extension}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-[var(--card-border)] pt-3 text-xs font-semibold text-foreground">
+                  <span>Batch mode <span className="text-[10px] font-normal text-[var(--text-secondary)]">(up to 500)</span></span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Batch mode"
+                    aria-checked={batchMode}
+                    onClick={() => setBatchMode(enabled => !enabled)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${batchMode ? 'bg-primary' : 'bg-foreground/20'}`}
+                  >
+                    <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${batchMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              </div>
+
               <PremiumSlider label="TITLE LENGTH" value={titleLength} min={10} max={200} suffix=" CHARS" onChange={setTitleLength} />
               <PremiumSlider label="DESCRIPTION LENGTH" value={descriptionLength} min={50} max={300} suffix=" CHARS" onChange={setDescriptionLength} />
               <PremiumSlider label="KEYWORDS COUNT" value={keywordsCount} min={5} max={50} suffix=" KEYS" onChange={setKeywordsCount} />
@@ -538,10 +684,6 @@ export default function GeneratorPage() {
                 <input value={negativeTitleWords} onChange={e => setNegativeTitleWords(e.target.value)} placeholder="e.g. best, beautiful, amazing" className="w-full rounded-xl border border-[var(--card-border)] bg-background px-3 py-2 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary" />
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-foreground/60">Negative keywords</label>
                 <input value={negativeKeywords} onChange={e => setNegativeKeywords(e.target.value)} placeholder="e.g. logo, watermark, blurry" className="w-full rounded-xl border border-[var(--card-border)] bg-background px-3 py-2 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary" />
-                <label className="flex items-center justify-between pt-2 text-xs font-semibold text-foreground">
-                  Auto CSV download
-                  <input type="checkbox" checked={autoCsvDownload} onChange={e => setAutoCsvDownload(e.target.checked)} className="h-4 w-4 accent-primary" />
-                </label>
               </div>
             </div>
           ) : (
@@ -610,11 +752,12 @@ export default function GeneratorPage() {
             </div>
           )}
         </div>
+
       </div>
 
       {/* Main Uploader workspace */}
       <div className="flex min-w-0 flex-col gap-5">
-        
+
         {/* Upload Box */}
         <div className="border border-[var(--card-border)] rounded-2xl p-5 bg-[var(--card-bg)] flex flex-col gap-4 shadow-[0_18px_45px_rgba(0,0,0,.08)]">
           <div className="flex items-center justify-between">
@@ -622,89 +765,28 @@ export default function GeneratorPage() {
               <ImagePlus className="w-5 h-5 text-primary" />
               <h3 className="font-bold text-[11px] uppercase tracking-[0.18em] text-foreground">Upload Assets</h3>
             </div>
-            <span className="text-[10px] font-bold text-primary/70">{images.length} items selected</span>
+            <div className="flex items-center gap-4">
+              <label className="flex cursor-pointer items-center gap-2 text-[10px] font-semibold text-foreground/70">
+                Auto CSV download
+                <input type="checkbox" checked={autoCsvDownload} onChange={event => setAutoCsvDownload(event.target.checked)} className="h-4 w-4 accent-primary" />
+              </label>
+              <span className="text-[10px] font-bold text-primary/70">{images.length} items selected</span>
+            </div>
           </div>
 
-           <div 
+           <div
              className={`min-h-48 border border-dashed rounded-xl px-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${isDragging ? 'border-primary bg-primary/10' : 'border-[var(--input-border)] bg-[var(--input-bg)] hover:border-primary/50 hover:bg-primary/5'}`}
              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
              onDragLeave={() => setIsDragging(false)}
              onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
              onClick={() => fileInputRef.current?.click()}
           >
-            <input ref={fileInputRef} type="file" className="hidden" multiple accept="image/*,.ai,.eps,.epsf,.svg,.pdf" onChange={(e) => handleFiles(e.target.files)} />
+            <input ref={fileInputRef} type="file" className="hidden" multiple accept="image/*,video/*,.ai,.eps,.epsf,.svg,.pdf" onChange={(e) => handleFiles(e.target.files)} />
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-primary/25 text-primary"><UploadCloud className="h-5 w-5" /></div>
             <p className="text-sm font-bold text-foreground mb-1">Drop your assets here</p>
-            <p className="text-xs text-[var(--text-secondary)]">or browse files · PNG · JPG · SVG · EPS · AI · PDF</p>
+            <p className="text-xs text-[var(--text-secondary)]">or browse · PNG · JPG · SVG · EPS · AI · PDF · MP4 · MOV · WebM</p>
           </div>
         </div>
-
-        {/* Action button bar */}
-        {images.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2 border-b border-primary/10 pb-4">
-            <span className="text-xs font-bold text-primary">
-              Queue: {images.filter(i => i.status === 'done').length} of {images.length} processed
-            </span>
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <button onClick={clearAllImages} className="px-4 py-2 bg-transparent border border-primary/30 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 transition-all">
-                Clear Queue
-              </button>
-              <div className="relative flex items-center gap-2 text-xs font-bold text-primary">
-                <span className="sr-only">Change file extension</span>
-                <button
-                  type="button"
-                  aria-label="Change file extension for CSV"
-                  aria-expanded={isExtensionMenuOpen}
-                  onClick={() => setIsExtensionMenuOpen((open) => !open)}
-                  className="generator-extension-select inline-flex min-w-[104px] items-center justify-between gap-3 rounded-xl border px-3 py-2 text-xs font-bold outline-none"
-                >
-                  {exportExtension}<ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExtensionMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {isExtensionMenuOpen && (
-                  <div className="generator-extension-menu absolute right-0 top-full z-30 mt-2 min-w-[104px] overflow-hidden rounded-xl border p-1 shadow-[0_16px_35px_rgba(7,27,23,0.18)]">
-                    {(['Default', 'jpg', 'jpeg', 'png', 'svg', 'eps', 'ai', 'mp4'] as ExportExtension[]).map((extension) => (
-                      <button
-                        key={extension}
-                        type="button"
-                        onClick={() => {
-                          setExportExtension(extension);
-                          setIsExtensionMenuOpen(false);
-                        }}
-                        className={`generator-extension-option block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold ${exportExtension === extension ? 'is-selected' : ''}`}
-                      >
-                        {extension}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button onClick={exportCSV} disabled={images.filter(i => i.status === 'done').length === 0} className="px-4 py-2 bg-transparent border border-primary/30 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 disabled:opacity-40 transition-all flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5" /> Export CSV
-              </button>
-              <label className="inline-flex items-center gap-2 text-xs font-bold text-primary">
-                <input type="checkbox" checked={batchMode} onChange={e => setBatchMode(e.target.checked)} className="h-4 w-4 accent-primary" />
-                Batch mode (up to 500)
-              </label>
-              <button 
-                 onClick={generateAll}
-                 disabled={isGenerating || images.length === 0}
-                 className="px-5 py-2 bg-primary text-background rounded-xl text-xs font-bold hover:bg-primary-hover disabled:opacity-40 transition-all flex items-center gap-1.5"
-               >
-                <Zap className="w-3.5 h-3.5" />
-                {isGenerating ? 'Processing batch...' : batchMode ? 'Generate batch' : 'Generate All'}
-              </button>
-              {isGenerating && (
-                <button
-                  type="button"
-                  onClick={togglePause}
-                  className="px-4 py-2 rounded-xl border border-amber-500/40 text-xs font-bold text-amber-600 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
-                >
-                  <Pause className="w-3.5 h-3.5" /> {isPaused ? 'Paused' : 'Pause'}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Queue Outputs Display */}
         {images.length > 0 && (
@@ -712,7 +794,7 @@ export default function GeneratorPage() {
             <div className="mb-4 flex items-center justify-between border-b border-primary/10 pb-4">
               <div>
                 <h3 className="text-sm font-bold text-foreground">Generated Results</h3>
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">{images.length} image{images.length === 1 ? '' : 's'} in this batch</p>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">{images.length} asset{images.length === 1 ? '' : 's'} in this batch</p>
               </div>
               <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[10px] font-bold text-primary">
                 {images.filter(image => image.status === 'done').length}/{images.length} ready
@@ -720,28 +802,31 @@ export default function GeneratorPage() {
             </div>
             <div className="max-h-[calc(100vh-190px)] space-y-4 overflow-y-auto pr-1 sm:max-h-[calc(100vh-210px)]">
               {images.map(img => (
-                <div key={img.id} className="border border-[var(--card-border)] rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row gap-5 bg-[var(--input-bg)]">
-              <div className="w-full md:w-48 shrink-0 flex flex-col gap-2">
-                <div className="relative aspect-video md:h-32 bg-primary/5 rounded-xl border border-primary/15 overflow-hidden flex items-center justify-center">
-                  {img.preview ? (
-                    <img src={img.preview} alt="preview" className="object-contain w-full h-full p-1.5" />
+                <article key={img.id} className="group grid min-w-0 gap-4 overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] p-3 transition-colors hover:border-primary/25 sm:gap-5 sm:p-4 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="flex min-w-0 flex-col gap-2.5">
+                <div className="relative aspect-video overflow-hidden rounded-xl border border-[var(--card-border)] bg-black">
+                  {img.isVideo ? (
+                    <video src={img.preview} controls muted playsInline preload="metadata" className="h-full w-full object-contain" />
+                  ) : img.preview ? (
+                    <img src={img.preview} alt={`Preview of ${img.file.name}`} className="h-full w-full object-contain p-2" />
                   ) : isVectorFile(img.file) ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-1 text-primary/70">
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-primary/70">
                       <FileJson className="h-8 w-8" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider">Vector preview on generate</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Preview on generate</span>
                     </div>
                   ) : null}
-                  <button onClick={() => removeImage(img.id)} className="absolute top-2 right-2 bg-background/80 hover:bg-background text-primary border border-primary/25 p-1.5 rounded-full shadow-md transition-colors">
+                  <span className={`absolute left-2 top-2 rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wide backdrop-blur ${img.status === 'error' ? 'border-red-400/30 bg-red-950/80 text-red-200' : img.status === 'done' ? 'border-emerald-300/30 bg-emerald-950/75 text-emerald-200' : 'border-white/15 bg-black/65 text-white/85'}`}>
+                    {img.status}
+                  </span>
+                  <button onClick={() => removeImage(img.id)} aria-label={`Remove ${img.file.name}`} className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/65 p-1.5 text-white/85 shadow-md backdrop-blur transition-colors hover:bg-red-600 hover:text-white">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <span className="text-[10px] font-bold text-primary/70 truncate">{img.file.name}</span>
-                <div className="text-[10px] font-bold text-primary/60">
-                  Status: <span className="uppercase text-primary">{img.status}</span>
-                </div>
+                <span className="truncate text-xs font-semibold text-foreground" title={img.file.name}>{img.file.name}</span>
+                <span className="text-[10px] text-[var(--text-secondary)]">{img.isVideo ? 'Video asset' : isVectorFile(img.file) ? 'Vector asset' : 'Image asset'}</span>
               </div>
 
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <div className="flex min-w-0 flex-col justify-center">
                 {(img.status === 'pending' || img.status === 'error') && (
                   <button onClick={() => generateSingle(img)} className="self-start px-4 py-2 border border-primary/25 rounded-xl text-xs font-bold text-primary hover:bg-primary/5 transition-colors">
                     <RefreshCw className="mr-1.5 inline h-3.5 w-3.5" /> {img.status === 'error' ? 'Retry generation' : 'Process individually'}
@@ -751,7 +836,7 @@ export default function GeneratorPage() {
                 {img.status === 'generating' && (
                   <div className="flex items-center gap-2 text-xs font-bold text-primary">
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    Analyzing image features...
+                    Analyzing visual features...
                   </div>
                 )}
 
@@ -762,62 +847,68 @@ export default function GeneratorPage() {
                 )}
 
                 {img.status === 'done' && img.metadata && activeTab === 'Metadata' && (
-                  <div className="space-y-4 text-xs">
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-primary/60 uppercase mb-1">
+                  <div className="space-y-4 text-xs sm:space-y-5">
+                    <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 sm:p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-bold uppercase text-[var(--text-secondary)]">
                         <span>Title</span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-3 text-primary">
                           <button onClick={() => { setEditingTitleId(img.id); setTitleDraft(img.metadata!.title); }} className="hover:underline flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit</button>
                           <button onClick={() => navigator.clipboard.writeText(img.metadata!.title)} className="hover:underline flex items-center gap-1"><Copy className="w-3 h-3" /> Copy</button>
                         </div>
                       </div>
                       {editingTitleId === img.id ? (
                         <div className="flex gap-2">
-                          <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-primary/20 bg-background p-3 text-primary outline-none" />
+                          <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-primary/25 bg-background p-3 text-foreground outline-none focus:border-primary" />
                           <button onClick={() => { updateMetadata(img.id, { title: titleDraft.trim() || img.metadata!.title }); setEditingTitleId(null); }} className="rounded-xl bg-primary px-3 text-background" title="Save title"><Check className="h-4 w-4" /></button>
                         </div>
-                      ) : <div className="rounded-xl border border-primary/10 bg-primary/5 p-3 font-medium text-primary">{img.metadata.title}</div>}
+                      ) : <p className="text-sm font-semibold leading-relaxed text-foreground">{img.metadata.title}</p>}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <span className="mb-1 block text-[10px] font-bold uppercase text-primary/60">Category</span>
-                        <div className="rounded-xl border border-primary/10 bg-primary/5 p-3 font-medium text-primary">{img.metadata.category || 'General'}</div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)]">Category</span>
+                        <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">{img.metadata.category || 'General'}</span>
                       </div>
-                      <div>
-                        <span className="mb-1 block text-[10px] font-bold uppercase text-primary/60">Actions</span>
-                        <button onClick={() => generateSingle(img)} className="inline-flex items-center gap-1.5 rounded-xl border border-primary/25 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5">
-                          <RefreshCw className="h-3.5 w-3.5" /> Regenerate
-                        </button>
-                      </div>
+                      <button onClick={() => generateSingle(img)} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--card-border)] px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary">
+                        <RefreshCw className="h-3.5 w-3.5" /> Regenerate
+                      </button>
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-primary/60 uppercase mb-1">
+                    <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3 sm:p-4">
+                      <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase text-[var(--text-secondary)]">
                         <span>Description</span>
-                        <button onClick={() => navigator.clipboard.writeText(img.metadata!.description)} className="hover:underline flex items-center gap-1"><Copy className="w-3 h-3" /> Copy</button>
+                        <button onClick={() => navigator.clipboard.writeText(img.metadata!.description)} className="inline-flex items-center gap-1 text-primary hover:underline"><Copy className="w-3 h-3" /> Copy</button>
                       </div>
-                      <div className="bg-primary/5 border border-primary/10 rounded-xl p-3 text-primary font-medium">{img.metadata.description}</div>
+                      <p className="leading-relaxed text-foreground/85">{img.metadata.description}</p>
                     </div>
 
                     <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-primary/60 uppercase mb-1">
+                      <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-bold uppercase text-[var(--text-secondary)]">
                         <span>Keywords ({img.metadata.keywords.length})</span>
-                        <button onClick={() => navigator.clipboard.writeText(img.metadata!.keywords.join(", "))} className="hover:underline flex items-center gap-1"><Copy className="w-3 h-3" /> Copy CSV</button>
+                        <button onClick={() => navigator.clipboard.writeText(img.metadata!.keywords.join(", "))} className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"><Copy className="w-3 h-3" /> Copy CSV</button>
                       </div>
-                      <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-xl border border-primary/10 bg-primary/5 p-2.5">
-                        {img.metadata.keywords.map((k, idx) => (
-                          <button key={`${k}-${idx}`} onClick={() => updateMetadata(img.id, { keywords: img.metadata!.keywords.filter((_, keywordIndex) => keywordIndex !== idx) })} className="group rounded-full border border-primary/15 bg-background px-2.5 py-1 text-[10px] font-bold text-primary" title="Remove keyword">
+                      <div className="flex flex-wrap gap-1.5">
+                        {img.metadata.keywords.slice(0, expandedKeywordCards[img.id] ? undefined : 14).map((k, idx) => (
+                          <button key={`${k}-${idx}`} onClick={() => updateMetadata(img.id, { keywords: img.metadata!.keywords.filter((_, keywordIndex) => keywordIndex !== idx) })} className="group rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:border-red-300/50 hover:text-red-500" title="Remove keyword">
                             {k} <span className="ml-1 text-primary/40 group-hover:text-red-400">x</span>
                           </button>
                         ))}
                       </div>
+                      {img.metadata.keywords.length > 14 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedKeywordCards(prev => ({ ...prev, [img.id]: !prev[img.id] }))}
+                          className="mt-2 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          {expandedKeywordCards[img.id] ? 'Show less' : `Show all ${img.metadata.keywords.length} keywords`}
+                        </button>
+                      )}
                       <div className="mt-2 flex gap-2">
-                        <input value={keywordDrafts[img.id] || ''} onChange={e => setKeywordDrafts(prev => ({ ...prev, [img.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') addKeyword(img); }} placeholder="Add keyword..." className="min-w-0 flex-1 rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-primary outline-none" />
+                        <input value={keywordDrafts[img.id] || ''} onChange={e => setKeywordDrafts(prev => ({ ...prev, [img.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') addKeyword(img); }} placeholder="Add keyword..." className="min-w-0 flex-1 rounded-lg border border-[var(--card-border)] bg-background px-3 py-2.5 text-xs text-foreground outline-none focus:border-primary" />
                         <button onClick={() => addKeyword(img)} className="rounded-xl border border-primary/25 px-3 text-primary" title="Add keyword"><Plus className="h-4 w-4" /></button>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 border-t border-primary/10 pt-3">
+                    <div className="flex flex-wrap gap-2 border-t border-[var(--card-border)] pt-3">
                       <button onClick={() => navigator.clipboard.writeText(`${img.metadata!.title}\n\n${img.metadata!.description}\n\n${img.metadata!.keywords.join(', ')}`)} className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 px-3 py-2 text-[10px] font-bold text-primary hover:bg-primary/5"><Copy className="h-3 w-3" /> Copy all</button>
                       <button onClick={() => downloadMetadataJson(img)} className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 px-3 py-2 text-[10px] font-bold text-primary hover:bg-primary/5"><FileJson className="h-3 w-3" /> JSON</button>
                     </div>
@@ -834,7 +925,7 @@ export default function GeneratorPage() {
                   </div>
                 )}
               </div>
-                </div>
+                </article>
               ))}
             </div>
           </section>
@@ -938,6 +1029,60 @@ export default function GeneratorPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isCsvReadyModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCsvReadyModalOpen(false)}
+              className="absolute inset-0 bg-background/75 backdrop-blur-sm"
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="csv-ready-title"
+              initial={{ y: 12, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 8, opacity: 0, scale: 0.98 }}
+              className="relative w-full max-w-sm space-y-5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl sm:p-6"
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Check className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 id="csv-ready-title" className="text-base font-bold text-foreground">Metadata is ready</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+                    {images.filter(image => image.status === 'done' && image.metadata).length} assets are ready to export as CSV.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsCsvReadyModalOpen(false)}
+                  className="rounded-xl border border-[var(--card-border)] px-4 py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-primary/5"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportCSV();
+                    setIsCsvReadyModalOpen(false);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-background transition-colors hover:bg-primary-hover"
+                >
+                  <Download className="h-4 w-4" /> Download CSV
+                </button>
               </div>
             </motion.div>
           </div>

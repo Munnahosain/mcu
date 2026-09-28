@@ -91,7 +91,11 @@ export const setAuthUser = (user: AuthUser): boolean => {
 
 export const clearAuthUser = () => {
   if (typeof window === "undefined") return;
-  logoutRequested = true;
+
+  // Do not permanently lock the auth flow here. This helper is used both for
+  // real sign-outs and for session restoration when the user is unauthenticated,
+  // so leaving logoutRequested=true would freeze future login attempts.
+  logoutRequested = false;
   localStorage.removeItem(USER_KEY);
   clearAccessToken();
 };

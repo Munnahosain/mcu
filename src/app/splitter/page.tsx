@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, Check, Download, RotateCcw, UploadCloud } from "lucide-react";
+import { Box, Check, Download, RotateCcw, Sparkles, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ManualSplitModal } from "@/components/ManualSplitModal";
@@ -11,6 +11,7 @@ import { batchExportIcons, generateSingleIconBlob, triggerDownload } from "@/ser
 import type { EPSDocument, ExtractedIcon, ExportFormat, ExportSettings } from "@/types";
 import { idbGet, idbGetSync, idbSet, idbRemove, readSessionValue, removeSessionValue, writeSessionValue } from "@/lib/safeStorage";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
+import { prepareSvgFor3D } from "@/lib/prepare-svg-for-3d";
 
 const defaultExportSettings: ExportSettings = {
   format: "svg", multiFormat: false, selectedFormats: ["svg"], size: "512", customWidth: 512, customHeight: 512,
@@ -107,6 +108,42 @@ function SplitterWorkspace() {
     await idbSet("mcustock_studio_import", payload);
     router.push("/dashboard/3d-icon-studio");
   };
+  const prepareFor3D = async (targetIcons: ExtractedIcon[]) => {
+    if (!targetIcons.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      const warnings: string[] = [];
+      const payload = targetIcons.map((icon, index) => {
+        const prepared = prepareSvgFor3D(icon.svgContent);
+        if (prepared.skippedStrokePathCount > 0) {
+          warnings.push(`${icon.name}: ${prepared.skippedStrokePathCount} stroke-only path(s)`);
+        }
+        return {
+          svg: prepared.svg,
+          name: `${icon.name}.svg`,
+          createdAt: Date.now() + index,
+          preparedFor3D: true,
+        };
+      });
+
+      if (warnings.length > 0) {
+        const shouldContinue = window.confirm(
+          `${warnings.join("\n")} could not be filled for extrusion. Continue with the closed shapes that were prepared?`
+        );
+        if (!shouldContinue) return;
+      }
+
+      writeSessionValue("mcustock_studio_import", payload);
+      await idbSet("mcustock_studio_import", payload);
+      router.push("/dashboard/3d-icon-studio");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not prepare these icons for 3D.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const prepareSelectedFor3D = () => prepareFor3D(selectedIcons);
   const toggleIcon = (id: string) => setIcons((current) => current.map((icon) => icon.id === id ? { ...icon, selected: !icon.selected } : icon));
   const clearWorkspace = () => {
     removeSessionValue("mcustock_studio_import");
@@ -124,11 +161,11 @@ function SplitterWorkspace() {
   return <div className="space-y-5 pb-8 text-slate-100" style={{ "--foreground": "#f1f5f9" } as React.CSSProperties}>
     <input ref={inputRef} type="file" accept=".svg,.eps,.ai,image/svg+xml,application/postscript" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadFile(file); event.currentTarget.value = ""; }} />
     <section className="rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Vector production tool</p><h1 className="mt-3 text-3xl font-black text-foreground sm:text-5xl">Vector Sheet <span className="text-primary">Splitter</span></h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">Extract isolated SVG paths from SVG, EPS, and Illustrator export sheets.</p></div><button type="button" onClick={() => router.push("/dashboard/3d-icon-studio")} className="!transform-none inline-flex h-10 items-center gap-2 rounded-full border border-transparent bg-red-600 px-4 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_4px_16px_rgba(220,38,38,0.3)] transition-colors hover:!transform-none hover:bg-red-500 hover:shadow-[0_4px_18px_rgba(220,38,38,0.4)]"><Box className="h-4 w-4" />3D Studio</button></div></section>
-    {document && <WorkspaceToolbar totalCount={icons.length} selectedCount={selectedIcons.length} onSelectAll={() => setIcons((current) => current.map((icon) => ({ ...icon, selected: true })))} onDeselectAll={() => setIcons((current) => current.map((icon) => ({ ...icon, selected: false })))} onOpenInStudio={openSelectedInStudio} onExportSelected={() => void exportSelected()} onExportAll={() => void exportSelected(true)} onReprocess={() => { if (document) void loadFile(new File([document.rawContent], document.filename)); }} onManualSplit={() => setShowManual(true)} onGridSplit={applyGrid} searchQuery={search} onSearchChange={setSearch} filterMode={filter} onFilterModeChange={setFilter} sortBy={sort} onSortByChange={setSort} />}
+    {document && <WorkspaceToolbar totalCount={icons.length} selectedCount={selectedIcons.length} onSelectAll={() => setIcons((current) => current.map((icon) => ({ ...icon, selected: true })))} onDeselectAll={() => setIcons((current) => current.map((icon) => ({ ...icon, selected: false })))} onOpenInStudio={openSelectedInStudio} onPrepareFor3D={() => void prepareSelectedFor3D()} onExportSelected={() => void exportSelected()} onExportAll={() => void exportSelected(true)} onReprocess={() => { if (document) void loadFile(new File([document.rawContent], document.filename)); }} onManualSplit={() => setShowManual(true)} onGridSplit={applyGrid} searchQuery={search} onSearchChange={setSearch} filterMode={filter} onFilterModeChange={setFilter} sortBy={sort} onSortByChange={setSort} />}
     {error && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
     {!document ? <button type="button" onClick={() => inputRef.current?.click()} className="group flex min-h-[360px] w-full flex-col items-center justify-center rounded-[24px] border-2 border-dashed border-primary/40 bg-[var(--card-bg)] p-8 text-center shadow-xl transition hover:border-primary hover:bg-primary/[0.04]"><span className="mb-4 rounded-2xl bg-primary/10 p-4 text-primary transition group-hover:scale-105"><UploadCloud className="h-10 w-10" /></span><h2 className="text-xl font-black text-foreground">{busy ? "Processing vector sheet..." : "Upload a vector sheet"}</h2><p className="mt-2 text-sm text-[var(--text-secondary)]">SVG, outlined EPS, and Illustrator exports are processed locally.</p><span className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-xs font-black text-white shadow-[0_4px_16px_rgba(22,199,132,0.25)]">Choose file</span></button> : <>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl"><div><p className="font-black text-foreground">{document.filename}</p><p className="text-xs text-[var(--text-secondary)]">{icons.length} icons · {selectedIcons.length} selected</p></div><div className="flex flex-wrap items-center gap-2"><input value={prefix} onChange={(event) => setPrefix(event.target.value.replace(/[^a-z0-9-_]/gi, "-"))} aria-label="Filename prefix" className="w-24 rounded-lg border border-[var(--card-border)] bg-[var(--input-bg)] px-2 py-2 text-xs text-foreground" /><select value={format} onChange={(event) => setFormat(event.target.value as ExportFormat)} className="rounded-lg border border-[var(--card-border)] bg-[var(--input-bg)] px-2 py-2 text-xs text-foreground"><option value="svg">SVG</option><option value="eps">EPS</option><option value="png">PNG</option><option value="jpg">JPG</option><option value="webp">WebP</option><option value="pdf">PDF</option></select><button type="button" onClick={clearWorkspace} className="inline-flex items-center gap-1.5 rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-xs font-bold text-white hover:border-red-500 hover:bg-red-500 dark:border-red-600 dark:bg-red-600 dark:text-white dark:hover:border-red-500 dark:hover:bg-red-500 transition-all duration-150 active:scale-95 shadow-xs" title="Clear workspace"><RotateCcw className="h-3.5 w-3.5" />Clear</button></div></div>
-      {visibleIcons.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{visibleIcons.map((icon) => <article key={icon.id} className={`overflow-hidden rounded-2xl border transition-all ${icon.selected ? "border-primary bg-primary/5 shadow-[0_0_0_1px_rgba(52,211,153,0.15)]" : "border-white/10 bg-[#0a1915]"}`}><button type="button" onClick={() => toggleIcon(icon.id)} className="relative block aspect-square w-full bg-white p-4"><img src={makePreview(icon)} alt={icon.name} className="h-full w-full object-contain" />{icon.selected ? <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-black shadow-lg ring-2 ring-white"><Check className="h-3.5 w-3.5" /></span> : <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white/80 text-transparent"><Check className="h-3.5 w-3.5" /></span>}</button><div className="p-3"><p className="truncate text-xs font-bold text-white">{icon.name}</p><div className="mt-3 flex gap-1"><button type="button" onClick={() => void exportOne(icon)} title="Download" className="rounded-lg border border-white/10 p-2 text-slate-300"><Download className="h-3.5 w-3.5" /></button><button type="button" onClick={() => void openStudio(icon)} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-red-600 text-[10px] font-black text-white hover:bg-red-500"><Box className="h-3.5 w-3.5" />3D Studio</button></div></div></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-400">No icons match this filter.</div>}
+      {visibleIcons.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{visibleIcons.map((icon) => <article key={icon.id} className={`overflow-hidden rounded-2xl border transition-all ${icon.selected ? "border-primary bg-primary/5 shadow-[0_0_0_1px_rgba(52,211,153,0.15)]" : "border-white/10 bg-[#0a1915]"}`}><button type="button" onClick={() => toggleIcon(icon.id)} className="relative block aspect-square w-full bg-white p-4"><img src={makePreview(icon)} alt={icon.name} className="h-full w-full object-contain" />{icon.selected ? <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-black shadow-lg ring-2 ring-white"><Check className="h-3.5 w-3.5" /></span> : <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white/80 text-transparent"><Check className="h-3.5 w-3.5" /></span>}</button><div className="p-3"><p className="truncate text-xs font-bold text-white">{icon.name}</p><div className="mt-3 flex gap-1"><button type="button" onClick={() => void exportOne(icon)} title="Download" className="rounded-lg border border-white/10 p-2 text-slate-300"><Download className="h-3.5 w-3.5" /></button><button type="button" onClick={() => void openStudio(icon)} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-red-600 text-[10px] font-black text-white hover:bg-red-500"><Box className="h-3.5 w-3.5" />3D Studio</button><button type="button" onClick={() => void prepareFor3D([icon])} title={`Prepare ${icon.name} for 3D extrusion`} aria-label={`Prepare ${icon.name} for 3D extrusion`} className="rounded-lg bg-primary p-2 text-[#071b17] hover:bg-primary-hover"><Sparkles className="h-3.5 w-3.5" /></button></div></div></article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-400">No icons match this filter.</div>}
     </>}
     {showManual && document && <ManualSplitModal isOpen={showManual} document={document} onClose={() => setShowManual(false)} onApplyManualSplit={replaceIcons} />}
   </div>;

@@ -71,6 +71,7 @@ export type IconAsset = {
   name: string;
   text: string;
   preview: string;
+  preparedFor3D?: boolean;
 };
 
 export type StudioControls = {
@@ -104,7 +105,7 @@ export type StudioControls = {
   // Animations & Video
   animation: AnimationKind;
   animSpeed: number;
-  videoDuration: number; // 1 to 20 seconds
+  videoDuration: number; // 5 to 60 seconds
 };
 
 type BatchStatus = {
@@ -129,6 +130,8 @@ type PreviewHandle = {
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
+const VIDEO_EXPORT_FPS = 30;
+const VIDEO_EXPORT_VISIBILITY_ERROR = "Keep the 3D Icon Studio tab visible during video export, then try again.";
 
 function yieldToBrowser(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -224,7 +227,7 @@ const defaultControls: StudioControls = {
   fastPreview: true,
   animation: "none",
   animSpeed: 1,
-  videoDuration: 4, // 4 seconds by default, max 20
+  videoDuration: 10,
 };
 
 function sanitizeHex(value: string) {
@@ -528,16 +531,34 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
 
   data.paths.forEach((path, pathIndex) => {
     const pathColor = parseColorFromPath(path, gradientMap, controls.color);
-    const material = makeMaterial(controls, pathColor);
+    const faceMaterial = makeMaterial(controls, pathColor);
+    const material = asset.preparedFor3D
+      ? [
+          faceMaterial,
+          new THREE.MeshPhysicalMaterial({
+            color: new THREE.Color(pathColor).multiplyScalar((controls.brightness / 100) * 0.42),
+            roughness: 0.22,
+            metalness: 0.16,
+            clearcoat: 0.9,
+            clearcoatRoughness: 0.08,
+            side: THREE.DoubleSide,
+          }),
+        ]
+      : faceMaterial;
     const shapes = SVGLoader.createShapes(path);
 
     // Subtle Z elevation per SVG layer so overlapping paths don't Z-fight or occlude
     const zElevation = pathIndex * 0.04;
 
     shapes.forEach((shape) => {
-      const safeBevel = Math.min(controls.bevel, controls.depth * 0.7);
+      const shapeBounds = new THREE.Box2().setFromPoints(shape.getPoints(48)).getSize(new THREE.Vector2());
+      const extrusionDepth = controls.depth;
+      const maxBevel = asset.preparedFor3D
+        ? Math.min(extrusionDepth * 0.45, Math.max(0.35, Math.min(shapeBounds.x, shapeBounds.y) * 0.08))
+        : controls.depth * 0.7;
+      const safeBevel = Math.min(controls.bevel, maxBevel);
       const rawGeo = new THREE.ExtrudeGeometry(shape, {
-        depth: Math.max(0.8, controls.depth),
+        depth: Math.max(0.8, extrusionDepth),
         bevelEnabled: safeBevel > 0,
         bevelSize: safeBevel * 0.58,
         bevelThickness: safeBevel * 0.52,
@@ -557,6 +578,64 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
       mesh.userData = { pathColor };
       group.add(mesh);
       shapeCount += 1;
+
+      if (asset.preparedFor3D) {
+        const insetDepth = Math.max(1, extrusionDepth * 0.48);
+        const insetGeometry = new THREE.ExtrudeGeometry(shape, {
+          depth: insetDepth,
+          bevelEnabled: safeBevel > 0,
+          bevelSize: safeBevel * 0.18,
+          bevelThickness: safeBevel * 0.16,
+          bevelSegments,
+          curveSegments,
+          steps: 1,
+        });
+        insetGeometry.scale(1, -1, 1);
+        insetGeometry.computeBoundingBox();
+        const insetBounds = insetGeometry.boundingBox;
+        if (insetBounds) {
+          const insetCenter = insetBounds.getCenter(new THREE.Vector3());
+          insetGeometry.translate(-insetCenter.x, -insetCenter.y, 0);
+          insetGeometry.scale(0.88, 0.88, 1);
+          insetGeometry.translate(
+            insetCenter.x + shapeBounds.x * 0.025,
+            insetCenter.y + shapeBounds.y * 0.025,
+            extrusionDepth - insetDepth + safeBevel * 0.52 + 0.08
+          );
+          insetGeometry.computeVertexNormals();
+
+          const insetColor = new THREE.Color(pathColor);
+          const insetLightness = insetColor.getHSL({ h: 0, s: 0, l: 0 }).l;
+          if (insetLightness > 0.85) insetColor.multiplyScalar(0.86);
+          else insetColor.lerp(new THREE.Color(0xffffff), 0.28);
+
+          const insetSideColor = insetColor.clone().multiplyScalar(0.58);
+          const insetMesh = new THREE.Mesh(insetGeometry, [
+            new THREE.MeshPhysicalMaterial({
+              color: insetColor,
+              roughness: 0.12,
+              metalness: 0.04,
+              clearcoat: 1,
+              clearcoatRoughness: 0.04,
+              side: THREE.DoubleSide,
+            }),
+            new THREE.MeshPhysicalMaterial({
+              color: insetSideColor,
+              roughness: 0.2,
+              metalness: 0.12,
+              clearcoat: 0.9,
+              clearcoatRoughness: 0.08,
+              side: THREE.DoubleSide,
+            }),
+          ]);
+          insetMesh.castShadow = true;
+          insetMesh.receiveShadow = true;
+          insetMesh.userData = { pathColor, isPreparedInset: true };
+          group.add(insetMesh);
+        } else {
+          insetGeometry.dispose();
+        }
+      }
     });
   });
 
@@ -1101,10 +1180,11 @@ const IconPreview = forwardRef<
         }
       },
       record360Video: async (targetAsset, durationSeconds, onProgress) => {
-        const recordSize = 720;
+        const recordWidth = 1920;
+        const recordHeight = 1080;
         const offCanvas = document.createElement("canvas");
-        offCanvas.width = recordSize;
-        offCanvas.height = recordSize;
+        offCanvas.width = recordWidth;
+        offCanvas.height = recordHeight;
 
         const offRenderer = new THREE.WebGLRenderer({
           canvas: offCanvas,
@@ -1113,7 +1193,7 @@ const IconPreview = forwardRef<
           preserveDrawingBuffer: true,
           powerPreference: "high-performance",
         });
-        offRenderer.setSize(recordSize, recordSize, false);
+        offRenderer.setSize(recordWidth, recordHeight, false);
         offRenderer.setPixelRatio(1);
         offRenderer.outputColorSpace = THREE.SRGBColorSpace;
         offRenderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1123,7 +1203,7 @@ const IconPreview = forwardRef<
         offRenderer.setClearColor(bgHex, 1);
 
         const offScene = new THREE.Scene();
-        const offCamera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+        const offCamera = new THREE.PerspectiveCamera(36, recordWidth / recordHeight, 0.1, 100);
         offCamera.position.set(0, 0, 7.2);
         offCamera.lookAt(0, 0, 0);
 
@@ -1170,8 +1250,11 @@ const IconPreview = forwardRef<
         // Pre-render ready frame
         offRenderer.render(offScene, offCamera);
 
-        const stream = offCanvas.captureStream(60);
+        const stream = offCanvas.captureStream(0);
+        const videoTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined;
+        let mediaRecorder: MediaRecorder | null = null;
 
+        try {
         if (typeof MediaRecorder === "undefined") {
           throw new Error("Video export is not supported by this browser. Try Chrome, Edge, or Firefox.");
         }
@@ -1198,18 +1281,19 @@ const IconPreview = forwardRef<
           }
         }
 
-        const mediaRecorder = new MediaRecorder(stream, {
+        const recorder = new MediaRecorder(stream, {
           mimeType: selectedMimeType,
           videoBitsPerSecond: 16000000,
         });
+        mediaRecorder = recorder;
 
         const chunks: Blob[] = [];
-        mediaRecorder.ondataavailable = (e) => {
+        recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunks.push(e.data);
         };
 
-        const fps = 60;
-        const duration = Math.max(1, Math.min(20, durationSeconds || 4));
+        const fps = VIDEO_EXPORT_FPS;
+        const duration = Math.max(5, Math.min(60, durationSeconds || 10));
         const totalFrames = Math.round(duration * fps);
         const baseRotX = THREE.MathUtils.degToRad(controls.rotX);
         const baseRotY = THREE.MathUtils.degToRad(controls.rotY);
@@ -1221,13 +1305,15 @@ const IconPreview = forwardRef<
         const currentScale = (controls.scale / 100) * baseScale;
         const speed = controls.animSpeed || 1;
 
-        mediaRecorder.start(100);
+        recorder.start(100);
 
         const frameInterval = 1000 / fps;
-        const startRecordTime = performance.now();
 
         for (let i = 0; i <= totalFrames; i++) {
-          const targetTime = startRecordTime + i * frameInterval;
+          if (document.visibilityState !== "visible") {
+            throw new Error(VIDEO_EXPORT_VISIBILITY_ERROR);
+          }
+          const frameStartedAt = performance.now();
           const frameProgress = i / totalFrames;
           const animTime = frameProgress * duration;
 
@@ -1274,38 +1360,43 @@ const IconPreview = forwardRef<
           }
 
           offRenderer.render(offScene, offCamera);
+          videoTrack?.requestFrame();
           onProgress(Math.round(frameProgress * 100));
 
-          const now = performance.now();
-          const delay = Math.max(0, targetTime - now);
+          const delay = Math.max(0, frameInterval - (performance.now() - frameStartedAt));
           if (delay > 0) {
             await new Promise((r) => setTimeout(r, delay));
           }
         }
 
-        if (mediaRecorder.state === "recording") {
-          mediaRecorder.requestData();
+        if (recorder.state === "recording") {
+          recorder.requestData();
         }
 
         await new Promise((r) => setTimeout(r, 150));
 
         const videoBlob = await new Promise<Blob>((resolve, reject) => {
-          mediaRecorder.onstop = () => {
+          recorder.onstop = () => {
             const blob = new Blob(chunks, { type: selectedMimeType });
             if (!blob.size) reject(new Error("Video export produced an empty file. Please try a shorter duration."));
             else resolve(blob);
           };
-          mediaRecorder.onerror = () => reject(new Error("Video recording failed. Please try WebM or a shorter duration."));
-          mediaRecorder.stop();
+          recorder.onerror = () => reject(new Error("Video recording failed. Please try WebM or a shorter duration."));
+          recorder.stop();
         });
-
-        offScene.remove(exportGroup);
-        disposeObject(exportGroup);
-        envTexture.dispose();
-        pmremGenerator.dispose();
-        offRenderer.dispose();
-
         return { blob: videoBlob, format: formatExt };
+        } finally {
+          if (mediaRecorder?.state === "recording") mediaRecorder.stop();
+          stream.getTracks().forEach((track) => track.stop());
+          offScene.remove(exportGroup);
+          disposeObject(exportGroup);
+          envTexture.dispose();
+          pmremGenerator.dispose();
+          offRenderer.dispose();
+          offRenderer.forceContextLoss();
+          offCanvas.width = 0;
+          offCanvas.height = 0;
+        }
       },
     }),
     [controls]
@@ -1403,23 +1494,35 @@ export default function IconStudio() {
     }
 
     const ffmpeg = await ffmpegLoadRef.current;
-    await ffmpeg.writeFile("input.webm", await fetchFile(blob));
-    await ffmpeg.exec([
-      "-i", "input.webm",
-      "-c:v", "libx264",
-      "-pix_fmt", "yuv420p",
-      "-movflags", "+faststart",
-      "output.mp4",
-    ]);
-    const output = await ffmpeg.readFile("output.mp4");
-    if (typeof output === "string") throw new Error("FFmpeg returned invalid MP4 data.");
-    const mp4Bytes = new Uint8Array(output);
-    const mp4Buffer = new ArrayBuffer(mp4Bytes.byteLength);
-    new Uint8Array(mp4Buffer).set(mp4Bytes);
-    const mp4 = new Blob([mp4Buffer], { type: "video/mp4" });
     await ffmpeg.deleteFile("input.webm").catch(() => undefined);
     await ffmpeg.deleteFile("output.mp4").catch(() => undefined);
-    return { blob: mp4, format: "mp4" };
+    await ffmpeg.writeFile("input.webm", await fetchFile(blob));
+    try {
+      await ffmpeg.exec([
+        "-i", "input.webm",
+        "-an",
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-profile:v", "high",
+        "-level:v", "4.0",
+        "-r", String(VIDEO_EXPORT_FPS),
+        "-b:v", "16M",
+        "-maxrate", "16M",
+        "-bufsize", "32M",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "output.mp4",
+      ]);
+      const output = await ffmpeg.readFile("output.mp4");
+      if (typeof output === "string") throw new Error("FFmpeg returned invalid MP4 data.");
+      const mp4Bytes = new Uint8Array(output);
+      const mp4Buffer = new ArrayBuffer(mp4Bytes.byteLength);
+      new Uint8Array(mp4Buffer).set(mp4Bytes);
+      return { blob: new Blob([mp4Buffer], { type: "video/mp4" }), format: "mp4" };
+    } finally {
+      await ffmpeg.deleteFile("input.webm").catch(() => undefined);
+      await ffmpeg.deleteFile("output.mp4").catch(() => undefined);
+    }
   };
 
   const STUDIO_ASSETS_KEY = "mcustock_studio_assets";
@@ -1438,9 +1541,9 @@ export default function IconStudio() {
 
       // 2. Check for imported icons from Vector Splitter
       const importedValue =
-        idbGetSync<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import") ||
-        readSessionValue<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import") ||
-        (await idbGet<Array<{ svg: string; name: string } | { svg: string; name: string; createdAt?: number }>>("mcustock_studio_import"));
+        idbGetSync<Array<{ svg: string; name: string; createdAt?: number; preparedFor3D?: boolean }>>("mcustock_studio_import") ||
+        readSessionValue<Array<{ svg: string; name: string; createdAt?: number; preparedFor3D?: boolean }>>("mcustock_studio_import") ||
+        (await idbGet<Array<{ svg: string; name: string; createdAt?: number; preparedFor3D?: boolean }>>("mcustock_studio_import"));
 
       let finalAssets = [...existingAssets];
       let newSelectedId = existingAssets[0]?.id || "";
@@ -1455,6 +1558,7 @@ export default function IconStudio() {
             name: item.name,
             text: item.svg,
             preview: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.svg)}`,
+            preparedFor3D: item.preparedFor3D === true,
           }));
 
           // Avoid duplicates while PRESERVING existing 3D studio files!
@@ -1464,6 +1568,20 @@ export default function IconStudio() {
 
           finalAssets = [...assetsToAdd, ...nonDuplicateExisting].slice(0, MAX_FILES);
           newSelectedId = assetsToAdd[0]?.id || "";
+
+          if (batchImports.some((item) => item.preparedFor3D)) {
+            setControls((current) => ({
+              ...current,
+              material: "glossy",
+              depth: 8,
+              bevel: 5.5,
+              roughness: 10,
+              bevelSmoothing: 18,
+              fastPreview: false,
+              lighting: "studio",
+              colorMode: "svg",
+            }));
+          }
 
           // Clear the one-time import queue so it doesn't re-import on refresh
           removeSessionValue("mcustock_studio_import");
@@ -1677,6 +1795,10 @@ export default function IconStudio() {
 
   const exportCurrent = async (format: ExportFormat) => {
     if (!selectedAsset || !previewRef.current) return;
+    if (format === "mp4" && document.visibilityState !== "visible") {
+      setError(VIDEO_EXPORT_VISIBILITY_ERROR);
+      return;
+    }
     try {
       await consumeFeatureCredit("three_d_generation");
       const baseName = selectedAsset.name.replace(/\.svg$/i, "");
@@ -1707,11 +1829,15 @@ export default function IconStudio() {
         if (vidExt !== "mp4") {
           try {
             videoOutput = await convertVideoToMp4(blob, vidExt);
-          } catch {
-            setError("MP4 conversion was unavailable, so the 60 FPS WebM version was downloaded instead.");
+          } catch (conversionError) {
+            throw new Error(
+              conversionError instanceof Error
+                ? `MP4 conversion failed. No video was downloaded. ${conversionError.message}`
+                : "MP4 conversion failed. No video was downloaded."
+            );
           }
         }
-        downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-60fps.${videoOutput.format}`);
+        downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-${VIDEO_EXPORT_FPS}fps.${videoOutput.format}`);
         setVideoRecording(false);
       }
     } catch (exportError) {
@@ -1722,6 +1848,10 @@ export default function IconStudio() {
 
   const exportSelectedVideos = async () => {
     if (!previewRef.current || videoRecording || batch.running) return;
+    if (document.visibilityState !== "visible") {
+      setError(VIDEO_EXPORT_VISIBILITY_ERROR);
+      return;
+    }
     const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
     const targets = selectedAssets.length ? selectedAssets : selectedAsset ? [selectedAsset] : [];
     if (!targets.length) return;
@@ -1735,6 +1865,7 @@ export default function IconStudio() {
       await consumeFeatureCredit("three_d_generation", targets.length);
       let completed = 0;
       let failed = 0;
+      let interruptedByBackground = false;
       for (const asset of targets) {
         if (cancelBatch.current) break;
         setBatch({ running: true, current: asset.name, completed, failed });
@@ -1748,20 +1879,30 @@ export default function IconStudio() {
           if (format !== "mp4") {
             try {
               videoOutput = await convertVideoToMp4(blob, format);
-            } catch {
-              setError("MP4 conversion was unavailable, so a 60 FPS WebM file was downloaded.");
+            } catch (conversionError) {
+              throw new Error(
+                conversionError instanceof Error
+                  ? `MP4 conversion failed. ${conversionError.message}`
+                  : "MP4 conversion failed."
+              );
             }
           }
           const baseName = asset.name.replace(/\.svg$/i, "");
-          downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-60fps.${videoOutput.format}`);
+          downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-${VIDEO_EXPORT_FPS}fps.${videoOutput.format}`);
           completed += 1;
-        } catch {
+        } catch (videoError) {
           failed += 1;
+          setError(videoError instanceof Error ? videoError.message : "Video export failed.");
+          if (videoError instanceof Error && videoError.message === VIDEO_EXPORT_VISIBILITY_ERROR) {
+            interruptedByBackground = true;
+            break;
+          }
         }
         setBatch({ running: true, current: asset.name, completed, failed });
         await new Promise((resolve) => window.setTimeout(resolve, 350));
       }
-      if (failed > 0) setError(`${failed} selected video export${failed === 1 ? "" : "s"} failed.`);
+      if (interruptedByBackground) setError(VIDEO_EXPORT_VISIBILITY_ERROR);
+      else if (failed > 0) setError(`${failed} selected video export${failed === 1 ? "" : "s"} failed.`);
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "Selected video export failed.");
     } finally {
@@ -1882,18 +2023,6 @@ export default function IconStudio() {
               ariaLabel="Fast preview"
             />
           </div>
-
-          {/* 360 Video Turntable MP4 Export */}
-          <button
-            type="button"
-            onClick={() => void exportCurrent("mp4")}
-            disabled={!selectedAsset || videoRecording}
-            className="flex h-11 items-center gap-2 rounded-2xl border border-primary/40 bg-primary/10 hover:bg-primary/20 px-3.5 text-xs font-bold text-primary transition-all duration-200 disabled:opacity-40"
-            title={`Download ${controls.videoDuration}s Turntable rotation video`}
-          >
-            {videoRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-            <span>{videoRecording ? `Recording (${videoProgress}%)` : `Video (${controls.videoDuration}s)`}</span>
-          </button>
 
           {/* Quick Copy to Clipboard */}
           <button
@@ -2056,19 +2185,19 @@ export default function IconStudio() {
               ariaLabel="Kinetic animation"
             />
 
-            {/* Video Duration Slider (Max 20s) */}
+            {/* Stock video duration */}
             <div className="pt-2 border-t border-[var(--card-border)]">
               <Slider
-                label="Video Loop Duration (Max 20s)"
-                min={1}
-                max={20}
+                label="Video Duration (5–60s)"
+                min={5}
+                max={60}
                 step={1}
                 suffix="s"
                 value={controls.videoDuration}
                 onChange={(v) => updateControl("videoDuration", v)}
               />
               <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Output: {controls.videoDuration} seconds @ 60 FPS ({controls.videoDuration * 60} frames, MP4 when supported; WebM fallback)
+                Stock video: 1920×1080, {controls.videoDuration}s @ {VIDEO_EXPORT_FPS} FPS, MP4
               </p>
             </div>
 
@@ -2406,7 +2535,7 @@ export default function IconStudio() {
                 onClick={() => void exportCurrent("mp4")}
                 disabled={!selectedAsset || videoRecording}
                 className="flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/20 px-3 py-2 text-xs font-bold text-primary transition-all disabled:opacity-40 shadow-sm"
-                title={`Download ${controls.videoDuration}s Turntable Video (Max 20s)`}
+                title={`Download ${controls.videoDuration}s 1080p MP4 video`}
               >
                 {videoRecording ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
                 <span>{controls.videoDuration}s Video</span>
@@ -2446,7 +2575,7 @@ export default function IconStudio() {
                 onClick={() => void exportSelectedVideos()}
                 disabled={!selectedIds.length || batch.running || videoRecording}
                 className="flex items-center gap-1.5 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2 text-xs font-bold text-primary transition-all hover:bg-primary/20 disabled:opacity-40"
-                title="Download selected icons as individual 60 FPS videos"
+                title={`Download selected icons as individual ${VIDEO_EXPORT_FPS} FPS videos`}
               >
                 {videoRecording ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
                 <span>Videos ({selectedIds.length})</span>

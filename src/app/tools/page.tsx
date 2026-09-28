@@ -26,7 +26,7 @@ const tools = [
     description:
       "Generate SEO-optimized titles, descriptions, and exactly 49 keywords tailored for major stock agencies.",
     isNew: false,
-    href: "/dashboard/metadata",
+    href: "/dashboard/generator",
   },
   {
     icon: <Sparkles className="h-8 w-8 text-primary" />,
@@ -42,7 +42,7 @@ const tools = [
     description:
       "Generate perfectly formatted metadata CSVs for Adobe Stock, Shutterstock, and Freepik in one click.",
     isNew: false,
-    href: "/dashboard/metadata",
+    href: "/dashboard/generator",
   },
   {
     icon: <PenTool className="h-8 w-8 text-primary" />,

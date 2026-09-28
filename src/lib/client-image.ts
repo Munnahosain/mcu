@@ -1,9 +1,14 @@
 const MAX_UPLOAD_BYTES = 1_500_000;
 const MAX_DIMENSION = 1600;
 const VECTOR_FILE_PATTERN = /\.(ai|eps|epsf|svg|pdf)$/i;
+const VIDEO_FILE_PATTERN = /\.(mp4|mov|webm|m4v)$/i;
 
 export function isVectorFile(file: File) {
   return VECTOR_FILE_PATTERN.test(file.name);
+}
+
+export function isVideoFile(file: File) {
+  return file.type.startsWith('video/') || VIDEO_FILE_PATTERN.test(file.name);
 }
 
 function isSvgFile(file: File) {
@@ -42,6 +47,63 @@ async function rasterizeSvgForUpload(file: File): Promise<File> {
 export function prepareImageForUpload(file: File) {
   if (isSvgFile(file)) return rasterizeSvgForUpload(file);
   return isVectorFile(file) ? Promise.resolve(file) : compressImageForUpload(file);
+}
+
+export async function createVideoContactSheet(file: File): Promise<File> {
+  const video = document.createElement('video');
+  const objectUrl = URL.createObjectURL(file);
+  video.preload = 'metadata';
+  video.muted = true;
+  video.src = objectUrl;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      video.addEventListener('loadedmetadata', () => resolve(), { once: true });
+      video.addEventListener('error', () => reject(new Error('This video could not be decoded by your browser.')), { once: true });
+    });
+    if (!Number.isFinite(video.duration) || video.duration <= 0) {
+      throw new Error('This video has no supported duration for frame analysis.');
+    }
+
+    const frameWidth = 512;
+    const frameHeight = 288;
+    const canvas = document.createElement('canvas');
+    canvas.width = frameWidth * 2;
+    canvas.height = frameHeight * 2;
+    const context = canvas.getContext('2d');
+    if (!context || !video.videoWidth || !video.videoHeight) {
+      throw new Error('This video does not contain readable frames.');
+    }
+
+    const frameTimes = [0.1, 0.35, 0.65, 0.9].map((portion) =>
+      Math.min(video.duration * portion, Math.max(video.duration - 0.05, 0))
+    );
+    for (const [index, time] of frameTimes.entries()) {
+      if (Math.abs(video.currentTime - time) >= 0.01) {
+        await new Promise<void>((resolve, reject) => {
+          video.addEventListener('seeked', () => resolve(), { once: true });
+          video.addEventListener('error', () => reject(new Error('A video frame could not be decoded.')), { once: true });
+          video.currentTime = time;
+        });
+      }
+
+      const scale = Math.min(frameWidth / video.videoWidth, frameHeight / video.videoHeight);
+      const width = video.videoWidth * scale;
+      const height = video.videoHeight * scale;
+      const x = (index % 2) * frameWidth + (frameWidth - width) / 2;
+      const y = Math.floor(index / 2) * frameHeight + (frameHeight - height) / 2;
+      context.fillStyle = '#111111';
+      context.fillRect((index % 2) * frameWidth, Math.floor(index / 2) * frameHeight, frameWidth, frameHeight);
+      context.drawImage(video, x, y, width, height);
+    }
+
+    const blob = await canvasToBlob(canvas, 0.85, 'image/jpeg');
+    return new File([blob], 'video-contact-sheet.jpg', { type: 'image/jpeg' });
+  } finally {
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export async function compressImageForUpload(file: File): Promise<File> {

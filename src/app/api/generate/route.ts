@@ -22,19 +22,22 @@ function buildPrompt(
   platform: string,
   additionalKeywords: string,
   negativeTitleWords: string,
-  negativeKeywords: string
+  negativeKeywords: string,
+  isVideo: boolean
 ): string {
-  return `You are an expert stock photography SEO metadata generator.
+  return `You are an expert stock ${isVideo ? 'video footage' : 'photography'} SEO metadata generator.
 
-Analyze the image and return ONLY a valid JSON object. No extra text, no markdown fences, no code blocks.
+Analyze the ${isVideo ? 'four temporally ordered frames from this video' : 'image'} and return ONLY a valid JSON object. No extra text, no markdown fences, no code blocks.
 
 Return exactly this JSON structure:
 {
-  "title": "descriptive SEO title for the image",
-  "description": "detailed description of the image subject, mood, and context",
+  "title": "descriptive SEO title for the visual content",
+  "description": "detailed description of the subject, action, mood, and context",
   "keywords": ["keyword1", "keyword2", "keyword3", "..."],
-  "category": "best matching stock photo category"
+  "category": "best matching stock content category"
 }
+
+${isVideo ? 'Describe the visible action and motion across the frames. Do not invent audio, dialogue, or events not shown.' : ''}
 
 STRICT RULES — FOLLOW EXACTLY:
 1. "title": MUST be between ${Math.max(titleLength - 20, 10)} and ${titleLength} characters. Do NOT exceed ${titleLength} characters.
@@ -74,6 +77,7 @@ export async function POST(req: Request) {
     const additionalKeywords = ((formData.get('additionalKeywords') as string) || '').trim();
     const negativeTitleWords = ((formData.get('negativeTitleWords') as string) || '').trim();
     const negativeKeywords = ((formData.get('negativeKeywords') as string) || '').trim();
+    const isVideo = formData.get('contentType') === 'video';
 
     if (!image) {
       return NextResponse.json({ success: false, error: 'No image provided.' }, { status: 400 });
@@ -120,7 +124,8 @@ export async function POST(req: Request) {
       platform,
       additionalKeywords,
       negativeTitleWords,
-      negativeKeywords
+      negativeKeywords,
+      isVideo
     );
 
     const responseText = await callVisionProvider({

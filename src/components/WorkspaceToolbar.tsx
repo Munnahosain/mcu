@@ -19,6 +19,7 @@ interface WorkspaceToolbarProps {
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onOpenInStudio: () => void;
+  onPrepareFor3D: () => void;
   onExportSelected: () => void;
   onExportAll: () => void;
   onReprocess: () => void;
@@ -38,6 +39,7 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
   onSelectAll,
   onDeselectAll,
   onOpenInStudio,
+  onPrepareFor3D,
   onExportSelected,
   onExportAll,
   onReprocess,
@@ -237,6 +239,17 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
             >
               <Box className="w-3.5 h-3.5" />
               <span>Open in 3D Studio</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onPrepareFor3D}
+              disabled={selectedCount === 0}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#071b17] bg-primary hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Normalize selected icons into closed shapes, then open in 3D Studio"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Prepare for 3D</span>
             </button>
 
             {/* Export buttons */}
