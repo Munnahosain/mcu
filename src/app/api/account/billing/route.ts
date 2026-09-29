@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
 import { Subscription } from '@/server/models/Subscription';
-import { Plan } from '@/server/models/Plan';
+import { Plan, OFFICIAL_PLANS_SEED } from '@/server/models/Plan';
 import { CreditLedger } from '@/server/models/CreditLedger';
+import { hasMongoDbConfig } from '@/server/db/database-config';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,6 +12,62 @@ export const revalidate = 0;
 export async function GET(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
+
+    if (!hasMongoDbConfig()) {
+      const freePlan = OFFICIAL_PLANS_SEED[0];
+      const monthly = user.credits?.monthly ?? 2000;
+      const bonus = user.credits?.bonus ?? 500;
+      const used = user.credits?.used ?? 0;
+      const remaining = monthly + bonus;
+      const allowance = freePlan.monthlyCredits || 100;
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: String(user._id ?? user.id),
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+        plan: {
+          id: 'free',
+          name: freePlan.name,
+          slug: freePlan.slug,
+          description: freePlan.description,
+          monthlyPrice: freePlan.monthlyPrice,
+          yearlyPrice: freePlan.yearlyPrice,
+          currency: freePlan.currency,
+          monthlyCredits: freePlan.monthlyCredits,
+          batchLimit: freePlan.batchLimit,
+          bgRemovalLimit: freePlan.bgRemovalLimit,
+          activeDeviceLimit: freePlan.activeDeviceLimit,
+          creditRolloverEnabled: freePlan.creditRolloverEnabled,
+          maxRolloverCredits: freePlan.maxRolloverCredits,
+        },
+        subscription: {
+          id: 'free',
+          status: 'active',
+          startedAt: new Date().toISOString(),
+          currentPeriodStart: new Date().toISOString(),
+          currentPeriodEnd: null,
+          expiresAt: null,
+          billingInterval: 'month',
+          cancelledAt: null,
+        },
+        credits: {
+          balance: remaining,
+          remaining,
+          monthly,
+          bonus,
+          used,
+          monthlyAllowance: allowance,
+          rolloverCredits: bonus,
+          usedThisCycle: used,
+          usagePercent: 0,
+        },
+        transactions: [],
+      });
+    }
+
     await connectToDatabase();
 
     const [subscription, currentPlan, transactions] = await Promise.all([
@@ -129,9 +186,17 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
-    await connectToDatabase();
     const body = await req.json().catch(() => ({}));
     const action = body.action;
+
+    if (!hasMongoDbConfig()) {
+      return NextResponse.json({
+        success: true,
+        message: action === 'cancel' ? 'Subscription renewal cancelled.' : 'Subscription resumed.',
+      });
+    }
+
+    await connectToDatabase();
 
     if (action === 'cancel') {
       const activeSub = await Subscription.findOne({

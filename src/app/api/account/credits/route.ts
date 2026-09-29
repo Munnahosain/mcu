@@ -4,10 +4,35 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { Subscription } from '@/server/models/Subscription';
 import '@/server/models/Plan';
 import { consumeCredits, InsufficientCreditsError } from '@/server/services/credit-service';
+import { hasMongoDbConfig } from '@/server/db/database-config';
 
 export async function GET(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
+
+    if (!hasMongoDbConfig()) {
+      const monthly = user.credits?.monthly || 2000;
+      const bonus = user.credits?.bonus || 500;
+      const used = user.credits?.used || 0;
+      return NextResponse.json({
+        success: true,
+        credits: {
+          monthly,
+          bonus,
+          used,
+          remaining: monthly + bonus,
+          total: monthly + bonus + used,
+        },
+        plan: 'free',
+        subscription: {
+          status: 'active',
+          expiresAt: null,
+          provider: 'free',
+          plan: { name: 'Free', slug: 'free', monthlyCredits: 100, billingInterval: 'month' },
+        },
+      });
+    }
+
     await connectToDatabase();
 
     const subscription = await Subscription.findOne({

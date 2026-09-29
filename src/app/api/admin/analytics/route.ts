@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { requireAdmin, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
 import { AiCost } from '@/server/models/AiCost';
-import { Plan } from '@/server/models/Plan';
+import { Plan, OFFICIAL_PLANS_SEED } from '@/server/models/Plan';
 import { Usage } from '@/server/models/Usage';
 import { User } from '@/server/models/User';
+import { hasMongoDbConfig } from '@/server/db/database-config';
 
 function getRange(days: number) {
   const end = new Date();
@@ -20,6 +21,20 @@ export async function GET(req: Request) {
     const requestedDays = Number(new URL(req.url).searchParams.get('days') || '30');
     const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 30;
     const { start, end } = getRange(days);
+
+    if (!hasMongoDbConfig()) {
+      return NextResponse.json({
+        success: true,
+        days,
+        range: { start, end },
+        newUsers: [{ _id: new Date().toISOString().slice(0, 10), count: 1 }],
+        planDistribution: [{ _id: 'super_admin', count: 1 }, { _id: 'user', count: 1 }],
+        usage: { metadataGenerated: 0, backgroundRemoved: 0, threeDGenerated: 0, apiRequests: 0, creditsUsed: 0, storageUsedMB: 0 },
+        aiCost: [],
+        plans: OFFICIAL_PLANS_SEED.length,
+      });
+    }
+
     await connectToDatabase();
 
     const [newUsers, planDistribution, usage, aiCost] = await Promise.all([

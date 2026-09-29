@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActiveTab,
   PatternSettings,
@@ -26,6 +26,8 @@ import {
   Sun,
   Moon,
   ArrowLeft,
+  Palette,
+  Shuffle,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -41,6 +43,8 @@ interface HeaderProps {
   onUndo: () => void;
   onRedo: () => void;
   onOpenHelp: () => void;
+  onOpenColorways: () => void;
+  onScatterMotifs: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,15 +59,34 @@ export const Header: React.FC<HeaderProps> = ({
   onUndo,
   onRedo,
   onOpenHelp,
+  onOpenColorways,
+  onScatterMotifs,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const templateMenuRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window === 'undefined') return true;
     return (localStorage.getItem('mcustock_theme') || 'dark') === 'dark';
   });
 
-  // Sync theme with mcumetadata.vercel.app convention ('mcustock_theme')
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (templateMenuRef.current && !templateMenuRef.current.contains(event.target as Node)) {
+        setShowTemplateMenu(false);
+      }
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sync theme with mcumetadata convention
   useEffect(() => {
     try {
       const stored = localStorage.getItem('mcustock_theme') || 'dark';
@@ -124,51 +147,53 @@ export const Header: React.FC<HeaderProps> = ({
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]">Textile Studio</p>
-          <h1 className="flex items-center gap-2 truncate text-lg font-extrabold">
-            Pattern Maker <span className="text-primary">Fabric Engine</span>
-            <span className="hidden rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 font-mono text-[10px] uppercase text-primary sm:inline">300 DPI PRO</span>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Textile Studio</p>
+          <h1 className="flex items-center gap-2 truncate text-base font-extrabold text-foreground">
+            Pattern Maker <span className="text-primary font-bold">Fabric Engine</span>
+            <span className="hidden rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase text-primary sm:inline">300 DPI PRO</span>
           </h1>
         </div>
       </div>
 
-      {/* Template Quick Switcher. Branding lives in the dashboard shell above. */}
-      <div className="relative min-w-0 shrink-0">
+      {/* Template Presets, Colorway & Smart Scatter */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {/* Template Menu */}
+        <div ref={templateMenuRef} className="relative min-w-0 shrink-0">
           <button
             id="btn-templates"
             onClick={() => setShowTemplateMenu(!showTemplateMenu)}
-            className="flex h-11 items-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-xs font-bold text-[var(--text-secondary)] transition-all hover:bg-primary/15 hover:text-primary"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-xs font-bold text-[var(--text-secondary)] transition-all hover:bg-primary/15 hover:text-primary"
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#18c98a]" />
-            <span className="hidden md:inline text-[#77808c]">Preset:</span>
-            <span className="font-medium text-[#f5f7f8]">Templates</span>
-            <ChevronDown className="w-3 h-3 text-[#77808c]" />
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden sm:inline">Preset:</span>
+            <span className="font-bold text-foreground">Templates</span>
+            <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
           </button>
 
           {showTemplateMenu && (
-            <div className="absolute left-0 mt-1 w-64 bg-[#17191e] rounded-lg shadow-2xl border border-[#252a31] py-1.5 z-50">
-              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[#77808c] font-bold font-mono">
+            <div className="absolute left-0 mt-1 w-64 rounded-xl shadow-2xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1.5 z-50">
+              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-bold font-mono">
                 Seamless Design Presets
               </div>
               {STARTER_TEMPLATES.map((tmpl) => (
                 <button
                   key={tmpl.id}
                   onClick={() => handleLoadTemplate(tmpl.id)}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#20242a] text-[#f5f7f8] flex flex-col transition"
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--input-bg)] text-foreground flex flex-col transition"
                 >
-                  <span className="font-semibold text-[#18c98a]">{tmpl.name}</span>
-                  <span className="text-[11px] text-[#77808c] truncate">
+                  <span className="font-semibold text-primary">{tmpl.name}</span>
+                  <span className="text-[11px] text-[var(--text-secondary)] truncate">
                     {tmpl.description}
                   </span>
                 </button>
               ))}
-              <div className="border-t border-[#252a31] my-1" />
+              <div className="border-t border-[var(--card-border)] my-1" />
               <button
                 onClick={() => {
                   setElements([]);
                   setShowTemplateMenu(false);
                 }}
-                className="w-full text-left px-3 py-1.5 text-xs text-rose-400 hover:bg-[#20242a] transition"
+                className="w-full text-left px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 transition"
               >
                 Clear to Blank Canvas
               </button>
@@ -176,12 +201,33 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
+        {/* Colorway Studio / Palette Harmonizer */}
+        <button
+          onClick={onOpenColorways}
+          title="Open Colorway Studio & Palette Harmonizer"
+          className="flex h-10 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition shadow-sm"
+        >
+          <Palette className="w-3.5 h-3.5 text-primary" />
+          <span>Colorways</span>
+        </button>
+
+        {/* Smart Auto-Scatter Motifs */}
+        <button
+          onClick={onScatterMotifs}
+          title="Smart Auto-Scatter motifs seamlessly across the canvas"
+          className="flex h-10 items-center gap-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] px-3 text-xs font-bold text-[var(--text-secondary)] hover:text-foreground hover:bg-primary/15 hover:border-primary/30 transition"
+        >
+          <Shuffle className="w-3.5 h-3.5 text-primary" />
+          <span className="hidden sm:inline">Auto-Scatter</span>
+        </button>
+      </div>
+
       {/* Navigation View Tabs */}
-      <div className="hidden shrink-0 items-center rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5 shadow-inner md:flex">
+      <div className="hidden shrink-0 items-center rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5 shadow-inner md:flex">
         <button
           id="tab-artboard"
           onClick={() => setActiveTab('artboard')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
             activeTab === 'artboard'
               ? 'bg-primary text-background shadow-sm'
               : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
@@ -194,7 +240,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="tab-tiling"
           onClick={() => setActiveTab('tiling')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
             activeTab === 'tiling'
               ? 'bg-primary text-background shadow-sm'
               : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
@@ -207,7 +253,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="tab-fabric-spec"
           onClick={() => setActiveTab('fabric-spec')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
             activeTab === 'fabric-spec'
               ? 'bg-primary text-background shadow-sm'
               : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
@@ -220,7 +266,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="tab-mockups"
           onClick={() => setActiveTab('mockups')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
             activeTab === 'mockups'
               ? 'bg-primary text-background shadow-sm'
               : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
@@ -233,12 +279,12 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Action Controls: Undo/Redo, Theme & Export */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <div className="hidden items-center gap-1 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5 lg:flex">
+        <div className="hidden items-center gap-1 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5 lg:flex">
           <button
             onClick={onUndo}
             disabled={!canUndo}
             title="Undo (Ctrl+Z)"
-            className="p-1.5 rounded hover:bg-[#20242a] text-[#aeb5bf] disabled:opacity-30 disabled:pointer-events-none transition"
+            className="p-1.5 rounded-lg hover:bg-[var(--card-bg)] text-[var(--text-secondary)] disabled:opacity-30 disabled:pointer-events-none transition"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -246,17 +292,17 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onRedo}
             disabled={!canRedo}
             title="Redo (Ctrl+Y)"
-            className="p-1.5 rounded hover:bg-[#20242a] text-[#aeb5bf] disabled:opacity-30 disabled:pointer-events-none transition"
+            className="p-1.5 rounded-lg hover:bg-[var(--card-bg)] text-[var(--text-secondary)] disabled:opacity-30 disabled:pointer-events-none transition"
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Dark/Light Mode Switcher matching mcumetadata.vercel.app */}
+        {/* Dark/Light Mode Switcher */}
         <button
           onClick={toggleTheme}
           title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] transition-all hover:bg-primary/15 hover:text-primary"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] transition-all hover:bg-primary/15 hover:text-primary"
         >
           {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
@@ -264,17 +310,17 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenHelp}
           title="Edge Wrapping & Math Guide"
-          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] transition-all hover:bg-primary/15 hover:text-primary"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] transition-all hover:bg-primary/15 hover:text-primary"
         >
           <HelpCircle className="w-4 h-4" />
         </button>
 
-        {/* Export Dropdown in signature MCUSTOCK Mint */}
-        <div className="relative">
+        {/* Export Dropdown */}
+        <div ref={exportMenuRef} className="relative">
           <button
             id="btn-export-dropdown"
             onClick={() => setShowExportMenu(!showExportMenu)}
-            className="flex h-11 items-center gap-1.5 rounded-2xl bg-primary px-4 text-xs font-bold text-background shadow-[0_0_15px_rgba(22,199,132,0.3)] transition-all hover:bg-primary/90 active:scale-[0.98]"
+            className="flex h-10 items-center gap-1.5 rounded-xl bg-primary px-4 text-xs font-bold text-background shadow-md transition-all hover:bg-primary/90 active:scale-[0.98]"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export</span>
@@ -282,8 +328,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {showExportMenu && (
-            <div className="absolute right-0 mt-1 w-64 bg-[#17191e] rounded-lg shadow-2xl border border-[#252a31] py-1.5 z-50">
-              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[#77808c] font-bold font-mono">
+            <div className="absolute right-0 mt-1 w-64 rounded-xl shadow-2xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1.5 z-50">
+              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-bold font-mono">
                 Tile Outputs (300 DPI)
               </div>
               <button
@@ -291,22 +337,22 @@ export const Header: React.FC<HeaderProps> = ({
                   void exportHighResTile(elements, settings, 3);
                   setShowExportMenu(false);
                 }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-[#20242a] text-[#f5f7f8] flex flex-col transition"
+                className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--input-bg)] text-foreground flex flex-col transition"
               >
-                <span className="font-semibold text-[#f5f7f8]">1:1 Seamless Tile (PNG 1500px)</span>
-                <span className="text-[11px] text-[#77808c]">High-res for digital textile printing</span>
+                <span className="font-semibold text-foreground">1:1 Seamless Tile (PNG 1500px)</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">High-res for digital textile printing</span>
               </button>
 
               <button
                 onClick={handleExportSvg}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-[#20242a] text-[#f5f7f8] flex flex-col transition"
+                className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--input-bg)] text-foreground flex flex-col transition"
               >
-                <span className="font-semibold text-[#f5f7f8]">Vector SVG Seamless Tile</span>
-                <span className="text-[11px] text-[#77808c]">Pure scalable vectors with auto edge clip</span>
+                <span className="font-semibold text-foreground">Vector SVG Seamless Tile</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Pure scalable vectors with auto edge clip</span>
               </button>
 
-              <div className="border-t border-[#252a31] my-1" />
-              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[#77808c] font-bold font-mono">
+              <div className="border-t border-[var(--card-border)] my-1" />
+              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-bold font-mono">
                 Production Sheets
               </div>
 
@@ -315,10 +361,10 @@ export const Header: React.FC<HeaderProps> = ({
                   void exportFabricSpecSheet(elements, settings);
                   setShowExportMenu(false);
                 }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-[#20242a] text-[#18c98a] flex flex-col transition"
+                className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--input-bg)] text-primary flex flex-col transition"
               >
                 <span className="font-semibold">Fabric Cutting Spec Sheet</span>
-                <span className="text-[11px] text-[#77808c]">
+                <span className="text-[11px] text-[var(--text-secondary)]">
                   Full blueprint with cm/inch repeat, seam allowance & bolt yield
                 </span>
               </button>
@@ -328,10 +374,10 @@ export const Header: React.FC<HeaderProps> = ({
                   void exportTiledFabric(elements, settings, 4, 4);
                   setShowExportMenu(false);
                 }}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-[#20242a] text-[#f5f7f8] flex flex-col transition"
+                className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--input-bg)] text-foreground flex flex-col transition"
               >
-                <span className="font-semibold text-[#f5f7f8]">4×4 Continuous Fabric Sheet</span>
-                <span className="text-[11px] text-[#77808c]">Simulated repeat bolt ready to print</span>
+                <span className="font-semibold text-foreground">4×4 Continuous Fabric Sheet</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Simulated repeat bolt ready to print</span>
               </button>
             </div>
           )}
@@ -340,4 +386,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

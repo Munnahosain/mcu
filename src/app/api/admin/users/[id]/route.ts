@@ -4,6 +4,8 @@ import { requireAdmin, requireRole, authorizationErrorResponse } from '@/server/
 import { connectToDatabase } from '@/server/db/mongodb';
 import { AuditLog } from '@/server/models/AuditLog';
 import { User } from '@/server/models/User';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { findDevUserById, updateDevUserStatus, deleteDevUser } from '@/server/auth/dev-auth';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -11,6 +13,26 @@ export async function GET(req: Request, context: RouteContext) {
   try {
     await requireAdmin(req);
     const { id } = await context.params;
+
+    if (!hasMongoDbConfig()) {
+      const devUser = findDevUserById(id);
+      if (!devUser) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
+      return NextResponse.json({
+        success: true,
+        user: {
+          _id: devUser.id,
+          id: devUser.id,
+          name: devUser.name,
+          email: devUser.email,
+          role: devUser.role,
+          status: devUser.status,
+          credits: devUser.credits,
+          createdAt: devUser.createdAt,
+          planId: { name: 'Creator', slug: 'creator', price: 199, billingInterval: 'month', monthlyCredits: 2000 },
+        },
+      });
+    }
+
     if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     await connectToDatabase();
@@ -27,7 +49,6 @@ export async function PATCH(req: Request, context: RouteContext) {
   try {
     const actor = await requireRole(req, ['super_admin', 'admin']);
     const { id } = await context.params;
-    if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     const body = await req.json().catch(() => ({}));
     const requestedStatus = typeof body.status === 'string' ? body.status : undefined;
@@ -38,6 +59,16 @@ export async function PATCH(req: Request, context: RouteContext) {
     if (requestedRole && !['super_admin', 'admin', 'support', 'user'].includes(requestedRole)) {
       return NextResponse.json({ success: false, error: 'Invalid account role.' }, { status: 400 });
     }
+
+    if (!hasMongoDbConfig()) {
+      const devUser = findDevUserById(id);
+      if (!devUser) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
+      if (requestedStatus) updateDevUserStatus(id, requestedStatus as any);
+      if (requestedRole) devUser.role = requestedRole as any;
+      return NextResponse.json({ success: true, user: { ...devUser, _id: devUser.id } });
+    }
+
+    if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     await connectToDatabase();
     const target = await User.findById(id).select('role status').lean();
@@ -80,6 +111,12 @@ export async function DELETE(req: Request, context: RouteContext) {
   try {
     const actor = await requireRole(req, ['super_admin', 'admin']);
     const { id } = await context.params;
+
+    if (!hasMongoDbConfig()) {
+      deleteDevUser(id);
+      return NextResponse.json({ success: true, message: 'User deleted successfully.' });
+    }
+
     if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     await connectToDatabase();

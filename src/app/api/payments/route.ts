@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
-import { Plan } from '@/server/models/Plan';
+import { Plan, OFFICIAL_PLANS_SEED } from '@/server/models/Plan';
 import { Payment } from '@/server/models/Payment';
 import { AuditLog } from '@/server/models/AuditLog';
 import { enforceRateLimit } from '@/server/auth/rate-limit';
 import { getBkashSettings, normalizeBangladeshMobile, normalizeTransactionId, createPaymentId } from '@/server/services/payment-service';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { inMemoryStore } from '@/server/db/in-memory-store';
 
 export async function GET(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
+
+    if (!hasMongoDbConfig()) {
+      const userPayments = inMemoryStore.payments.filter(p => p.userId._id === String(user._id || user.id));
+      return NextResponse.json({ success: true, payments: userPayments });
+    }
+
     await connectToDatabase();
     const payments = await Payment.find({ userId: user._id }).sort({ createdAt: -1 }).limit(100).lean();
     return NextResponse.json({ success: true, payments: payments.map((payment) => ({ ...payment, _id: String(payment._id), userId: String(payment.userId), planId: String(payment.planId) })) });
@@ -19,7 +27,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
-    const limited = enforceRateLimit(req, String(user._id), { limit: 5, windowMs: 15 * 60 * 1000, keyPrefix: 'payment-submit' });
+    const limited = enforceRateLimit(req, String(user._id || user.id), { limit: 10, windowMs: 15 * 60 * 1000, keyPrefix: 'payment-submit' });
     if (limited) return limited;
     const body = await req.json().catch(() => ({}));
     const planId = typeof body.planId === 'string' ? body.planId.trim() : '';
@@ -30,6 +38,27 @@ export async function POST(req: Request) {
     if (!senderNumber) return NextResponse.json({ success: false, error: 'Please enter a valid Bangladesh mobile number.' }, { status: 400 });
     if (!transactionId) return NextResponse.json({ success: false, error: 'Transaction ID is required.' }, { status: 400 });
     if (body.termsAccepted !== true) return NextResponse.json({ success: false, error: 'Please accept the Terms and Conditions.' }, { status: 400 });
+
+    if (!hasMongoDbConfig()) {
+      const targetPlan = OFFICIAL_PLANS_SEED.find(p => p.slug === planId || `seed-${OFFICIAL_PLANS_SEED.indexOf(p)}` === planId) || OFFICIAL_PLANS_SEED[1];
+      const amount = billingInterval === 'year' ? targetPlan.yearlyPrice : targetPlan.monthlyPrice;
+      const paymentId = createPaymentId();
+      const newPayment = {
+        _id: `pay-${Date.now()}`,
+        paymentId,
+        userId: { _id: String(user._id || user.id), name: user.name, email: user.email },
+        planId: targetPlan.slug,
+        planNameSnapshot: targetPlan.name,
+        amount,
+        provider: 'bkash',
+        senderNumber,
+        transactionId,
+        status: 'pending' as const,
+        createdAt: new Date().toISOString(),
+      };
+      inMemoryStore.payments.unshift(newPayment);
+      return NextResponse.json({ success: true, payment: { paymentId, status: 'pending', amount, currency: 'BDT' } }, { status: 201 });
+    }
 
     await connectToDatabase();
     const settings = await getBkashSettings();

@@ -183,29 +183,32 @@ export async function exportTiledFabric(
   }
 
   // Draw repeats with repeatType offset (Grid, Half-Drop, Half-Brick)
-  for (let c = 0; c < repeatCols; c++) {
-    for (let r = 0; r < repeatRows; r++) {
+  // Rendering from -1 to repeatCols/Rows ensures half-shift offsets never produce edge gaps
+  for (let c = -1; c <= repeatCols; c++) {
+    for (let r = -1; r <= repeatRows; r++) {
       let x = c * tileSizePx;
       let y = r * tileSizePx;
 
       if (settings.repeatType === 'half-drop') {
-        if (c % 2 === 1) {
+        if (Math.abs(c) % 2 === 1) {
           y += tileSizePx / 2;
         }
       } else if (settings.repeatType === 'half-brick') {
-        if (r % 2 === 1) {
+        if (Math.abs(r) % 2 === 1) {
           x += tileSizePx / 2;
         }
       }
 
-      ctx.drawImage(tileCanvas, x, y);
-
-      // Wrap if half-drop or half-brick leaves top/left gap
-      if (settings.repeatType === 'half-drop' && c % 2 === 1) {
-        ctx.drawImage(tileCanvas, x, y - tileSizePx * repeatRows);
-      }
-      if (settings.repeatType === 'half-brick' && r % 2 === 1) {
-        ctx.drawImage(tileCanvas, x - tileSizePx * repeatCols, y);
+      if (settings.repeatType === 'mirror-quad') {
+        const flipX = Math.abs(c) % 2 === 1;
+        const flipY = Math.abs(r) % 2 === 1;
+        ctx.save();
+        ctx.translate(x + (flipX ? tileSizePx : 0), y + (flipY ? tileSizePx : 0));
+        ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+        ctx.drawImage(tileCanvas, 0, 0);
+        ctx.restore();
+      } else {
+        ctx.drawImage(tileCanvas, x, y);
       }
     }
   }

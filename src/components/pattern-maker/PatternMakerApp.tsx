@@ -17,6 +17,8 @@ import { FabricSpecView } from './components/FabricSpecView';
 import { MockupView } from './components/MockupView';
 import { ShapeLibraryModal } from './components/ShapeLibraryModal';
 import { HelpModal } from './components/HelpModal';
+import { ColorwayModal } from './components/ColorwayModal';
+import { TextPromptModal } from './components/TextPromptModal';
 import { importVectorFile } from './utils/vectorImport';
 
 export default function App() {
@@ -60,6 +62,9 @@ export default function App() {
   const [zoom, setZoom] = useState<number>(1);
   const [isShapeLibraryOpen, setIsShapeLibraryOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [isColorwayOpen, setIsColorwayOpen] = useState<boolean>(false);
+  const [isTextPromptOpen, setIsTextPromptOpen] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Push current elements state to history before mutating
   const pushHistory = useCallback(() => {
@@ -255,13 +260,14 @@ export default function App() {
     setSelectedId(newElement.id);
   };
 
-  // Add Monogram / Text Motif
+  // Add Monogram / Text Motif modal trigger
   const handleAddText = () => {
+    setIsTextPromptOpen(true);
+  };
+
+  const handleTextPromptSubmit = (textPrompt: string) => {
     pushHistory();
     const S = settings.artboardSize;
-    const textPrompt = window.prompt('Enter monogram or text for pattern:', 'Bloom');
-    if (!textPrompt) return;
-
     const newElement: DesignElement = {
       id: `text-${Date.now()}`,
       name: `Text: ${textPrompt}`,
@@ -284,6 +290,40 @@ export default function App() {
     };
     setElements((prev) => [...prev, newElement]);
     setSelectedId(newElement.id);
+  };
+
+  // Smart Harmonic Motif Auto-Scatter across toroidal repeat
+  const handleScatterMotifs = () => {
+    if (elements.length === 0) {
+      setToastMessage("Load or add some motifs first before scattering.");
+      return;
+    }
+    pushHistory();
+    const S = settings.artboardSize;
+    const edgeCoords = [
+      { x: 0, y: S * 0.3 },
+      { x: S, y: S * 0.7 },
+      { x: S * 0.4, y: 0 },
+      { x: S * 0.8, y: S },
+    ];
+    setElements((prev) =>
+      prev.map((el, i) => {
+        let newX = Math.round((Math.sin(i * 1.7 + 0.6) * 0.36 + 0.5) * S);
+        let newY = Math.round((Math.cos(i * 2.1 + 1.1) * 0.36 + 0.5) * S);
+        if (i < edgeCoords.length) {
+          newX = Math.round(edgeCoords[i].x);
+          newY = Math.round(edgeCoords[i].y);
+        }
+        const rots = [0, 30, 45, 90, 135, 180, 270, 315];
+        return {
+          ...el,
+          x: newX,
+          y: newY,
+          rotation: rots[(i * 3) % rots.length],
+        };
+      })
+    );
+    setToastMessage("Motifs seamlessly scattered with edge wrapping!");
   };
 
   // Upload Custom Stamp / Graphic
@@ -328,7 +368,7 @@ export default function App() {
   const handleImportVector = (fileName: string, data: ArrayBuffer | string) => {
     const imported = importVectorFile(fileName, data, settings.artboardSize);
     if (imported.elements.length === 0) {
-      window.alert(imported.warnings.join('\n') || 'No editable vector content found.');
+      setToastMessage(imported.warnings.join('\n') || 'No editable vector content found.');
       return;
     }
 
@@ -338,7 +378,7 @@ export default function App() {
       zIndex: prev.length + index + 1,
     })).concat(prev));
     setSelectedId(imported.elements[imported.elements.length - 1].id);
-    if (imported.warnings.length > 0) window.alert(imported.warnings.join('\n'));
+    if (imported.warnings.length > 0) setToastMessage(imported.warnings.join('\n'));
   };
 
   const selectedElement = elements.find((e) => e.id === selectedId) || null;
@@ -358,6 +398,8 @@ export default function App() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenColorways={() => setIsColorwayOpen(true)}
+        onScatterMotifs={handleScatterMotifs}
       />
 
       {/* Main Workspace Body */}
@@ -440,6 +482,39 @@ export default function App() {
 
       {/* Help & Zero-Math Edge Wrapping Guide Modal */}
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      {/* Colorway Studio / Palette Harmonizer Modal */}
+      <ColorwayModal
+        isOpen={isColorwayOpen}
+        onClose={() => setIsColorwayOpen(false)}
+        elements={elements}
+        setElements={setElements}
+        settings={settings}
+        setSettings={setSettings}
+        onPushHistory={pushHistory}
+      />
+
+      {/* Text / Monogram Input Modal (zero window.prompt) */}
+      <TextPromptModal
+        isOpen={isTextPromptOpen}
+        onClose={() => setIsTextPromptOpen(false)}
+        onSubmit={handleTextPromptSubmit}
+      />
+
+      {/* Modern In-App Toast Notification (zero window.alert) */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-primary/40 bg-[var(--card-bg)] px-4 py-3 text-xs font-bold text-foreground shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+          <span className="flex h-2 w-2 rounded-full bg-primary" />
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="ml-2 rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--input-bg)] hover:text-foreground"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

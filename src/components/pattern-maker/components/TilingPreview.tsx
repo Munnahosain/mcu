@@ -9,6 +9,9 @@ import {
   Download,
   Layers,
   Sparkles,
+  Waves,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { exportTiledFabric } from '../utils/exportUtils';
 
@@ -32,6 +35,32 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
+  const [isKineticFlow, setIsKineticFlow] = useState<boolean>(false);
+
+  // Smooth Kinetic Flow / Endless Pan Animation
+  useEffect(() => {
+    if (!isKineticFlow) return;
+    let animId: number;
+    let lastTime = performance.now();
+    const speed = 45; // pixels per second
+
+    const tick = (time: number) => {
+      const dt = (time - lastTime) / 1000;
+      lastTime = time;
+      setPan((p) => {
+        const tileSize = 280;
+        let newX = p.x - speed * dt;
+        let newY = p.y - speed * dt;
+        if (newX < -tileSize) newX += tileSize;
+        if (newY < -tileSize) newY += tileSize;
+        return { x: newX, y: newY };
+      });
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, [isKineticFlow]);
 
   // Render seamless tiling in real-time
   useEffect(() => {
@@ -68,33 +97,35 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
     }
 
     // Tile across columns and rows with seamless wrapping and repeat offsets
-    for (let c = 0; c < repeatCount; c++) {
-      for (let r = 0; r < repeatCount; r++) {
+    for (let c = -1; c <= repeatCount; c++) {
+      for (let r = -1; r <= repeatCount; r++) {
         let x = c * tileSize;
         let y = r * tileSize;
 
         if (settings.repeatType === 'half-drop') {
-          if (c % 2 === 1) {
+          if (Math.abs(c) % 2 === 1) {
             y += tileSize / 2;
           }
         } else if (settings.repeatType === 'half-brick') {
-          if (r % 2 === 1) {
+          if (Math.abs(r) % 2 === 1) {
             x += tileSize / 2;
           }
         }
 
-        ctx.drawImage(offscreen, x, y);
-
-        // Fill gaps produced by half-drop/half-brick at the edge
-        if (settings.repeatType === 'half-drop' && c % 2 === 1) {
-          ctx.drawImage(offscreen, x, y - tileSize * repeatCount);
-        }
-        if (settings.repeatType === 'half-brick' && r % 2 === 1) {
-          ctx.drawImage(offscreen, x - tileSize * repeatCount, y);
+        if (settings.repeatType === 'mirror-quad') {
+          const flipX = Math.abs(c) % 2 === 1;
+          const flipY = Math.abs(r) % 2 === 1;
+          ctx.save();
+          ctx.translate(x + (flipX ? tileSize : 0), y + (flipY ? tileSize : 0));
+          ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+          ctx.drawImage(offscreen, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.drawImage(offscreen, x, y);
         }
 
         // Optional tile outline to inspect seams
-        if (showTileBorders) {
+        if (showTileBorders && c >= 0 && c < repeatCount && r >= 0 && r < repeatCount) {
           ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
           ctx.lineWidth = 1;
           ctx.strokeRect(x, y, tileSize, tileSize);
@@ -137,9 +168,9 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
 
           <div className="h-4 w-px bg-[#252a31] hidden sm:block" />
 
-          {/* Repeat Type Buttons */}
+          {/* Repeat Type Buttons including mirror-quad */}
           <div className="flex items-center gap-1 bg-[#17191e] p-0.5 rounded-lg border border-[#252a31]">
-            {(['grid', 'half-drop', 'half-brick'] as const).map((mode) => (
+            {(['grid', 'half-drop', 'half-brick', 'mirror-quad'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() =>
@@ -151,7 +182,7 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
                     : 'text-[#aeb5bf] hover:text-[#f5f7f8]'
                 }`}
               >
-                {mode.replace('-', ' ')}
+                {mode === 'mirror-quad' ? '4-Way Mirror' : mode.replace('-', ' ')}
               </button>
             ))}
           </div>
@@ -171,8 +202,22 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
           </div>
         </div>
 
-        {/* Right Tools: Seam Borders, Zoom, Download */}
+        {/* Right Tools: Kinetic Flow, Seam Borders, Zoom, Download */}
         <div className="flex items-center gap-2">
+          {/* Unique Feature: Live Kinetic Motion Flow */}
+          <button
+            onClick={() => setIsKineticFlow(!isKineticFlow)}
+            title="Toggle continuous motion flow preview for textile patterns"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition ${
+              isKineticFlow
+                ? 'bg-[#18c98a] text-black border-[#18c98a] font-bold shadow-md'
+                : 'bg-[#17191e] text-[#aeb5bf] border-[#252a31] hover:text-[#f5f7f8]'
+            }`}
+          >
+            <Waves className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Kinetic Flow</span>
+          </button>
+
           <button
             onClick={() => setShowTileBorders(!showTileBorders)}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border transition ${

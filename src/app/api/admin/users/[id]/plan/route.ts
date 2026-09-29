@@ -3,9 +3,11 @@ import { Types } from 'mongoose';
 import { requireRole, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
 import { AuditLog } from '@/server/models/AuditLog';
-import { Plan } from '@/server/models/Plan';
+import { Plan, OFFICIAL_PLANS_SEED } from '@/server/models/Plan';
 import { Subscription } from '@/server/models/Subscription';
 import { User } from '@/server/models/User';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { findDevUserById } from '@/server/auth/dev-auth';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -15,6 +17,21 @@ export async function POST(req: Request, context: RouteContext) {
     const { id } = await context.params;
     const body = await req.json().catch(() => ({}));
     const planId = typeof body.planId === 'string' ? body.planId : '';
+
+    if (!hasMongoDbConfig()) {
+      const devUser = findDevUserById(id);
+      if (!devUser) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
+      const targetPlan = OFFICIAL_PLANS_SEED.find(p => p.slug === planId || `seed-${OFFICIAL_PLANS_SEED.indexOf(p)}` === planId) || OFFICIAL_PLANS_SEED[2];
+      devUser.planId = targetPlan.slug;
+      devUser.credits.monthly = targetPlan.monthlyCredits;
+      return NextResponse.json({
+        success: true,
+        plan: { ...targetPlan, _id: targetPlan.slug },
+        subscription: { id: 'sub-dev', status: 'active', startedAt: new Date().toISOString() },
+        user: { ...devUser, _id: devUser.id, planId: targetPlan.slug },
+      });
+    }
+
     if (!Types.ObjectId.isValid(id) || !Types.ObjectId.isValid(planId)) return NextResponse.json({ success: false, error: 'Invalid user or plan.' }, { status: 400 });
 
     await connectToDatabase();

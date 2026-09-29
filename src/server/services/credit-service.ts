@@ -2,6 +2,8 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { CreditLedger } from '@/server/models/CreditLedger';
 import { User } from '@/server/models/User';
 import { SystemSetting } from '@/server/models/SystemSetting';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { updateDevUserCredits } from '@/server/auth/dev-auth';
 
 type CreditCostKey =
   | 'metadata_generation'
@@ -22,9 +24,14 @@ type CreditCostKey =
 
 async function resolveCreditAmount(amount: number, costKey?: CreditCostKey) {
   if (!costKey) return amount;
-  const setting = await SystemSetting.findOne({ key: 'credit_costs' }).lean();
-  const configured = Number((setting?.value as Record<string, unknown> | undefined)?.[costKey]);
-  return Number.isFinite(configured) && configured >= 0 ? amount * Math.floor(configured) : amount;
+  if (!hasMongoDbConfig()) return amount;
+  try {
+    const setting = await SystemSetting.findOne({ key: 'credit_costs' }).lean();
+    const configured = Number((setting?.value as Record<string, unknown> | undefined)?.[costKey]);
+    return Number.isFinite(configured) && configured >= 0 ? amount * Math.floor(configured) : amount;
+  } catch {
+    return amount;
+  }
 }
 
 export class InsufficientCreditsError extends Error {
@@ -36,6 +43,12 @@ export class InsufficientCreditsError extends Error {
 
 export async function consumeCredits(userId: string, amount = 1, reason = 'Feature usage', costKey?: CreditCostKey) {
   if (!Number.isInteger(amount) || amount <= 0) throw new Error('Credit amount must be a positive integer.');
+
+  if (!hasMongoDbConfig()) {
+    updateDevUserCredits(userId, -amount, 0, amount);
+    return { _id: userId, credits: { monthly: 2000, bonus: 500, used: amount } };
+  }
+
   await connectToDatabase();
   const effectiveAmount = await resolveCreditAmount(amount, costKey);
   if (effectiveAmount === 0) return User.findById(userId).select('_id credits').lean();
@@ -68,6 +81,12 @@ export async function consumeCredits(userId: string, amount = 1, reason = 'Featu
 
 export async function refundCredits(userId: string, amount = 1, reason = 'Failed feature usage refund', costKey?: CreditCostKey) {
   if (!Number.isInteger(amount) || amount <= 0) throw new Error('Credit amount must be a positive integer.');
+
+  if (!hasMongoDbConfig()) {
+    updateDevUserCredits(userId, amount, 0, -amount);
+    return;
+  }
+
   await connectToDatabase();
   const effectiveAmount = await resolveCreditAmount(amount, costKey);
   if (effectiveAmount === 0) return;

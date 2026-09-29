@@ -4,15 +4,11 @@ import mongoose from 'mongoose';
 export const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.set('updatePipeline', true);
+mongoose.set('bufferCommands', false); // Fail fast, don't hang if offline
 
-/**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections growing exponentially
- * during API Route usage.
- */
 interface GlobalMongoose {
   conn: typeof mongoose | null;
-  promise: Promise<typeof mongoose> | null;
+  promise: Promise<typeof mongoose | null> | null;
 }
 
 declare global {
@@ -25,9 +21,10 @@ if (!cached) {
   cached = global.mongooseCache = { conn: null, promise: null };
 }
 
-export async function connectToDatabase() {
+export async function connectToDatabase(): Promise<typeof mongoose | null> {
   if (!MONGODB_URI) {
-    throw new Error('MongoDB is not configured. Set MONGODB_URI in .env.local.');
+    // MongoDB is not configured - return null without crashing
+    return null;
   }
 
   if (cached!.conn) {
@@ -50,9 +47,12 @@ export async function connectToDatabase() {
       connectTimeoutMS: 5000,
     };
 
-    cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+    cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
       console.log('MongoDB successfully connected');
-      return mongoose;
+      return mongooseInstance;
+    }).catch((err) => {
+      console.warn('MongoDB connection failed — continuing with in-memory fallbacks:', err.message);
+      return null;
     });
   }
 
@@ -60,7 +60,8 @@ export async function connectToDatabase() {
     cached!.conn = await cached!.promise;
   } catch (e) {
     cached!.promise = null;
-    throw e;
+    console.warn('MongoDB connection error:', e);
+    return null;
   }
 
   return cached!.conn;

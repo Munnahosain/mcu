@@ -5,6 +5,8 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { AuditLog } from '@/server/models/AuditLog';
 import { CreditLedger } from '@/server/models/CreditLedger';
 import { User } from '@/server/models/User';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { updateDevUserCredits, findDevUserById } from '@/server/auth/dev-auth';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -12,13 +14,27 @@ export async function POST(req: Request, context: RouteContext) {
   try {
     const actor = await requireRole(req, ['super_admin', 'admin']);
     const { id } = await context.params;
-    if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     const body = await req.json().catch(() => ({}));
     const action = body.action;
     const amount = Number(body.amount);
     if (!['add', 'remove', 'reset'].includes(action)) return NextResponse.json({ success: false, error: 'Invalid credit action.' }, { status: 400 });
     if (action !== 'reset' && (!Number.isInteger(amount) || amount <= 0 || amount > 1_000_000)) return NextResponse.json({ success: false, error: 'Amount must be a positive whole number.' }, { status: 400 });
+
+    if (!hasMongoDbConfig()) {
+      const devUser = findDevUserById(id);
+      if (!devUser) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
+      if (action === 'reset') {
+        devUser.credits = { monthly: 0, bonus: 0, used: 0 };
+      } else if (action === 'add') {
+        updateDevUserCredits(id, 0, amount, 0);
+      } else {
+        updateDevUserCredits(id, 0, -amount, 0);
+      }
+      return NextResponse.json({ success: true, user: { ...devUser, _id: devUser.id } });
+    }
+
+    if (!Types.ObjectId.isValid(id)) return NextResponse.json({ success: false, error: 'Invalid user id.' }, { status: 400 });
 
     await connectToDatabase();
     let updated;
