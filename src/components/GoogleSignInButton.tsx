@@ -139,18 +139,19 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
           },
         });
 
-        // Determine container width
+        // Determine container width and active theme
         const containerWidth = buttonContainerRef.current.parentElement?.clientWidth || 360;
-        const targetWidth = Math.min(380, Math.max(240, containerWidth));
+        const targetWidth = Math.min(380, Math.max(260, containerWidth));
+        const isDarkMode = typeof document !== 'undefined' && (document.documentElement.classList.contains('dark') || !document.documentElement.classList.contains('light'));
 
         // Clear existing children and render native Google button visibly
         buttonContainerRef.current.replaceChildren();
         window.google.accounts.id.renderButton(buttonContainerRef.current, {
           type: "standard",
-          theme: "outline",
+          theme: isDarkMode ? "filled_black" : "outline",
           size: "large",
           text: "continue_with",
-          shape: "rectangular",
+          shape: "pill",
           logo_alignment: "left",
           width: targetWidth,
         });
@@ -213,6 +214,17 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
   useEffect(() => {
     if (clientId) {
       renderGoogleButton();
+    }
+
+    // Observe theme changes (dark/light toggle) to adapt button styling dynamically
+    if (typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(() => {
+        if (clientId) {
+          renderGoogleButton();
+        }
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      return () => observer.disconnect();
     }
   }, [clientId, renderGoogleButton]);
 
