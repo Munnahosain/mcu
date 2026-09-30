@@ -14,7 +14,7 @@ export async function tryDevLogin(email: string, password: string) {
   }
 
   const devUser = findDevUser(email);
-  if (!devUser || !verifyPassword(password, devUser.password)) {
+  if (!devUser || !devUser.password || !verifyPassword(password, devUser.password)) {
     return null;
   }
 

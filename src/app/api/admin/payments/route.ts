@@ -3,18 +3,55 @@ import { requireAdmin, authorizationErrorResponse } from '@/server/auth/authoriz
 import { connectToDatabase } from '@/server/db/mongodb';
 import { Payment } from '@/server/models/Payment';
 import { User } from '@/server/models/User';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { inMemoryStore } from '@/server/db/in-memory-store';
 
 export async function GET(req: Request) {
   try {
     await requireAdmin(req);
-    await connectToDatabase();
+
     const url = new URL(req.url);
     const status = url.searchParams.get('status');
     const search = url.searchParams.get('search')?.trim().slice(0, 100) || '';
-    const from = url.searchParams.get('from');
-    const to = url.searchParams.get('to');
     const page = Math.max(1, Number(url.searchParams.get('page') || 1));
     const limit = [20, 50, 100].includes(Number(url.searchParams.get('limit'))) ? Number(url.searchParams.get('limit')) : 20;
+
+    if (!hasMongoDbConfig()) {
+      let filtered = inMemoryStore.payments;
+      if (status && ['pending', 'approved', 'rejected', 'cancelled'].includes(status)) {
+        filtered = filtered.filter(p => p.status === status);
+      }
+      if (search) {
+        const lower = search.toLowerCase();
+        filtered = filtered.filter(p =>
+          p.paymentId.toLowerCase().includes(lower) ||
+          p.transactionId.toLowerCase().includes(lower) ||
+          p.senderNumber.includes(lower) ||
+          p.userId.name.toLowerCase().includes(lower) ||
+          p.userId.email.toLowerCase().includes(lower)
+        );
+      }
+      const total = filtered.length;
+      const paginated = filtered.slice((page - 1) * limit, page * limit);
+      const summary: Record<string, { count: number; revenue: number }> = {
+        pending: { count: inMemoryStore.payments.filter(p => p.status === 'pending').length, revenue: 0 },
+        approved: {
+          count: inMemoryStore.payments.filter(p => p.status === 'approved').length,
+          revenue: inMemoryStore.payments.filter(p => p.status === 'approved').reduce((acc, p) => acc + p.amount, 0),
+        },
+        rejected: { count: inMemoryStore.payments.filter(p => p.status === 'rejected').length, revenue: 0 },
+      };
+      return NextResponse.json({
+        success: true,
+        payments: paginated,
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+        stats: summary,
+      });
+    }
+
+    await connectToDatabase();
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
     const query: Record<string, unknown> = {};
     if (status && ['pending', 'approved', 'rejected', 'cancelled'].includes(status)) query.status = status;
     if (from || to) {

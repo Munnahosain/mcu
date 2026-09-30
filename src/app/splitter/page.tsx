@@ -20,6 +20,7 @@ const defaultExportSettings: ExportSettings = {
 };
 
 const SPLITTER_WORKSPACE_KEY = "mcustock_splitter_workspace";
+const SPLITTER_SETTINGS_KEY = "mcustock_splitter_settings";
 
 function makePreview(icon: ExtractedIcon): string {
   return icon.previewDataUrl || `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon.svgContent)}`;
@@ -38,10 +39,35 @@ function SplitterWorkspace() {
   const [showManual, setShowManual] = useState(false);
   const [prefix, setPrefix] = useState("icon");
   const [format, setFormat] = useState<ExportFormat>("svg");
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const restoredWorkspace = useRef(false);
   const settings = useMemo<ExportSettings>(() => ({ ...defaultExportSettings, format, customPrefix: prefix || "icon" }), [format, prefix]);
   const visibleIcons = useMemo(() => icons.filter((icon) => icon.name.toLowerCase().includes(search.toLowerCase())).filter((icon) => filter === "all" || (filter === "selected" ? icon.selected : !icon.selected)).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "size" ? b.width * b.height - a.width * a.height : sort === "paths" ? b.pathCount - a.pathCount : a.index - b.index), [icons, search, filter, sort]);
   const selectedIcons = icons.filter((icon) => icon.selected);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SPLITTER_SETTINGS_KEY);
+      if (saved) {
+        const settings = JSON.parse(saved) as { prefix?: string; format?: ExportFormat };
+        if (typeof settings.prefix === "string") setPrefix(settings.prefix);
+        if (["svg", "eps", "png", "jpg", "webp", "pdf"].includes(settings.format || "")) {
+          setFormat(settings.format!);
+        }
+      }
+    } catch {
+    } finally {
+      setSettingsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    try {
+      localStorage.setItem(SPLITTER_SETTINGS_KEY, JSON.stringify({ prefix, format }));
+    } catch {
+    }
+  }, [prefix, format, settingsHydrated]);
 
   useEffect(() => {
     // 1. Instant sync restore from memory cache

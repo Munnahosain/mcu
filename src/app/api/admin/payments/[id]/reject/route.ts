@@ -4,6 +4,8 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { Payment } from '@/server/models/Payment';
 import { AuditLog } from '@/server/models/AuditLog';
 import { sanitizeText } from '@/server/services/payment-service';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { inMemoryStore } from '@/server/db/in-memory-store';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,6 +14,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await req.json().catch(() => ({}));
     const reason = typeof body.reason === 'string' ? sanitizeText(body.reason, 500) : '';
     if (!reason) return NextResponse.json({ success: false, error: 'A rejection reason is required.' }, { status: 400 });
+
+    if (!hasMongoDbConfig()) {
+      const payment = inMemoryStore.payments.find(p => p._id === id || p.paymentId === id);
+      if (!payment || payment.status !== 'pending') return NextResponse.json({ success: false, error: 'Payment is not pending or was not found.' }, { status: 409 });
+      payment.status = 'rejected';
+      payment.rejectionReason = reason;
+      return NextResponse.json({ success: true, message: 'Payment rejected.' });
+    }
+
     await connectToDatabase();
     const payment = await Payment.findOne({ $or: [{ _id: id }, { paymentId: id }], status: 'pending' });
     if (!payment) return NextResponse.json({ success: false, error: 'Payment is not pending or was not found.' }, { status: 409 });

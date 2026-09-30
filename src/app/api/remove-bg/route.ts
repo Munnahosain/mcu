@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { Poof, PoofError } from "@poof-bg/js";
 import { getAuthenticatedUserId } from "@/server/auth/request-auth";
 import { enforceRateLimit } from "@/server/auth/rate-limit";
 
-const poof = new Poof({
-  apiKey: process.env.POOF_API_KEY || process.env.REMOVE_BG_API_KEY || "",
-});
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +27,14 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.POOF_API_KEY || process.env.REMOVE_BG_API_KEY;
     if (!apiKey) {
-      throw new Error("POOF_API_KEY is not configured. Add your Poof.bg key to the server env file.");
+      return NextResponse.json(
+        { success: false, error: "POOF_API_KEY is not configured. Add your Poof.bg key to the server environment." },
+        { status: 503 }
+      );
     }
+
+    const { Poof } = await import("@poof-bg/js");
+    const poof = new Poof({ apiKey });
 
     const result = await poof.removeBackground(imageFile, {
       format: "png",
@@ -45,12 +48,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const message = error instanceof PoofError
-      ? `${error.message} (${error.code})`
-      : error instanceof Error
-        ? error.message
-        : "Poof background removal failed";
-
+    const message = error instanceof Error ? error.message : "Poof background removal failed";
     console.error("Poof background removal error:", error);
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

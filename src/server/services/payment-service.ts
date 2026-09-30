@@ -8,6 +8,8 @@ import { Subscription } from '@/server/models/Subscription';
 import { User } from '@/server/models/User';
 import { CreditLedger } from '@/server/models/CreditLedger';
 import { AuditLog } from '@/server/models/AuditLog';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { inMemoryStore } from '@/server/db/in-memory-store';
 
 export function normalizeBangladeshMobile(value: string) {
   const compact = value.trim().replace(/[\s-]/g, '');
@@ -27,6 +29,9 @@ export function sanitizeText(value: string, maxLength: number) {
 }
 
 export async function getBkashSettings() {
+  if (!hasMongoDbConfig()) {
+    return inMemoryStore.paymentSettings;
+  }
   await connectToDatabase();
   return PaymentSettings.findOneAndUpdate(
     { provider: 'bkash' },
@@ -36,6 +41,13 @@ export async function getBkashSettings() {
 }
 
 export async function approvePayment(paymentObjectId: string, adminId: string, request: Request) {
+  if (!hasMongoDbConfig()) {
+    const payment = inMemoryStore.payments.find(p => p._id === paymentObjectId);
+    if (!payment) throw new Error('PAYMENT_NOT_FOUND');
+    payment.status = 'approved';
+    return { paymentId: payment.paymentId, amount: payment.amount, credits: 5000, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString() };
+  }
+
   await connectToDatabase();
   const session = await mongoose.startSession();
   try {

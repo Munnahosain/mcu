@@ -23,7 +23,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 Automatic Edge Stitching (Zero-Math Seamless Repeat)
               </h2>
               <p className="text-[11px] text-[#aeb5bf]">
-                How our 1:1 Artboard eliminates Adobe Illustrator's manual math
+                How our 1:1 Artboard eliminates Adobe Illustrator&apos;s manual math
               </p>
             </div>
           </div>
@@ -113,7 +113,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <span>Fabric Cutting & Customization Map</span>
             </h3>
             <p className="text-[11px] text-[#aeb5bf] leading-relaxed">
-              Switch to the <strong>Cutting Map</strong> tab at the top to see exact fabric bolt widths (44", 55", 60" or 110cm, 140cm), total whole repeat counts, selvage margins, and print-ready 300 DPI specifications for digital textile printing.
+              Switch to the <strong>Cutting Map</strong> tab at the top to see exact fabric bolt widths (44&quot;, 55&quot;, 60&quot; or 110cm, 140cm), total whole repeat counts, selvage margins, and print-ready 300 DPI specifications for digital textile printing.
             </p>
           </div>
         </div>
@@ -124,7 +124,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             onClick={onClose}
             className="px-4 py-2 bg-[#18c98a] hover:bg-[#14b179] text-[#071b17] font-bold rounded-lg text-xs transition shadow-sm"
           >
-            Got it, Let's Design!
+            Got it, Let&apos;s Design!
           </button>
         </div>
       </div>

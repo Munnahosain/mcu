@@ -1,0 +1,7 @@
+{
+  "name": "Design & Retro Raster Studio",
+  "description": "Creative suite featuring Pattern Maker, Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

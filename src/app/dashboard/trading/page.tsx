@@ -29,6 +29,7 @@ import type { Candle, CandleInterval, ChartTemplate, ChartType, IndicatorKey, Ma
 
 const chartWidth = 1000;
 const chartHeight = 520;
+const TRADING_SETTINGS_KEY = "mcustock-trading-settings";
 
 const CHART_TYPES: { id: ChartType; label: string; icon: string }[] = [
   { id: "candlestick", label: "Candles", icon: "🕯️" },
@@ -79,15 +80,61 @@ export default function TradingPage() {
 
   const [zoom, setZoom] = useState(1);
   const [toast, setToast] = useState("");
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
 
   useEffect(() => {
     try {
       setFavorites(JSON.parse(localStorage.getItem("mcustock-trading-favorites") || "[]"));
       setCustomTemplates(JSON.parse(localStorage.getItem("mcustock-trading-custom") || "[]"));
+      const savedSettings = localStorage.getItem(TRADING_SETTINGS_KEY);
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings) as {
+          symbol?: MarketSymbol;
+          interval?: CandleInterval;
+          template?: ChartTemplate;
+          chartType?: ChartType;
+          showVolume?: boolean;
+          showGrid?: boolean;
+          indicators?: Record<IndicatorKey, boolean>;
+        };
+        if (settings.symbol) setSymbol(settings.symbol);
+        if (settings.interval) setInterval(settings.interval);
+        if (settings.template) {
+          setTemplate({
+            ...settings.template,
+            chartType: settings.chartType || settings.template.chartType,
+            showVolume: settings.showVolume ?? settings.template.showVolume,
+            showGrid: settings.showGrid ?? settings.template.showGrid,
+          });
+        } else {
+          if (settings.chartType) setChartType(settings.chartType);
+          if (typeof settings.showVolume === "boolean") setShowVolume(settings.showVolume);
+          if (typeof settings.showGrid === "boolean") setShowGrid(settings.showGrid);
+        }
+        if (settings.indicators) setIndicators((current) => ({ ...current, ...settings.indicators }));
+      }
     } catch {
       // defaults
+    } finally {
+      setSettingsHydrated(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    try {
+      localStorage.setItem(TRADING_SETTINGS_KEY, JSON.stringify({
+        symbol,
+        interval,
+        template,
+        chartType,
+        showVolume,
+        showGrid,
+        indicators,
+      }));
+    } catch {
+    }
+  }, [symbol, interval, template, chartType, showVolume, showGrid, indicators, settingsHydrated]);
 
   useEffect(() => {
     const marketProvider = provider.current;

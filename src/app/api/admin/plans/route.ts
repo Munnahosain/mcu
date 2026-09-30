@@ -3,6 +3,7 @@ import { requireAdmin, requireRole, authorizationErrorResponse } from '@/server/
 import { connectToDatabase } from '@/server/db/mongodb';
 import { AuditLog } from '@/server/models/AuditLog';
 import { Plan, OFFICIAL_PLANS_SEED } from '@/server/models/Plan';
+import { hasMongoDbConfig } from '@/server/db/database-config';
 
 function normalizePlan(input: Record<string, unknown>) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -49,6 +50,14 @@ function normalizePlan(input: Record<string, unknown>) {
 export async function GET(req: Request) {
   try {
     await requireAdmin(req);
+
+    if (!hasMongoDbConfig()) {
+      return NextResponse.json({
+        success: true,
+        plans: OFFICIAL_PLANS_SEED.map((p, idx) => ({ ...p, _id: `seed-${idx}` })),
+      });
+    }
+
     await connectToDatabase();
     const plans = await Plan.find().sort({ sortOrder: 1, monthlyPrice: 1 }).lean();
     return NextResponse.json({
@@ -64,6 +73,14 @@ export async function POST(req: Request) {
   try {
     const actor = await requireRole(req, ['super_admin', 'admin']);
     const body = await req.json().catch(() => ({}));
+
+    if (!hasMongoDbConfig()) {
+      return NextResponse.json({
+        success: true,
+        message: 'Official BDT plans active.',
+        plans: OFFICIAL_PLANS_SEED.map((p, idx) => ({ ...p, _id: `seed-${idx}` })),
+      });
+    }
 
     await connectToDatabase();
 

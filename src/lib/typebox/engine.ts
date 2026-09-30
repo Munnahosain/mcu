@@ -577,26 +577,94 @@ export function generateSvgExport(state: TypeboxState): string {
   const height = state.artboardHeight;
   const bg = state.color.transparent ? "" : `<rect width="100%" height="100%" fill="${state.color.bgColor}"/>`;
 
-  const fontCSS = getFontFamilyCSS(state.fontFamily, state.customFontName);
-  const lines = state.text.split("\n");
-  const fontSize = state.fontSize;
-  const lineHeightPx = fontSize * state.lineHeight;
-  const totalH = lines.length * lineHeightPx;
-  const startY = height / 2 - totalH / 2 + lineHeightPx / 2 + state.transform.y;
+  let innerNodes = "";
 
-  const textAnchor = state.textAlign === "center" ? "middle" : state.textAlign === "right" ? "end" : "start";
-  const anchorX = state.textAlign === "center" ? width / 2 : state.textAlign === "right" ? width * 0.85 : width * 0.15;
-  const finalAnchorX = anchorX + state.transform.x;
+  if (state.sourceMode === "svg" && state.svgContent) {
+    try {
+      let vbWidth = 100;
+      let vbHeight = 100;
+      let svgBody = state.svgContent;
 
-  let textNodes = "";
-  lines.forEach((line, i) => {
-    const y = startY + i * lineHeightPx;
-    textNodes += `<text x="${finalAnchorX}" y="${y}" text-anchor="${textAnchor}" fill="${state.color.textColor}" font-family="${fontCSS}" font-size="${fontSize}px" font-weight="${state.fontWeight}" letter-spacing="${state.letterSpacing}px" dominant-baseline="central">${escapeXml(line)}</text>\n`;
-  });
+      if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(state.svgContent, "image/svg+xml");
+        const svgEl = doc.querySelector("svg");
+        if (svgEl) {
+          const vb = svgEl.getAttribute("viewBox");
+          if (vb) {
+            const parts = vb.trim().split(/[\s,]+/).map(Number);
+            if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+              vbWidth = parts[2];
+              vbHeight = parts[3];
+            }
+          } else {
+            const w = parseFloat(svgEl.getAttribute("width") || "100");
+            const h = parseFloat(svgEl.getAttribute("height") || "100");
+            if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
+              vbWidth = w;
+              vbHeight = h;
+            }
+          }
+          svgBody = svgEl.innerHTML;
+        }
+      } else {
+        const vbMatch = state.svgContent.match(/viewBox=["']([^"']+)["']/i);
+        if (vbMatch) {
+          const parts = vbMatch[1].trim().split(/[\s,]+/).map(Number);
+          if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+            vbWidth = parts[2];
+            vbHeight = parts[3];
+          }
+        }
+        const innerMatch = state.svgContent.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i);
+        if (innerMatch) {
+          svgBody = innerMatch[1];
+        }
+      }
 
-  const transformAttr = state.transform.rotate !== 0 
-    ? `transform="rotate(${state.transform.rotate} ${width / 2} ${height / 2})"` 
-    : "";
+      const aspect = vbWidth > 0 && vbHeight > 0 ? vbWidth / vbHeight : 1;
+      const baseSize = Math.min(width, height) * 0.5 * (state.svgScale || 1);
+      const drawW = aspect >= 1 ? baseSize : baseSize * aspect;
+      const scaleFactor = vbWidth > 0 ? drawW / vbWidth : 1;
+
+      const posX = width / 2 + state.transform.x;
+      const posY = height / 2 + state.transform.y;
+      const rotate = state.transform.rotate || 0;
+
+      innerNodes = `
+  <g transform="translate(${posX} ${posY}) rotate(${rotate}) scale(${scaleFactor.toFixed(4)}) translate(${-vbWidth / 2} ${-vbHeight / 2})" fill="${state.color.textColor}" color="${state.color.textColor}">
+    ${svgBody}
+  </g>`;
+    } catch {
+      innerNodes = `<text x="${width / 2}" y="${height / 2}" text-anchor="middle" fill="${state.color.textColor}" font-size="24px">SVG Render Error</text>`;
+    }
+  } else {
+    const fontCSS = getFontFamilyCSS(state.fontFamily, state.customFontName);
+    const lines = state.text.split("\n");
+    const fontSize = state.fontSize;
+    const lineHeightPx = fontSize * state.lineHeight;
+    const totalH = lines.length * lineHeightPx;
+    const startY = height / 2 - totalH / 2 + lineHeightPx / 2 + state.transform.y;
+
+    const textAnchor = state.textAlign === "center" ? "middle" : state.textAlign === "right" ? "end" : "start";
+    const anchorX = state.textAlign === "center" ? width / 2 : state.textAlign === "right" ? width * 0.85 : width * 0.15;
+    const finalAnchorX = anchorX + state.transform.x;
+
+    let textNodes = "";
+    lines.forEach((line, i) => {
+      const y = startY + i * lineHeightPx;
+      textNodes += `<text x="${finalAnchorX}" y="${y}" text-anchor="${textAnchor}" fill="${state.color.textColor}" font-family="${fontCSS}" font-size="${fontSize}px" font-weight="${state.fontWeight}" letter-spacing="${state.letterSpacing}px" dominant-baseline="central">${escapeXml(line)}</text>\n`;
+    });
+
+    const transformAttr = state.transform.rotate !== 0 
+      ? `transform="rotate(${state.transform.rotate} ${width / 2} ${height / 2})"` 
+      : "";
+
+    innerNodes = `
+  <g ${transformAttr}>
+    ${textNodes}
+  </g>`;
+  }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
@@ -605,9 +673,7 @@ export function generateSvgExport(state: TypeboxState): string {
     text { user-select: none; }
   </style>
   ${bg}
-  <g ${transformAttr}>
-    ${textNodes}
-  </g>
+  ${innerNodes}
 </svg>`;
 }
 

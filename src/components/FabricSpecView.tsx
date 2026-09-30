@@ -148,7 +148,7 @@ export const FabricSpecView: React.FC<FabricSpecViewProps> = ({
 
               {/* Dimension indicators on sides */}
               <div className="absolute bottom-1 right-2 bg-[#101114]/90 text-[#18c98a] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#252a31]">
-                {metrics.tileSizeInches}" × {metrics.tileSizeInches}"
+                {metrics.tileSizeInches}&quot; × {metrics.tileSizeInches}&quot;
               </div>
             </div>
 
@@ -182,7 +182,7 @@ export const FabricSpecView: React.FC<FabricSpecViewProps> = ({
                 </h2>
               </div>
               <span className="text-xs font-mono text-[#aeb5bf]">
-                Bolt Width: <strong className="text-[#18c98a]">{metrics.boltWidthCm} cm</strong> ({metrics.boltWidthInches}")
+                Bolt Width: <strong className="text-[#18c98a]">{metrics.boltWidthCm} cm</strong> ({metrics.boltWidthInches}&quot;)
               </span>
             </div>
 

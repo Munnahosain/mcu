@@ -46,6 +46,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   onPushHistory,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(zoom);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragAction, setDragAction] = useState<DragAction>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0, canvasX: 0, canvasY: 0 });
@@ -55,14 +56,18 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
 
   const [spacePressed, setSpacePressed] = useState(false);
 
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
   // Keep the artboard centered when the dashboard shell or side panels resize.
   useEffect(() => {
     const centerArtboard = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       setPan({
-        x: (rect.width - S * zoom) / 2,
-        y: (rect.height - S * zoom) / 2,
+        x: (rect.width - S * zoomRef.current) / 2,
+        y: (rect.height - S * zoomRef.current) / 2,
       });
     };
 
@@ -73,7 +78,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [S, zoom]);
+  }, [S]);
 
   // Spacebar tracking
   useEffect(() => {
@@ -82,6 +87,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
         return;
       }
       if (e.code === 'Space') {
+        if (e.type === 'keydown') e.preventDefault();
         setSpacePressed(e.type === 'keydown');
       }
     };
@@ -116,6 +122,16 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
     if (e.ctrlKey || e.metaKey) {
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
       const newZoom = Math.min(3.5, Math.max(0.3, +(zoom * zoomFactor).toFixed(2)));
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const pointerX = e.clientX - rect.left;
+        const pointerY = e.clientY - rect.top;
+        const ratio = newZoom / zoom;
+        setPan((current) => ({
+          x: pointerX - (pointerX - current.x) * ratio,
+          y: pointerY - (pointerY - current.y) * ratio,
+        }));
+      }
       setZoom(newZoom);
     } else {
       // Pan with trackpad
@@ -169,6 +185,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
 
   // Pointer Down on canvas or background
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    containerRef.current?.setPointerCapture(e.pointerId);
     if (e.button === 1 || toolMode === 'pan' || (e.button === 0 && spacePressed)) {
       // Pan
       setDragAction({
@@ -205,6 +222,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
     element: DesignElement
   ) => {
     e.stopPropagation();
+    containerRef.current?.setPointerCapture(e.pointerId);
     if (toolMode === 'pan') return;
 
     setSelectedId(element.id);
@@ -239,6 +257,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   // Pointer Down on Resize Handle
   const handleResizePointerDown = (e: React.PointerEvent, handle: string) => {
     e.stopPropagation();
+    containerRef.current?.setPointerCapture(e.pointerId);
     if (!selectedElement) return;
     onPushHistory();
 
@@ -258,6 +277,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   // Pointer Down on Rotate Handle
   const handleRotatePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
+    containerRef.current?.setPointerCapture(e.pointerId);
     if (!selectedElement) return;
     onPushHistory();
 
@@ -394,7 +414,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
 
   // Pointer Up
   const handlePointerUp = () => {
-    if (dragAction?.type === 'draw' && drawingPoints.length > 2) {
+    if (dragAction?.type === 'draw' && drawingPoints.length > 1) {
       // Convert points array into smooth SVG path data
       // Compute bounding box
       const xs = drawingPoints.map((p) => p.x);
@@ -409,12 +429,20 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       const cy = (minY + maxY) / 2;
 
       // Re-center path around (0,0) so scaling and rotation work like other elements
-      let centeredD = '';
-      for (let i = 0; i < drawingPoints.length; i++) {
-        const px = drawingPoints[i].x - cx + w / 2;
-        const py = drawingPoints[i].y - cy + h / 2;
-        centeredD += (i === 0 ? 'M' : 'L') + ` ${px.toFixed(1)} ${py.toFixed(1)}`;
+      const centeredPoints = drawingPoints.map((point) => ({
+        x: point.x - cx + w / 2,
+        y: point.y - cy + h / 2,
+      }));
+      let centeredD = `M ${centeredPoints[0].x.toFixed(1)} ${centeredPoints[0].y.toFixed(1)}`;
+      for (let i = 1; i < centeredPoints.length - 1; i++) {
+        const midpoint = {
+          x: (centeredPoints[i].x + centeredPoints[i + 1].x) / 2,
+          y: (centeredPoints[i].y + centeredPoints[i + 1].y) / 2,
+        };
+        centeredD += ` Q ${centeredPoints[i].x.toFixed(1)} ${centeredPoints[i].y.toFixed(1)} ${midpoint.x.toFixed(1)} ${midpoint.y.toFixed(1)}`;
       }
+      const lastPoint = centeredPoints[centeredPoints.length - 1];
+      centeredD += ` L ${lastPoint.x.toFixed(1)} ${lastPoint.y.toFixed(1)}`;
 
       const newElement: DesignElement = {
         id: `path-${Date.now()}`,
@@ -454,6 +482,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       {/* Top Ruler */}
       {settings.showRulers && (
@@ -736,8 +765,13 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
 
             {/* Currently drawing active stroke */}
             {dragAction?.type === 'draw' && drawingPoints.length > 1 && (
-              <polyline
-                points={drawingPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+              <path
+                d={drawingPoints.reduce((path, point, index, points) => {
+                  if (index === 0) return `M ${point.x} ${point.y}`;
+                  if (index === points.length - 1) return `${path} L ${point.x} ${point.y}`;
+                  const next = points[index + 1];
+                  return `${path} Q ${point.x} ${point.y} ${(point.x + next.x) / 2} ${(point.y + next.y) / 2}`;
+                }, '')}
                 fill="none"
                 stroke="#f59e0b"
                 strokeWidth="4"

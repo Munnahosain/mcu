@@ -4,10 +4,35 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { Subscription } from '@/server/models/Subscription';
 import '@/server/models/Plan';
 import { consumeCredits, InsufficientCreditsError } from '@/server/services/credit-service';
+import { hasMongoDbConfig } from '@/server/db/database-config';
 
 export async function GET(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
+
+    if (!hasMongoDbConfig()) {
+      const monthly = user.credits?.monthly ?? 2000;
+      const bonus = user.credits?.bonus ?? 500;
+      const used = user.credits?.used ?? 0;
+      return NextResponse.json({
+        success: true,
+        credits: {
+          monthly,
+          bonus,
+          used,
+          remaining: monthly + bonus,
+          total: monthly + bonus + used,
+        },
+        plan: 'free',
+        subscription: {
+          status: 'active',
+          expiresAt: null,
+          provider: 'free',
+          plan: { name: 'Free', slug: 'free', monthlyCredits: 100, billingInterval: 'month' },
+        },
+      });
+    }
+
     await connectToDatabase();
 
     const subscription = await Subscription.findOne({
@@ -15,9 +40,9 @@ export async function GET(req: Request) {
       status: { $in: ['active', 'trial'] },
     }).sort({ createdAt: -1 }).populate('planId', 'name slug monthlyCredits billingInterval').lean();
 
-    const monthly = user.credits?.monthly || 0;
-    const bonus = user.credits?.bonus || 0;
-    const used = user.credits?.used || 0;
+    const monthly = user.credits?.monthly ?? 0;
+    const bonus = user.credits?.bonus ?? 0;
+    const used = user.credits?.used ?? 0;
 
     return NextResponse.json({
       success: true,
@@ -50,6 +75,8 @@ export async function POST(req: Request) {
     const allowedFeatures = new Set([
       'three_d_generation', 'grid_generation', 'palette_generation', 'typebox_generation',
       'bento_generation', 'ascii_generation', 'trading_generation', 'splitter_export',
+      'metadata_generation', 'prompt_generation', 'advanced_metadata', 'batch_generation',
+      'advanced_ai', 'heavy_ai', 'background_removal', 'pattern_generation'
     ]);
     if (!allowedFeatures.has(feature)) {
       return NextResponse.json({ success: false, error: 'Invalid metered feature.' }, { status: 400 });

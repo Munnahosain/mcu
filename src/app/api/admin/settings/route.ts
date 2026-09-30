@@ -2,10 +2,23 @@ import { NextResponse } from 'next/server';
 import { requireAdmin, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
 import { SystemSetting } from '@/server/models/SystemSetting';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { inMemoryStore } from '@/server/db/in-memory-store';
 
 export async function GET(req: Request) {
   try {
     await requireAdmin(req);
+
+    if (!hasMongoDbConfig()) {
+      const settings = Array.from(inMemoryStore.systemSettings.entries()).map(([key, value], idx) => ({
+        _id: `setting-${idx}`,
+        key,
+        value,
+        updatedAt: new Date().toISOString(),
+      }));
+      return NextResponse.json({ success: true, settings });
+    }
+
     await connectToDatabase();
     const settings = await SystemSetting.find().sort({ key: 1 }).lean();
     return NextResponse.json({ success: true, settings: settings.map((setting) => ({ ...setting, _id: String(setting._id) })) });
@@ -20,6 +33,14 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const key = typeof body.key === 'string' ? body.key.trim() : '';
     if (!key) return NextResponse.json({ success: false, error: 'A setting key is required.' }, { status: 400 });
+
+    if (!hasMongoDbConfig()) {
+      inMemoryStore.systemSettings.set(key, body.value ?? '');
+      return NextResponse.json({
+        success: true,
+        setting: { _id: `setting-${key}`, key, value: body.value ?? '', updatedBy: actor._id },
+      });
+    }
 
     await connectToDatabase();
     const updated = await SystemSetting.findOneAndUpdate(

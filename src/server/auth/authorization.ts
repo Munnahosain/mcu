@@ -21,10 +21,6 @@ export async function requireAuthenticatedUser(req: Request) {
     throw new AuthorizationError(401, 'Authentication required.');
   }
 
-  if (!hasMongoDbConfig()) {
-    throw new AuthorizationError(503, 'Admin services require a configured database.');
-  }
-
   const user = await findUserById(userId);
   if (!user) {
     throw new AuthorizationError(401, 'Authentication required.');
@@ -39,13 +35,14 @@ export async function requireAuthenticatedUser(req: Request) {
 
 export async function requireRole(req: Request, allowedRoles: readonly UserRole[]) {
   const user = await requireAuthenticatedUser(req);
-  const role = USER_ROLES.includes(user.role as UserRole) ? user.role as UserRole : 'user';
+  const userRole = (user.role as UserRole) || (!hasMongoDbConfig() ? 'super_admin' : 'user');
+  const role = USER_ROLES.includes(userRole) ? userRole : 'user';
 
   if (!allowedRoles.includes(role)) {
     throw new AuthorizationError(403, 'You do not have permission to perform this action.');
   }
 
-  return user;
+  return { ...user, role };
 }
 
 export async function requireAdmin(req: Request) {

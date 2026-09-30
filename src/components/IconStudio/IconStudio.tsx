@@ -60,6 +60,8 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 export type MaterialKind = "glass" | "plastic" | "glossy" | "frosted" | "metallic" | "iridescent";
 export type Resolution = "1K" | "2K" | "4K" | "8K";
+export type VideoResolution = "4K" | "1080p" | "1:1" | "9:16" | "720p";
+export type VideoFPS = 24 | 30 | 60;
 export type ArtboardMode = "fit" | "custom";
 export type ExportFormat = "png" | "webp" | "svg" | "obj" | "gltf" | "mp4";
 export type ColorMode = "svg" | "custom";
@@ -108,6 +110,8 @@ export type StudioControls = {
   animation: AnimationKind;
   animSpeed: number;
   videoDuration: number; // 5 to 60 seconds
+  videoResolution: VideoResolution;
+  videoFps: VideoFPS;
 };
 
 type BatchStatus = {
@@ -124,7 +128,7 @@ type PreviewHandle = {
     asset: IconAsset,
     durationSeconds: number,
     onProgress: (pct: number) => void
-  ) => Promise<{ blob: Blob; format: string }>;
+  ) => Promise<{ blob: Blob; format: string; width: number; height: number; fps: number }>;
   resetView: () => void;
   centerObject: () => void;
   setManualPose: (rotX: number, rotY: number, rotZ?: number) => void;
@@ -132,7 +136,8 @@ type PreviewHandle = {
 
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
-const VIDEO_EXPORT_FPS = 24;
+const STUDIO_CONTROLS_KEY = "mcustock_3d_studio_controls";
+const VIDEO_EXPORT_FPS = 30;
 const VIDEO_EXPORT_VISIBILITY_ERROR = "Keep the 3D Icon Studio tab visible during video export, then try again.";
 
 function yieldToBrowser(): Promise<void> {
@@ -202,6 +207,52 @@ const resolutionSize: Record<Resolution, number> = {
   "8K": 8192,
 };
 
+export const VIDEO_RESOLUTION_PROFILES: Record<
+  VideoResolution,
+  { label: string; width: number; height: number; defaultBitrate: number; description: string; tag: string }
+> = {
+  "4K": {
+    label: "4K UHD (16:9)",
+    width: 3840,
+    height: 2160,
+    defaultBitrate: 55_000_000,
+    description: "3840×2160 · Premium Stock Standard (Adobe Stock & Shutterstock Top Tier)",
+    tag: "Highest Revenue",
+  },
+  "1080p": {
+    label: "1080p Full HD",
+    width: 1920,
+    height: 1080,
+    defaultBitrate: 28_000_000,
+    description: "1920×1080 · Universal Stock Standard (100% Accepted on All Marketplaces)",
+    tag: "Recommended",
+  },
+  "1:1": {
+    label: "Square (1:1)",
+    width: 1080,
+    height: 1080,
+    defaultBitrate: 22_000_000,
+    description: "1080×1080 · Social Media, App Store UI & Bento Video Stock",
+    tag: "Square 1:1",
+  },
+  "9:16": {
+    label: "Vertical (9:16)",
+    width: 1080,
+    height: 1920,
+    defaultBitrate: 28_000_000,
+    description: "1080×1920 · TikTok, Instagram Reels & YouTube Shorts Video Stock",
+    tag: "Reels / Shorts",
+  },
+  "720p": {
+    label: "720p HD Draft",
+    width: 1280,
+    height: 720,
+    defaultBitrate: 12_000_000,
+    description: "1280×720 · Fast Draft Preview for Quick Prototyping",
+    tag: "Draft Preview",
+  },
+};
+
 const defaultControls: StudioControls = {
   color: "#16c784",
   colorMode: "svg",
@@ -231,6 +282,8 @@ const defaultControls: StudioControls = {
   animation: "none",
   animSpeed: 1,
   videoDuration: 10,
+  videoResolution: "1080p",
+  videoFps: 30,
 };
 
 function sanitizeHex(value: string) {
@@ -721,6 +774,50 @@ function applyLightingPreset(preset: LightingPreset, lightsGroup: THREE.Group) {
   }
 }
 
+let exportCanvasInstance: HTMLCanvasElement | null = null;
+let exportRendererInstance: THREE.WebGLRenderer | null = null;
+let exportPmremInstance: THREE.PMREMGenerator | null = null;
+let exportEnvTextureInstance: THREE.Texture | null = null;
+
+function getSharedExportRenderer(size: number, alpha: boolean) {
+  if (!exportCanvasInstance) {
+    exportCanvasInstance = document.createElement("canvas");
+  }
+  exportCanvasInstance.width = size;
+  exportCanvasInstance.height = size;
+
+  const isContextLost = exportRendererInstance?.getContext()?.isContextLost();
+  if (!exportRendererInstance || isContextLost) {
+    if (exportRendererInstance) {
+      try {
+        exportRendererInstance.dispose();
+      } catch {}
+    }
+    exportRendererInstance = new THREE.WebGLRenderer({
+      canvas: exportCanvasInstance,
+      antialias: true,
+      alpha,
+      preserveDrawingBuffer: true,
+      powerPreference: "high-performance",
+    });
+    exportRendererInstance.setPixelRatio(1);
+    exportRendererInstance.outputColorSpace = THREE.SRGBColorSpace;
+    exportRendererInstance.toneMapping = THREE.ACESFilmicToneMapping;
+    exportRendererInstance.toneMappingExposure = 1.15;
+
+    exportPmremInstance = new THREE.PMREMGenerator(exportRendererInstance);
+    exportPmremInstance.compileEquirectangularShader();
+    exportEnvTextureInstance = exportPmremInstance.fromScene(new RoomEnvironment(), 0.04).texture;
+  }
+
+  exportRendererInstance.setSize(size, size, false);
+  return {
+    canvas: exportCanvasInstance,
+    renderer: exportRendererInstance,
+    envTexture: exportEnvTextureInstance,
+  };
+}
+
 const IconPreview = forwardRef<
   PreviewHandle,
   { asset?: IconAsset; controls: StudioControls; onError: (error: string) => void }
@@ -1064,22 +1161,7 @@ const IconPreview = forwardRef<
       },
       exportBlob: async (targetAsset, format, resolution) => {
         const size = resolutionSize[resolution];
-        const offCanvas = document.createElement("canvas");
-        offCanvas.width = size;
-        offCanvas.height = size;
-
-        const offRenderer = new THREE.WebGLRenderer({
-          canvas: offCanvas,
-          antialias: true,
-          alpha: controls.alpha,
-          preserveDrawingBuffer: true,
-          powerPreference: "high-performance",
-        });
-        offRenderer.setSize(size, size, false);
-        offRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        offRenderer.outputColorSpace = THREE.SRGBColorSpace;
-        offRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-        offRenderer.toneMappingExposure = 1.15;
+        const { canvas: offCanvas, renderer: offRenderer, envTexture } = getSharedExportRenderer(size, controls.alpha);
 
         const bgHex = new THREE.Color(controls.bgColor).getHex();
         offRenderer.setClearColor(controls.alpha ? 0x000000 : bgHex, controls.alpha ? 0 : 1);
@@ -1089,10 +1171,9 @@ const IconPreview = forwardRef<
         offCamera.position.set(0, 0, 7.2);
         offCamera.lookAt(0, 0, 0);
 
-        const pmremGenerator = new THREE.PMREMGenerator(offRenderer);
-        pmremGenerator.compileEquirectangularShader();
-        const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-        offScene.environment = envTexture;
+        if (envTexture) {
+          offScene.environment = envTexture;
+        }
 
         const offLights = new THREE.Group();
         offScene.add(offLights);
@@ -1142,11 +1223,10 @@ const IconPreview = forwardRef<
           );
         });
 
+        // Clean up only geometry and mesh objects; keep persistent WebGL context alive for the next batch icon!
         offScene.remove(exportGroup);
         disposeObject(exportGroup);
-        envTexture.dispose();
-        pmremGenerator.dispose();
-        offRenderer.dispose();
+        offScene.clear();
 
         return blob;
       },
@@ -1183,11 +1263,12 @@ const IconPreview = forwardRef<
         }
       },
       record360Video: async (targetAsset, durationSeconds, onProgress) => {
-        const qualityProfile = controls.exportQuality === "balanced"
-          ? { width: 1280, height: 720, fps: VIDEO_EXPORT_FPS, bitrate: 8_000_000 }
-          : { width: 960, height: 540, fps: 20, bitrate: 4_000_000 };
+        const qualityProfile = VIDEO_RESOLUTION_PROFILES[controls.videoResolution] || VIDEO_RESOLUTION_PROFILES["1080p"];
         const recordWidth = qualityProfile.width;
         const recordHeight = qualityProfile.height;
+        const fps = controls.videoFps || 30;
+        const bitrate = qualityProfile.defaultBitrate;
+
         const offCanvas = document.createElement("canvas");
         offCanvas.width = recordWidth;
         offCanvas.height = recordHeight;
@@ -1209,13 +1290,16 @@ const IconPreview = forwardRef<
         offRenderer.setClearColor(bgHex, 1);
 
         const offScene = new THREE.Scene();
-        const offCamera = new THREE.PerspectiveCamera(36, recordWidth / recordHeight, 0.1, 100);
-        offCamera.position.set(0, 0, 7.2);
+        const aspect = recordWidth / recordHeight;
+        // Dynamically adjust camera distance for portrait (9:16) or square (1:1) so icon is never cropped
+        const cameraDistance = aspect < 1 ? 7.2 / aspect : 7.2;
+        const offCamera = new THREE.PerspectiveCamera(36, aspect, 0.1, 100);
+        offCamera.position.set(0, 0, cameraDistance);
         offCamera.lookAt(0, 0, 0);
 
         const pmremGenerator = new THREE.PMREMGenerator(offRenderer);
         pmremGenerator.compileEquirectangularShader();
-        const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+        const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.02).texture;
         offScene.environment = envTexture;
 
         const offLights = new THREE.Group();
@@ -1227,16 +1311,17 @@ const IconPreview = forwardRef<
         if (controls.showShadow) {
           const shadowGeo = new THREE.PlaneGeometry(6, 6);
           const shadowCanvas = document.createElement("canvas");
-          shadowCanvas.width = 128;
-          shadowCanvas.height = 128;
+          shadowCanvas.width = 512;
+          shadowCanvas.height = 512;
           const sCtx = shadowCanvas.getContext("2d");
           if (sCtx) {
-            const grad = sCtx.createRadialGradient(64, 64, 0, 64, 64, 60);
-            grad.addColorStop(0, "rgba(0, 0, 0, 0.4)");
-            grad.addColorStop(0.5, "rgba(0, 0, 0, 0.12)");
+            const grad = sCtx.createRadialGradient(256, 256, 0, 256, 256, 240);
+            grad.addColorStop(0, "rgba(0, 0, 0, 0.45)");
+            grad.addColorStop(0.3, "rgba(0, 0, 0, 0.22)");
+            grad.addColorStop(0.65, "rgba(0, 0, 0, 0.06)");
             grad.addColorStop(1, "rgba(0, 0, 0, 0)");
             sCtx.fillStyle = grad;
-            sCtx.fillRect(0, 0, 128, 128);
+            sCtx.fillRect(0, 0, 512, 512);
           }
           const shadowMat = new THREE.MeshBasicMaterial({
             map: new THREE.CanvasTexture(shadowCanvas),
@@ -1261,15 +1346,16 @@ const IconPreview = forwardRef<
         let mediaRecorder: MediaRecorder | null = null;
 
         try {
-        if (typeof MediaRecorder === "undefined") {
-          throw new Error("Video export is not supported by this browser. Try Chrome, Edge, or Firefox.");
-        }
+          if (typeof MediaRecorder === "undefined") {
+            throw new Error("Video export is not supported by this browser. Try Chrome, Edge, or Firefox.");
+          }
 
-        let selectedMimeType = "video/webm";
-        let formatExt = "webm";
+          let selectedMimeType = "video/webm";
+          let formatExt = "webm";
 
-        if (typeof MediaRecorder !== "undefined") {
           const candidateTypes = [
+            { mime: "video/mp4;codecs=avc1.640028,mp4a.40.2", ext: "mp4" },
+            { mime: "video/mp4;codecs=avc1.4d4028", ext: "mp4" },
             { mime: "video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext: "mp4" },
             { mime: "video/mp4", ext: "mp4" },
             { mime: "video/webm;codecs=vp9,opus", ext: "webm" },
@@ -1285,121 +1371,133 @@ const IconPreview = forwardRef<
               break;
             }
           }
-        }
 
-        const recorder = new MediaRecorder(stream, {
-          mimeType: selectedMimeType,
-          videoBitsPerSecond: qualityProfile.bitrate,
-        });
-        mediaRecorder = recorder;
+          const recorder = new MediaRecorder(stream, {
+            mimeType: selectedMimeType,
+            videoBitsPerSecond: bitrate,
+          });
+          mediaRecorder = recorder;
 
-        const chunks: Blob[] = [];
-        recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) chunks.push(e.data);
-        };
-
-        const fps = qualityProfile.fps;
-        const duration = Math.max(5, Math.min(60, durationSeconds || 10));
-        const totalFrames = Math.round(duration * fps);
-        const baseRotX = THREE.MathUtils.degToRad(controls.rotX);
-        const baseRotY = THREE.MathUtils.degToRad(controls.rotY);
-        const baseRotZ = THREE.MathUtils.degToRad(controls.rotZ);
-        const basePosX = controls.posX / 30;
-        const basePosY = -controls.posY / 30;
-        const basePosZ = controls.posZ / 30;
-        const baseScale = (exportGroup.userData?.baseScale as number) || 1;
-        const currentScale = (controls.scale / 100) * baseScale;
-        const speed = controls.animSpeed || 1;
-
-        recorder.start(100);
-
-        const frameInterval = 1000 / fps;
-
-        for (let i = 0; i <= totalFrames; i++) {
-          if (document.visibilityState !== "visible") {
-            throw new Error(VIDEO_EXPORT_VISIBILITY_ERROR);
-          }
-          const frameStartedAt = performance.now();
-          const frameProgress = i / totalFrames;
-          const animTime = frameProgress * duration;
-
-          if (controls.animation === "floating") {
-            exportGroup.position.set(basePosX, basePosY + Math.sin(animTime * 2.2 * speed) * 0.22, basePosZ);
-            exportGroup.rotation.set(baseRotX, baseRotY + Math.sin(animTime * 1.2 * speed) * 0.08, baseRotZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          } else if (controls.animation === "wobble") {
-            exportGroup.rotation.x = baseRotX + Math.sin(animTime * 2.8 * speed) * 0.12;
-            exportGroup.rotation.y = baseRotY + Math.cos(animTime * 2.4 * speed) * 0.18;
-            exportGroup.position.set(basePosX, basePosY, basePosZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          } else if (controls.animation === "pulse") {
-            const beatTime = (animTime * 3.2 * speed) % (Math.PI * 2);
-            const beat1 = Math.pow(Math.max(0, Math.sin(beatTime)), 8) * 0.14;
-            const beat2 = Math.pow(Math.max(0, Math.sin(beatTime + 0.5)), 12) * 0.08;
-            const pulse = 1 + beat1 + beat2;
-            exportGroup.scale.set(currentScale * pulse, currentScale * pulse, currentScale * pulse);
-            exportGroup.position.set(basePosX, basePosY, basePosZ);
-            exportGroup.rotation.set(baseRotX, baseRotY, baseRotZ);
-          } else if (controls.animation === "swing") {
-            exportGroup.rotation.y = baseRotY + Math.sin(animTime * 2 * speed) * 0.55;
-            exportGroup.position.set(basePosX, basePosY, basePosZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          } else if (controls.animation === "orbit") {
-            exportGroup.rotation.set(baseRotX + Math.sin(animTime * 1.4 * speed) * 0.12, baseRotY + animTime * 0.9 * speed, baseRotZ);
-            exportGroup.position.set(basePosX + Math.cos(animTime * 1.4 * speed) * 0.16, basePosY + Math.sin(animTime * 1.4 * speed) * 0.12, basePosZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          } else if (controls.animation === "tilt") {
-            exportGroup.rotation.set(baseRotX + Math.sin(animTime * 1.8 * speed) * 0.2, baseRotY, baseRotZ + Math.cos(animTime * 1.8 * speed) * 0.12);
-            exportGroup.position.set(basePosX, basePosY, basePosZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          } else if (controls.animation === "bob") {
-            exportGroup.position.set(basePosX, basePosY + Math.sin(animTime * 2.6 * speed) * 0.28, basePosZ);
-            exportGroup.rotation.set(baseRotX, baseRotY + Math.sin(animTime * 2.6 * speed) * 0.06, baseRotZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          } else {
-            // Default 360 Turntable rotation for full seamless loop!
-            exportGroup.rotation.y = baseRotY + frameProgress * Math.PI * 2;
-            exportGroup.rotation.x = baseRotX;
-            exportGroup.rotation.z = baseRotZ;
-            exportGroup.position.set(basePosX, basePosY, basePosZ);
-            exportGroup.scale.set(currentScale, currentScale, currentScale);
-          }
-
-          offRenderer.render(offScene, offCamera);
-          videoTrack?.requestFrame();
-          onProgress(Math.round(frameProgress * 100));
-
-          const delay = Math.max(0, frameInterval - (performance.now() - frameStartedAt));
-          if (delay > 0) {
-            await new Promise((r) => setTimeout(r, delay));
-          }
-        }
-
-        if (recorder.state === "recording") {
-          recorder.requestData();
-        }
-
-        await new Promise((r) => setTimeout(r, 150));
-
-        const videoBlob = await new Promise<Blob>((resolve, reject) => {
-          recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: selectedMimeType });
-            if (!blob.size) reject(new Error("Video export produced an empty file. Please try a shorter duration."));
-            else resolve(blob);
+          const chunks: Blob[] = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) chunks.push(e.data);
           };
-          recorder.onerror = () => reject(new Error("Video recording failed. Please try WebM or a shorter duration."));
-          recorder.stop();
-        });
-        return { blob: videoBlob, format: formatExt };
+
+          const duration = Math.max(5, Math.min(60, durationSeconds || 10));
+          const totalFrames = Math.round(duration * fps);
+          const baseRotX = THREE.MathUtils.degToRad(controls.rotX);
+          const baseRotY = THREE.MathUtils.degToRad(controls.rotY);
+          const baseRotZ = THREE.MathUtils.degToRad(controls.rotZ);
+          const basePosX = controls.posX / 30;
+          const basePosY = -controls.posY / 30;
+          const basePosZ = controls.posZ / 30;
+          const baseScale = (exportGroup.userData?.baseScale as number) || 1;
+          const currentScale = (controls.scale / 100) * baseScale;
+          const speed = controls.animSpeed || 1;
+
+          recorder.start(100);
+
+          const frameDurationMs = 1000 / fps;
+
+          for (let i = 0; i <= totalFrames; i++) {
+            const frameProgress = i / totalFrames;
+            const animTime = frameProgress * duration;
+
+            if (controls.animation === "floating") {
+              exportGroup.position.set(basePosX, basePosY + Math.sin(animTime * 2.2 * speed) * 0.22, basePosZ);
+              exportGroup.rotation.set(baseRotX, baseRotY + Math.sin(animTime * 1.2 * speed) * 0.08, baseRotZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            } else if (controls.animation === "wobble") {
+              exportGroup.rotation.x = baseRotX + Math.sin(animTime * 2.8 * speed) * 0.12;
+              exportGroup.rotation.y = baseRotY + Math.cos(animTime * 2.4 * speed) * 0.18;
+              exportGroup.position.set(basePosX, basePosY, basePosZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            } else if (controls.animation === "pulse") {
+              const beatTime = (animTime * 3.2 * speed) % (Math.PI * 2);
+              const beat1 = Math.pow(Math.max(0, Math.sin(beatTime)), 8) * 0.14;
+              const beat2 = Math.pow(Math.max(0, Math.sin(beatTime + 0.5)), 12) * 0.08;
+              const pulse = 1 + beat1 + beat2;
+              exportGroup.scale.set(currentScale * pulse, currentScale * pulse, currentScale * pulse);
+              exportGroup.position.set(basePosX, basePosY, basePosZ);
+              exportGroup.rotation.set(baseRotX, baseRotY, baseRotZ);
+            } else if (controls.animation === "swing") {
+              exportGroup.rotation.y = baseRotY + Math.sin(animTime * 2 * speed) * 0.55;
+              exportGroup.position.set(basePosX, basePosY, basePosZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            } else if (controls.animation === "orbit") {
+              exportGroup.rotation.set(baseRotX + Math.sin(animTime * 1.4 * speed) * 0.12, baseRotY + animTime * 0.9 * speed, baseRotZ);
+              exportGroup.position.set(basePosX + Math.cos(animTime * 1.4 * speed) * 0.16, basePosY + Math.sin(animTime * 1.4 * speed) * 0.12, basePosZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            } else if (controls.animation === "tilt") {
+              exportGroup.rotation.set(baseRotX + Math.sin(animTime * 1.8 * speed) * 0.2, baseRotY, baseRotZ + Math.cos(animTime * 1.8 * speed) * 0.12);
+              exportGroup.position.set(basePosX, basePosY, basePosZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            } else if (controls.animation === "bob") {
+              exportGroup.position.set(basePosX, basePosY + Math.sin(animTime * 2.6 * speed) * 0.28, basePosZ);
+              exportGroup.rotation.set(baseRotX, baseRotY + Math.sin(animTime * 2.6 * speed) * 0.06, baseRotZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            } else {
+              // Default 360 Turntable rotation for full seamless loop!
+              exportGroup.rotation.y = baseRotY + frameProgress * Math.PI * 2;
+              exportGroup.rotation.x = baseRotX;
+              exportGroup.rotation.z = baseRotZ;
+              exportGroup.position.set(basePosX, basePosY, basePosZ);
+              exportGroup.scale.set(currentScale, currentScale, currentScale);
+            }
+
+            offRenderer.render(offScene, offCamera);
+            videoTrack?.requestFrame();
+            onProgress(Math.round(frameProgress * 100));
+
+            // Smooth deterministic frame pacing to prevent encoder frame drops and lag
+            await new Promise<void>((resolve) => {
+              window.requestAnimationFrame(() => {
+                window.setTimeout(resolve, Math.max(10, Math.round(frameDurationMs * 0.6)));
+              });
+            });
+          }
+
+          if (recorder.state === "recording") {
+            recorder.requestData();
+          }
+
+          await new Promise((r) => setTimeout(r, 200));
+
+          const videoBlob = await new Promise<Blob>((resolve, reject) => {
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: selectedMimeType });
+              if (!blob.size) reject(new Error("Video export produced an empty file. Please try a shorter duration or 1080p."));
+              else resolve(blob);
+            };
+            recorder.onerror = () => reject(new Error("Video recording failed. Please try WebM or a shorter duration."));
+            recorder.stop();
+          });
+
+          return {
+            blob: videoBlob,
+            format: formatExt,
+            width: recordWidth,
+            height: recordHeight,
+            fps,
+          };
         } finally {
-          if (mediaRecorder?.state === "recording") mediaRecorder.stop();
-          stream.getTracks().forEach((track) => track.stop());
-          offScene.remove(exportGroup);
-          disposeObject(exportGroup);
-          envTexture.dispose();
-          pmremGenerator.dispose();
-          offRenderer.dispose();
-          offRenderer.forceContextLoss();
+          try {
+            if (mediaRecorder && (mediaRecorder as MediaRecorder).state === "recording") {
+              (mediaRecorder as MediaRecorder).stop();
+            }
+          } catch {}
+          try {
+            stream.getTracks().forEach((track) => track.stop());
+          } catch {}
+          try {
+            offScene.remove(exportGroup);
+            disposeObject(exportGroup);
+          } catch {}
+          try {
+            envTexture.dispose();
+            pmremGenerator.dispose();
+            offRenderer.dispose();
+          } catch {}
           offCanvas.width = 0;
           offCanvas.height = 0;
         }
@@ -1467,14 +1565,19 @@ export default function IconStudio() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [controls, setControls] = useState<StudioControls>(defaultControls);
+  const [controlsHydrated, setControlsHydrated] = useState(false);
   const [hexDraft, setHexDraft] = useState(defaultControls.color);
   const [bgHexDraft, setBgHexDraft] = useState(defaultControls.bgColor);
   const [error, setError] = useState("");
   const [batch, setBatch] = useState<BatchStatus>({ running: false, current: "", completed: 0, failed: 0 });
   const [videoRecording, setVideoRecording] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
+  const [completedVideos, setCompletedVideos] = useState<
+    { id: string; name: string; url: string; blob: Blob; filename: string; size: string; res: string }[]
+  >([]);
   const [copySuccess, setCopySuccess] = useState(false);
   const cancelBatch = useRef(false);
+  const hasSavedControlsRef = useRef(false);
   const ffmpegRef = useRef<FFmpeg | null>(null);
   const ffmpegLoadRef = useRef<Promise<FFmpeg> | null>(null);
   const previewRef = useRef<PreviewHandle | null>(null);
@@ -1482,7 +1585,7 @@ export default function IconStudio() {
   const initializationStartedRef = useRef(false);
   const selectedAsset = assets.find((asset) => asset.id === selectedId);
 
-  const convertVideoToMp4 = async (blob: Blob, format: string) => {
+  const convertVideoToMp4 = async (blob: Blob, format: string, fps = 30) => {
     if (format === "mp4") return { blob, format };
     if (typeof window === "undefined") return { blob, format };
 
@@ -1510,11 +1613,9 @@ export default function IconStudio() {
         "-c:v", "libx264",
         "-preset", "medium",
         "-profile:v", "high",
-        "-level:v", "4.0",
-        "-r", String(VIDEO_EXPORT_FPS),
-        "-b:v", "8M",
-        "-maxrate", "8M",
-        "-bufsize", "16M",
+        "-level:v", "5.1",
+        "-r", String(fps),
+        "-crf", "18",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         "output.mp4",
@@ -1532,6 +1633,33 @@ export default function IconStudio() {
   };
 
   const STUDIO_ASSETS_KEY = "mcustock_studio_assets";
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STUDIO_CONTROLS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<StudioControls>;
+        if (parsed && typeof parsed === "object") {
+          const restored = { ...defaultControls, ...parsed };
+          hasSavedControlsRef.current = true;
+          setControls(restored);
+          setHexDraft(restored.color);
+          setBgHexDraft(restored.bgColor);
+        }
+      }
+    } catch {
+    } finally {
+      setControlsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!controlsHydrated) return;
+    try {
+      localStorage.setItem(STUDIO_CONTROLS_KEY, JSON.stringify(controls));
+    } catch {
+    }
+  }, [controls, controlsHydrated]);
 
   useEffect(() => {
     if (initializationStartedRef.current) return;
@@ -1575,7 +1703,7 @@ export default function IconStudio() {
           finalAssets = [...assetsToAdd, ...nonDuplicateExisting].slice(0, MAX_FILES);
           newSelectedId = assetsToAdd[0]?.id || "";
 
-          if (batchImports.some((item) => item.preparedFor3D)) {
+          if (batchImports.some((item) => item.preparedFor3D) && !hasSavedControlsRef.current) {
             setControls((current) => ({
               ...current,
               material: "glossy",
@@ -1826,24 +1954,21 @@ export default function IconStudio() {
       } else if (format === "mp4") {
         setVideoRecording(true);
         setVideoProgress(0);
-        const { blob, format: vidExt } = await previewRef.current.record360Video(
+        const vidResult = await previewRef.current.record360Video(
           selectedAsset,
           controls.videoDuration,
           setVideoProgress
         );
-        let videoOutput = { blob, format: vidExt };
-        if (vidExt !== "mp4") {
+        let videoOutput = { blob: vidResult.blob, format: vidResult.format };
+        if (vidResult.format !== "mp4") {
           try {
-            videoOutput = await convertVideoToMp4(blob, vidExt);
+            videoOutput = await convertVideoToMp4(vidResult.blob, vidResult.format, vidResult.fps);
           } catch (conversionError) {
-            throw new Error(
-              conversionError instanceof Error
-                ? `MP4 conversion failed. No video was downloaded. ${conversionError.message}`
-                : "MP4 conversion failed. No video was downloaded."
-            );
+            console.warn("FFmpeg conversion fallback to WebM:", conversionError);
+            videoOutput = { blob: vidResult.blob, format: vidResult.format };
           }
         }
-        downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-${VIDEO_EXPORT_FPS}fps.${videoOutput.format}`);
+        downloadBlob(videoOutput.blob, `${baseName}-3d-${vidResult.width}x${vidResult.height}-${controls.videoDuration}s-${vidResult.fps}fps.${videoOutput.format}`);
         setVideoRecording(false);
       }
     } catch (exportError) {
@@ -1854,61 +1979,90 @@ export default function IconStudio() {
 
   const exportSelectedVideos = async () => {
     if (!previewRef.current || videoRecording || batch.running) return;
-    if (document.visibilityState !== "visible") {
-      setError(VIDEO_EXPORT_VISIBILITY_ERROR);
-      return;
-    }
     const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
-    const targets = selectedAssets.length ? selectedAssets : selectedAsset ? [selectedAsset] : [];
+    const targets = selectedAssets.length ? selectedAssets : assets.length ? assets : selectedAsset ? [selectedAsset] : [];
     if (!targets.length) return;
 
     cancelBatch.current = false;
-    setBatch({ running: true, current: "", completed: 0, failed: 0 });
+    setBatch({ running: true, current: `Starting video export (0/${targets.length})...`, completed: 0, failed: 0 });
     setVideoRecording(true);
     setVideoProgress(0);
 
     try {
       await consumeFeatureCredit("three_d_generation", targets.length);
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
       let completed = 0;
       let failed = 0;
-      let interruptedByBackground = false;
-      for (const asset of targets) {
+
+      for (let idx = 0; idx < targets.length; idx++) {
         if (cancelBatch.current) break;
-        setBatch({ running: true, current: asset.name, completed, failed });
+        const asset = targets[idx];
+        setSelectedId(asset.id);
+        const statusLabel = `(${idx + 1}/${targets.length}) ${asset.name}`;
+        setBatch({ running: true, current: statusLabel, completed, failed });
+        setVideoProgress(0);
+
         try {
-          const { blob, format } = await previewRef.current.record360Video(
+          // Render this icon's 360 video
+          const vidResult = await previewRef.current.record360Video(
             asset,
             controls.videoDuration,
             (progress) => setVideoProgress(progress)
           );
-          let videoOutput = { blob, format };
-          if (format !== "mp4") {
+
+          let videoOutput = { blob: vidResult.blob, format: vidResult.format };
+          if (vidResult.format !== "mp4") {
             try {
-              videoOutput = await convertVideoToMp4(blob, format);
+              videoOutput = await convertVideoToMp4(vidResult.blob, vidResult.format, vidResult.fps);
             } catch (conversionError) {
-              throw new Error(
-                conversionError instanceof Error
-                  ? `MP4 conversion failed. ${conversionError.message}`
-                  : "MP4 conversion failed."
-              );
+              console.warn("FFmpeg conversion fallback to WebM:", conversionError);
+              videoOutput = { blob: vidResult.blob, format: vidResult.format };
             }
           }
+
           const baseName = asset.name.replace(/\.svg$/i, "");
-          downloadBlob(videoOutput.blob, `${baseName}-3d-${controls.videoDuration}s-${VIDEO_EXPORT_FPS}fps.${videoOutput.format}`);
+          const fileName = `${baseName}-3d-${vidResult.width}x${vidResult.height}-${controls.videoDuration}s-${vidResult.fps}fps.${videoOutput.format}`;
+
+          // Add to zip bundle
+          zip.file(fileName, videoOutput.blob);
+
+          // Add to persistent completed videos list
+          const videoItem = {
+            id: `${asset.id}-${Date.now()}`,
+            name: asset.name,
+            url: URL.createObjectURL(videoOutput.blob),
+            blob: videoOutput.blob,
+            filename: fileName,
+            size: `${(videoOutput.blob.size / (1024 * 1024)).toFixed(1)} MB`,
+            res: `${vidResult.width}×${vidResult.height}`,
+          };
+          setCompletedVideos((prev) => [...prev, videoItem]);
+
+          // Trigger browser download for this individual file
+          downloadBlob(videoOutput.blob, fileName);
           completed += 1;
         } catch (videoError) {
           failed += 1;
-          setError(videoError instanceof Error ? videoError.message : "Video export failed.");
-          if (videoError instanceof Error && videoError.message === VIDEO_EXPORT_VISIBILITY_ERROR) {
-            interruptedByBackground = true;
-            break;
-          }
+          console.error("Video export error for:", asset.name, videoError);
         }
-        setBatch({ running: true, current: asset.name, completed, failed });
-        await new Promise((resolve) => window.setTimeout(resolve, 350));
+
+        setBatch({ running: true, current: statusLabel, completed, failed });
+        // Give browser download pipeline and GPU thread time to breathe before next icon
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
       }
-      if (interruptedByBackground) setError(VIDEO_EXPORT_VISIBILITY_ERROR);
-      else if (failed > 0) setError(`${failed} selected video export${failed === 1 ? "" : "s"} failed.`);
+
+      // If 2 or more videos were exported, provide a unified ZIP bundle
+      // This guarantees the user gets ALL videos in one package even if browser blocks multiple automatic downloads!
+      if (!cancelBatch.current && targets.length > 1 && completed > 0) {
+        setBatch({ running: true, current: "Packaging all videos into ZIP bundle...", completed, failed });
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(zipBlob, `3d-icons-${controls.videoResolution}-${completed}-videos.zip`);
+      }
+
+      if (failed > 0) {
+        setError(`${completed} exported successfully, ${failed} failed.`);
+      }
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "Selected video export failed.");
     } finally {
@@ -1937,33 +2091,46 @@ export default function IconStudio() {
 
   const exportBatch = async () => {
     if (!assets.length || !previewRef.current) return;
+    const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
+    const targets = selectedAssets.length ? selectedAssets : assets;
+    if (!targets.length) return;
+
     cancelBatch.current = false;
-    setBatch({ running: true, current: "", completed: 0, failed: 0 });
+    setBatch({ running: true, current: `Starting 4K export (0/${targets.length})...`, completed: 0, failed: 0 });
     try {
-      await consumeFeatureCredit("three_d_generation", assets.length);
+      await consumeFeatureCredit("three_d_generation", targets.length);
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       let completed = 0;
       let failed = 0;
-      for (const asset of assets) {
+      for (let idx = 0; idx < targets.length; idx++) {
         if (cancelBatch.current) break;
+        const asset = targets[idx];
+        const statusLabel = `(${idx + 1}/${targets.length}) ${asset.name}`;
+        setBatch({ running: true, current: statusLabel, completed, failed });
         await yieldToBrowser();
-        setBatch({ running: true, current: asset.name, completed, failed });
         try {
           const blob = await previewRef.current.exportBlob(asset, "png", controls.resolution);
           zip.file(`${asset.name.replace(/\.svg$/i, "")}-3d-${controls.resolution}.png`, blob);
           completed += 1;
-        } catch {
+        } catch (itemErr) {
+          console.error(`Export failed for ${asset.name}:`, itemErr);
           failed += 1;
         }
-        setBatch({ running: true, current: asset.name, completed, failed });
-        // Let React paint progress and process cancellation before the next WebGL export.
-        await yieldToBrowser();
+        setBatch({ running: true, current: statusLabel, completed, failed });
+        // Let React paint progress and allow memory/GPU buffer cleanup between 4K renders
+        await new Promise((r) => setTimeout(r, 40));
       }
       if (!cancelBatch.current && completed > 0) {
+        setBatch((cur) => ({ ...cur, current: "Building ZIP archive..." }));
         await yieldToBrowser();
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        downloadBlob(zipBlob, `3d-icons-${controls.resolution}.zip`);
+        const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+          setBatch((cur) => ({ ...cur, current: `Packaging ZIP (${Math.round(metadata.percent)}%)...` }));
+        });
+        downloadBlob(zipBlob, `3d-icons-${controls.resolution}-${completed}-items.zip`);
+      }
+      if (failed > 0) {
+        setError(`${completed} exported successfully, ${failed} failed.`);
       }
     } catch (zipError) {
       setError(zipError instanceof Error ? zipError.message : "Batch export failed.");
@@ -2124,37 +2291,82 @@ export default function IconStudio() {
             </label>
 
             {assets.length > 0 && (
-              <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
-                {assets.map((asset) => {
-                  const isSelected = selectedIds.includes(asset.id);
-
-                  return (
-                    <div
-                      key={asset.id}
-                      onClick={(event) => handleAssetSelect(asset.id, event)}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition-all duration-150 cursor-pointer select-none ${
-                        isSelected
-                          ? "border-primary bg-primary/15 shadow-sm"
-                          : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary/30"
-                      }`}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-1 text-xs">
+                  <span className="text-[11px] font-bold text-[var(--text-secondary)]">
+                    {selectedIds.length > 0
+                      ? `${selectedIds.length} of ${assets.length} selected for export`
+                      : `${assets.length} icons available`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedIds.length === assets.length) {
+                          setSelectedIds([]);
+                        } else {
+                          setSelectedIds(assets.map((a) => a.id));
+                        }
+                      }}
+                      className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 p-1 shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={asset.preview} alt="" className="max-h-full max-w-full object-contain" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-xs font-bold text-foreground">{asset.name}</span>
-                      {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
-                      <button
-                        type="button"
-                        onClick={(event) => removeAsset(asset.id, event)}
-                        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
-                        aria-label={`Remove ${asset.name}`}
+                      {selectedIds.length === assets.length ? "Deselect All" : "Select All"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
+                  {assets.map((asset) => {
+                    const isSelected = selectedIds.includes(asset.id);
+
+                    return (
+                      <div
+                        key={asset.id}
+                        onClick={(event) => handleAssetSelect(asset.id, event)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border p-2 text-left transition-all duration-150 cursor-pointer select-none ${
+                          isSelected
+                            ? "border-primary bg-primary/15 shadow-sm"
+                            : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary/30"
+                        }`}
                       >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
+                        {/* Explicit Checkbox for multi-select without needing keyboard modifier */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedIds((prev) =>
+                              prev.includes(asset.id)
+                                ? prev.filter((id) => id !== asset.id)
+                                : [...prev, asset.id]
+                            );
+                          }}
+                          className={`h-4 w-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                            isSelected
+                              ? "bg-primary border-primary text-black"
+                              : "border-[var(--card-border)] bg-[var(--input-bg)] hover:border-primary"
+                          }`}
+                          aria-label={`Toggle select ${asset.name}`}
+                        >
+                          {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                        </button>
+
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 p-1 shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={asset.preview} alt="" className="max-h-full max-w-full object-contain" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-xs font-bold text-foreground">{asset.name}</span>
+                        <button
+                          type="button"
+                          onClick={(event) => removeAsset(asset.id, event)}
+                          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
+                          aria-label={`Remove ${asset.name}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </section>
@@ -2191,20 +2403,44 @@ export default function IconStudio() {
               ariaLabel="Kinetic animation"
             />
 
-            {/* Stock video duration */}
-            <div className="pt-2 border-t border-[var(--card-border)]">
-              <div className="mb-2">
-                <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Export Quality</span>
-                <SegmentedToggle<ExportQuality>
+            {/* Stock video duration & Microstock specifications */}
+            <div className="pt-3 border-t border-[var(--card-border)] space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Video Resolution</span>
+                  <span className="text-[10px] font-bold text-primary">
+                    {VIDEO_RESOLUTION_PROFILES[controls.videoResolution]?.tag || "Standard"}
+                  </span>
+                </div>
+                <SegmentedToggle<VideoResolution>
                   options={[
-                    { id: "smooth", label: "Smooth" },
-                    { id: "balanced", label: "Balanced" },
+                    { id: "1080p", label: "1080p FHD" },
+                    { id: "4K", label: "4K UHD" },
+                    { id: "1:1", label: "1:1 Square" },
+                    { id: "9:16", label: "9:16 Reel" },
+                    { id: "720p", label: "720p Draft" },
                   ]}
-                  value={controls.exportQuality}
-                  onChange={(val) => updateControl("exportQuality", val)}
+                  value={controls.videoResolution}
+                  onChange={(val) => updateControl("videoResolution", val)}
                   size="sm"
                   className="w-full"
-                  ariaLabel="Export quality"
+                  ariaLabel="Video resolution"
+                />
+              </div>
+
+              <div>
+                <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Frame Rate (FPS)</span>
+                <SegmentedToggle<VideoFPS>
+                  options={[
+                    { id: 24, label: "24 FPS (Cinema)" },
+                    { id: 30, label: "30 FPS (Standard)" },
+                    { id: 60, label: "60 FPS (Ultra)" },
+                  ]}
+                  value={controls.videoFps}
+                  onChange={(val) => updateControl("videoFps", val)}
+                  size="sm"
+                  className="w-full"
+                  ariaLabel="Video frame rate"
                 />
               </div>
 
@@ -2217,9 +2453,16 @@ export default function IconStudio() {
                 value={controls.videoDuration}
                 onChange={(v) => updateControl("videoDuration", v)}
               />
-              <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                Stock video: {controls.exportQuality === "balanced" ? "1280×720" : "960×540"}, {controls.videoDuration}s @ {controls.exportQuality === "balanced" ? VIDEO_EXPORT_FPS : 20} FPS, MP4
-              </p>
+
+              <div className="rounded-xl border border-primary/25 bg-primary/10 p-3 text-[11px] text-[var(--text-secondary)] space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-primary text-xs">
+                  <Check className="h-3.5 w-3.5 shrink-0" />
+                  <span>Microstock Ready: {VIDEO_RESOLUTION_PROFILES[controls.videoResolution]?.width}×{VIDEO_RESOLUTION_PROFILES[controls.videoResolution]?.height} @ {controls.videoFps} FPS</span>
+                </div>
+                <p className="text-[10px] leading-relaxed text-[var(--text-secondary)]">
+                  {VIDEO_RESOLUTION_PROFILES[controls.videoResolution]?.description}. Encoded in H.264/MP4 (yuv420p) with seamless CFR timing for Adobe Stock, Shutterstock, Pond5 & Freepik.
+                </p>
+              </div>
             </div>
 
             {/* Speed Multiplier */}
@@ -2556,10 +2799,10 @@ export default function IconStudio() {
                 onClick={() => void exportCurrent("mp4")}
                 disabled={!selectedAsset || videoRecording}
                 className="flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/20 px-3 py-2 text-xs font-bold text-primary transition-all disabled:opacity-40 shadow-sm"
-                title={`Download ${controls.videoDuration}s 720p MP4 video`}
+                title={`Download ${controls.videoDuration}s ${VIDEO_RESOLUTION_PROFILES[controls.videoResolution]?.label || controls.videoResolution} video @ ${controls.videoFps} FPS (H.264/MP4)`}
               >
                 {videoRecording ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
-                <span>{controls.videoDuration}s Video</span>
+                <span>{controls.videoDuration}s Video ({controls.videoResolution})</span>
               </button>
               <button
                 onClick={() => void exportCurrent("webp")}
@@ -2590,16 +2833,16 @@ export default function IconStudio() {
                 className="flex items-center gap-1.5 rounded-xl border border-primary/35 bg-primary/10 hover:bg-primary/20 px-3 py-2 text-xs font-bold text-primary transition-all disabled:opacity-40"
               >
                 {batch.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileArchive className="h-3.5 w-3.5" />}
-                <span>ZIP ({assets.length})</span>
+                <span>ZIP ({selectedIds.length ? `${selectedIds.length} Selected` : `All ${assets.length}`}) [{controls.resolution}]</span>
               </button>
               <button
                 onClick={() => void exportSelectedVideos()}
                 disabled={!selectedIds.length || batch.running || videoRecording}
                 className="flex items-center gap-1.5 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2 text-xs font-bold text-primary transition-all hover:bg-primary/20 disabled:opacity-40"
-                title={`Download selected icons as individual ${VIDEO_EXPORT_FPS} FPS videos`}
+                title={`Download selected icons as individual ${controls.videoResolution} @ ${controls.videoFps} FPS videos`}
               >
                 {videoRecording ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
-                <span>Videos ({selectedIds.length})</span>
+                <span>Videos ({selectedIds.length}) [{controls.videoResolution}]</span>
               </button>
               {batch.running && (
                 <button
@@ -2676,6 +2919,48 @@ export default function IconStudio() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {completedVideos.length > 0 && (
+            <div className="mt-3 rounded-2xl border border-primary/30 bg-primary/5 p-3.5 text-xs shadow-md">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="font-extrabold text-foreground flex items-center gap-1.5 text-xs">
+                  <Video className="h-4 w-4 text-primary" />
+                  Exported Videos Ready ({completedVideos.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const JSZip = (await import("jszip")).default;
+                    const zip = new JSZip();
+                    completedVideos.forEach((v) => zip.file(v.filename, v.blob));
+                    const zipBlob = await zip.generateAsync({ type: "blob" });
+                    downloadBlob(zipBlob, `3d-icons-${controls.videoResolution}-${completedVideos.length}-videos.zip`);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary text-black font-extrabold text-[11px] hover:bg-primary/90 transition shadow-sm cursor-pointer"
+                >
+                  <FileArchive className="h-3.5 w-3.5" /> Download All as ZIP
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                {completedVideos.map((vid) => (
+                  <div key={vid.id} className="flex items-center justify-between rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5 gap-2">
+                    <div className="min-w-0 flex-1 truncate">
+                      <p className="font-bold text-foreground truncate text-xs">{vid.name}</p>
+                      <p className="text-[10px] text-[var(--text-secondary)]">{vid.res} • {vid.size}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => downloadBlob(vid.blob, vid.filename)}
+                      className="px-2.5 py-1 rounded-lg border border-primary/40 bg-primary/10 hover:bg-primary/25 text-primary font-bold text-[10px] shrink-0 transition cursor-pointer"
+                      title="Download this video"
+                    >
+                      Download
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </main>

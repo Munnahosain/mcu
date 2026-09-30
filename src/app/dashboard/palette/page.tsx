@@ -19,7 +19,8 @@ function rgbToHex(r: number, g: number, b: number) {
 function rgbToHsl(r: number, g: number, b: number) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h = 0, s = 0, l = (max + min) / 2;
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
   if (max !== min) {
     const d = max - min;
     s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -52,7 +53,7 @@ function extractColors(imageData: ImageData, colorCount: number) {
   if (pixels.length === 0) return Array.from({ length: colorCount }).map(() => [0,0,0]);
 
   // Initialize centroids by picking random pixels
-  let centroids = [];
+  const centroids = [];
   for (let i = 0; i < colorCount; i++) {
     const randomPixel = pixels[Math.floor(Math.random() * pixels.length)];
     centroids.push(randomPixel ? [...randomPixel] : [...pixels[0]]);
@@ -80,7 +81,7 @@ function extractColors(imageData: ImageData, colorCount: number) {
     // Recalculate centroids
     for (let c = 0; c < colorCount; c++) {
       if (clusters[c].length === 0) continue;
-      let sum = [0, 0, 0];
+      const sum = [0, 0, 0];
       for (const p of clusters[c]) {
         sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2];
       }
@@ -104,11 +105,13 @@ interface ExtractedColor {
   hex: string;
   hsl: { h: number; s: number; l: number };
 }
+const PALETTE_SETTINGS_KEY = "mcustock_palette_settings";
 
 export default function ColorPalettePage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [colorsCount, setColorsCount] = useState<number>(6);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [palette, setPalette] = useState<ExtractedColor[]>([]);
   const [pickedColor, setPickedColor] = useState<ExtractedColor | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -119,6 +122,24 @@ export default function ColorPalettePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(PALETTE_SETTINGS_KEY));
+      if (Number.isInteger(saved) && saved >= 2 && saved <= 12) setColorsCount(saved);
+    } catch {
+    } finally {
+      setSettingsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    try {
+      localStorage.setItem(PALETTE_SETTINGS_KEY, String(colorsCount));
+    } catch {
+    }
+  }, [colorsCount, settingsHydrated]);
 
   const processImage = (src: string, colorCount: number) => {
     setIsProcessing(true);

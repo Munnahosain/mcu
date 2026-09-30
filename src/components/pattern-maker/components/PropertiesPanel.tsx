@@ -21,7 +21,10 @@ import {
 import { isElementCrossingEdge } from '../utils/seamlessMath';
 
 interface PropertiesPanelProps {
+  elements: DesignElement[];
   selectedElement: DesignElement | null;
+  selectedId: string | null;
+  setSelectedId: (id: string | null) => void;
   onUpdateElement: (updated: Partial<DesignElement>) => void;
   onDuplicateElement: () => void;
   onDeleteElement: () => void;
@@ -54,7 +57,10 @@ function sliderProgress(value: number, minimum: number, maximum: number): React.
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
+  elements,
   selectedElement,
+  selectedId,
+  setSelectedId,
   onUpdateElement,
   onDuplicateElement,
   onDeleteElement,
@@ -85,6 +91,33 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       </div>
 
       <div className="p-3.5 space-y-5">
+        <section className="space-y-2">
+          <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-[#77808c]">
+            <span>Layers</span>
+            <span>{elements.length}</span>
+          </div>
+          <div className="max-h-48 space-y-1 overflow-y-auto">
+            {[...elements].sort((a, b) => b.zIndex - a.zIndex).map((element) => (
+              <button
+                key={element.id}
+                type="button"
+                onClick={() => setSelectedId(element.id)}
+                className={`flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
+                  selectedId === element.id
+                    ? 'border-[#18c98a]/50 bg-[#18c98a]/10 text-[#18c98a]'
+                    : 'border-transparent bg-[#17191e] text-[#aeb5bf] hover:border-[#30363e] hover:text-[#f5f7f8]'
+                }`}
+              >
+                <span className="w-8 shrink-0 font-mono text-[9px] text-[#77808c]">{element.type}</span>
+                <span className="min-w-0 flex-1 truncate text-[11px]">{element.name || element.type}</span>
+              </button>
+            ))}
+            {elements.length === 0 && (
+              <p className="rounded-md bg-[#17191e] px-2.5 py-3 text-[11px] text-[#77808c]">No layers yet</p>
+            )}
+          </div>
+        </section>
+
         {selectedElement ? (
           <>
             {/* Edge Wrapping Active Alert */}
@@ -304,11 +337,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </div>
             </div>
 
-            {/* Layer Hierarchy & Actions */}
+            {/* Layer ordering and object actions */}
             <div className="space-y-2">
-              <div className="font-mono text-[11px] text-[#77808c] uppercase tracking-wider font-semibold">
-                Layers
-              </div>
               <div className="grid grid-cols-4 gap-1.5 bg-[#17191e] p-2 rounded-md border border-[#252a31]">
                 <button
                   onClick={() => onReorderElement('front')}

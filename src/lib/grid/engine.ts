@@ -351,7 +351,7 @@ export function buildGridSvg(
     ? `<text x="${marginX}" y="${Math.max(marginY - 12, 20)}" fill="${primaryColor}" fill-opacity="0.8" font-size="${Math.max(12, Math.round(width / 95))}" font-family="monospace" font-weight="700" letter-spacing="1.5">${config.seed} · ${config.type.toUpperCase()} GRID · ${width}×${height}px</text>`
     : "";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" style="display:block;width:100%;height:100%;aspect-ratio:${width}/${height};shape-rendering:geometricPrecision;text-rendering:geometricPrecision;">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block;width:100%;height:100%;aspect-ratio:${width}/${height};shape-rendering:geometricPrecision;text-rendering:geometricPrecision;">
     <defs>
       <linearGradient id="primaryGlow" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stop-color="${primaryColor}" stop-opacity="0.8"/>

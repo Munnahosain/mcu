@@ -30,6 +30,23 @@
   --toggle-dur: 0.5s;
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.smooth-gpu {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.smooth-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ---- Premium Liquid Glass Effects (iOS 26 Style) ---- */
 .glass {
   background: rgba(255, 255, 255, 0.7);

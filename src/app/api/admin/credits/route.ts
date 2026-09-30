@@ -4,6 +4,9 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { SystemSetting } from '@/server/models/SystemSetting';
 import { User } from '@/server/models/User';
 import { CreditLedger } from '@/server/models/CreditLedger';
+import { hasMongoDbConfig } from '@/server/db/database-config';
+import { inMemoryStore } from '@/server/db/in-memory-store';
+import { updateDevUserCredits, findDevUserById } from '@/server/auth/dev-auth';
 
 const DEFAULT_CREDIT_COSTS = {
   metadata_generation: 1,
@@ -27,6 +30,14 @@ const DEFAULT_CREDIT_COSTS = {
 export async function GET(req: Request) {
   try {
     await requireAdmin(req);
+
+    if (!hasMongoDbConfig()) {
+      return NextResponse.json({
+        success: true,
+        creditCosts: inMemoryStore.creditCosts,
+      });
+    }
+
     await connectToDatabase();
 
     const setting = await SystemSetting.findOne({ key: 'credit_costs' }).lean();
@@ -44,8 +55,40 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const actor = await requireAdmin(req);
-    await connectToDatabase();
     const body = await req.json().catch(() => ({}));
+
+    if (!hasMongoDbConfig()) {
+      if (body.action === 'adjust_user') {
+        const { userId, amount, reason } = body;
+        const numAmount = Number(amount);
+        if (!userId || !Number.isFinite(numAmount) || numAmount === 0) {
+          return NextResponse.json({ success: false, error: 'Valid userId and non-zero amount are required.' }, { status: 400 });
+        }
+        const updated = updateDevUserCredits(userId, numAmount > 0 ? numAmount : 0, 0, numAmount < 0 ? Math.abs(numAmount) : 0);
+        const target = findDevUserById(userId);
+        return NextResponse.json({
+          success: true,
+          message: `Successfully adjusted credits by ${numAmount > 0 ? `+${numAmount}` : numAmount}.`,
+          user: {
+            id: userId,
+            email: target?.email || 'user@mcustock.com',
+            balance: (target?.credits.monthly ?? 0) + (target?.credits.bonus ?? 0),
+          },
+        });
+      }
+
+      if (body.creditCosts && typeof body.creditCosts === 'object') {
+        Object.assign(inMemoryStore.creditCosts, body.creditCosts);
+        return NextResponse.json({
+          success: true,
+          message: 'Credit costs updated successfully.',
+          creditCosts: inMemoryStore.creditCosts,
+        });
+      }
+      return NextResponse.json({ success: false, error: 'Invalid request body.' }, { status: 400 });
+    }
+
+    await connectToDatabase();
 
     // Manual user credit adjustment
     if (body.action === 'adjust_user') {

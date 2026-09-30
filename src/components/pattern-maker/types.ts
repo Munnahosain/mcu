@@ -46,7 +46,7 @@ export interface DesignElement {
   locked?: boolean;
 }
 
-export type RepeatType = 'grid' | 'half-drop' | 'half-brick';
+export type RepeatType = 'grid' | 'half-drop' | 'half-brick' | 'mirror-quad';
 
 export type PhysicalUnit = 'cm' | 'inch' | 'mm';
 

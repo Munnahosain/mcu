@@ -72,6 +72,7 @@ const TYPEBOX_COLOR_PRESETS = [
   { name: "Fire Coral", textColor: "#ff4757", bgColor: "#1f0507" },
   { name: "Pastel Lavender", textColor: "#e0e7ff", bgColor: "#1e1b4b" },
 ];
+const TYPEBOX_SETTINGS_KEY = "mcustock_typebox_settings";
 
 // Pro Slider Component matching 3D Icon Studio style with full number input support
 function StudioSlider({
@@ -136,6 +137,7 @@ export default function TypeboxStudioPage() {
     ...DEFAULT_TYPEBOX_STATE,
     language: "en",
   });
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [zoom, setZoom] = useState<number>(0.85);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
@@ -146,6 +148,52 @@ export default function TypeboxStudioPage() {
   const customFontInputRef = useRef<HTMLInputElement | null>(null);
   const svgInputRef = useRef<HTMLInputElement | null>(null);
   const shardSvgInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TYPEBOX_SETTINGS_KEY);
+      if (saved) {
+        const restored = { ...DEFAULT_TYPEBOX_STATE, ...JSON.parse(saved) as Partial<TypeboxState> };
+        restored.transform = { ...DEFAULT_TYPEBOX_STATE.transform, ...restored.transform };
+        restored.color = { ...DEFAULT_TYPEBOX_STATE.color, ...restored.color };
+        restored.dither = { ...DEFAULT_TYPEBOX_STATE.dither, ...restored.dither };
+        restored.line = { ...DEFAULT_TYPEBOX_STATE.line, ...restored.line };
+        restored.slice = { ...DEFAULT_TYPEBOX_STATE.slice, ...restored.slice };
+        restored.boom = { ...DEFAULT_TYPEBOX_STATE.boom, ...restored.boom };
+        restored.crack = { ...DEFAULT_TYPEBOX_STATE.crack, ...restored.crack };
+        restored.sourceMode = "text";
+        restored.svgContent = null;
+        restored.svgFileName = null;
+        restored.customFontUrl = null;
+        restored.customFontName = null;
+        restored.fontFamily = restored.fontFamily === "Custom" ? DEFAULT_TYPEBOX_STATE.fontFamily : restored.fontFamily;
+        restored.boom.shardSvgContent = null;
+        restored.boom.shardSvgName = null;
+        setState(restored);
+      }
+    } catch {
+    } finally {
+      setSettingsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    const settings = {
+      ...state,
+      sourceMode: "text" as const,
+      svgContent: null,
+      svgFileName: null,
+      customFontUrl: null,
+      customFontName: null,
+      fontFamily: state.fontFamily === "Custom" ? DEFAULT_TYPEBOX_STATE.fontFamily : state.fontFamily,
+      boom: { ...state.boom, shardSvgContent: null, shardSvgName: null },
+    };
+    try {
+      localStorage.setItem(TYPEBOX_SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+    }
+  }, [state, settingsHydrated]);
 
   // Drag interaction tracking
   const dragStartRef = useRef<{ clientX: number; clientY: number; initialX: number; initialY: number }>({
@@ -381,13 +429,14 @@ export default function TypeboxStudioPage() {
     try {
       await consumeFeatureCredit("typebox_generation");
       const svgStr = generateSvgExport(state);
-      const filename = `typebox-${state.activeEffect}.svg`;
+      const filename = `typebox-${state.sourceMode === "svg" ? "vector" : state.activeEffect}.svg`;
       downloadText(svgStr, filename, "image/svg+xml;charset=utf-8");
 
       setCopiedNotification("SVG vector exported successfully!");
       setTimeout(() => setCopiedNotification(null), 3000);
     } catch (err) {
-      alert("SVG export error: " + (err instanceof Error ? err.message : "Unknown error"));
+      setCopiedNotification("SVG export error: " + (err instanceof Error ? err.message : "Unable to export SVG"));
+      setTimeout(() => setCopiedNotification(null), 4000);
     }
   };
 
