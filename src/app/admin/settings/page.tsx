@@ -77,6 +77,31 @@ export default function AdminSettingsPage() {
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-primary">Runtime config</p>
         <h2 className="mt-2 text-3xl font-black">System settings</h2>
         <p className="mt-2 text-sm text-white/55">Manage operational settings used across the product.</p>
+
+        {/* Quick Settings Links */}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <a
+            href="/admin/settings/storage"
+            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-primary/40 hover:bg-primary/5"
+          >
+            <div>
+              <p className="text-sm font-bold text-white">AWS S3 Cloud Storage</p>
+              <p className="text-xs text-white/50">Configure S3 Buckets &amp; Pre-Signed URLs</p>
+            </div>
+            <span className="text-xs font-bold text-primary">Configure &rarr;</span>
+          </a>
+
+          <a
+            href="/admin/settings/payment"
+            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-primary/40 hover:bg-primary/5"
+          >
+            <div>
+              <p className="text-sm font-bold text-white">MFS Payment Gateways</p>
+              <p className="text-xs text-white/50">Manage bKash, Nagad, Rocket, Upay</p>
+            </div>
+            <span className="text-xs font-bold text-primary">Configure &rarr;</span>
+          </a>
+        </div>
       </section>
 
       {error && <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
