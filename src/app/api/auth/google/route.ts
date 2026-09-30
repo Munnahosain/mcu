@@ -65,6 +65,7 @@ export async function POST(req: Request) {
     if (!user) {
       if (mode === "admin") return NextResponse.json({ success: false, error: "This Google account is not an authorized admin." }, { status: 403 });
       const freePlan = await Plan.findOne({ slug: "free", active: true }).lean();
+      const initialCredits = Number(freePlan?.monthlyCredits ?? 100);
       user = await User.create({
         name: googleUser.name || googleUser.email.split("@")[0],
         email: googleUser.email.toLowerCase(),
@@ -72,15 +73,19 @@ export async function POST(req: Request) {
         password: hashPassword(crypto.randomUUID()),
         emailVerified: true,
         planId: freePlan?._id || null,
-        credits: { monthly: Number(freePlan?.monthlyCredits ?? 100), bonus: 0, used: 0 },
+        credits: { monthly: initialCredits, bonus: 0, used: 0 },
       });
     } else {
-      if (!user.planId) {
-        const freePlan = await Plan.findOne({ slug: "free", active: true }).lean();
-        if (freePlan) {
-          user.planId = freePlan._id;
+      const activePlan = user.planId
+        ? await Plan.findById(user.planId).lean()
+        : await Plan.findOne({ slug: "free", active: true }).lean();
+
+      if (activePlan) {
+        user.planId = activePlan._id;
+        const targetMonthly = Number(activePlan.monthlyCredits ?? 100);
+        if (Number(user.credits?.monthly ?? 0) < targetMonthly && Number(user.credits?.used ?? 0) === 0) {
           user.credits = {
-            monthly: Math.max(Number(user.credits?.monthly ?? 0), Number(freePlan.monthlyCredits ?? 100)),
+            monthly: targetMonthly,
             bonus: Number(user.credits?.bonus ?? 0),
             used: Number(user.credits?.used ?? 0),
           };

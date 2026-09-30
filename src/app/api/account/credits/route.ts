@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
 import { Subscription } from '@/server/models/Subscription';
-import '@/server/models/Plan';
+import { Plan } from '@/server/models/Plan';
+import { User } from '@/server/models/User';
 import { consumeCredits, InsufficientCreditsError } from '@/server/services/credit-service';
 import { hasMongoDbConfig } from '@/server/db/database-config';
 
@@ -40,9 +41,31 @@ export async function GET(req: Request) {
       status: { $in: ['active', 'trial'] },
     }).sort({ createdAt: -1 }).populate('planId', 'name slug monthlyCredits billingInterval').lean();
 
-    const monthly = user.credits?.monthly ?? 0;
-    const bonus = user.credits?.bonus ?? 0;
-    const used = user.credits?.used ?? 0;
+    let monthly = Number(user.credits?.monthly ?? 0);
+    const bonus = Number(user.credits?.bonus ?? 0);
+    const used = Number(user.credits?.used ?? 0);
+
+    // Resolve active plan (from subscription, user planId, or default free plan)
+    let activePlan = subscription?.planId as { _id?: unknown; monthlyCredits?: number } | null;
+    if (!activePlan) {
+      if (user.planId) {
+        activePlan = await Plan.findById(user.planId).select('name slug monthlyCredits billingInterval').lean();
+      } else {
+        activePlan = await Plan.findOne({ slug: 'free', active: true }).select('name slug monthlyCredits billingInterval').lean();
+      }
+    }
+
+    // If admin increased plan monthlyCredits and user's monthly credits is lower than the new allowance
+    if (activePlan?.monthlyCredits && typeof activePlan.monthlyCredits === 'number') {
+      const planAllowance = Number(activePlan.monthlyCredits);
+      if (monthly < planAllowance && used === 0) {
+        monthly = planAllowance;
+        await User.updateOne(
+          { _id: user._id },
+          { $set: { 'credits.monthly': planAllowance, ...(activePlan._id ? { planId: activePlan._id } : {}) } }
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,
