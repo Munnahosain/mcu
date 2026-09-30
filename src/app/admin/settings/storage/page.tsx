@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Database, CheckCircle2, AlertCircle, RefreshCw, Copy, ExternalLink, ShieldCheck, Play } from 'lucide-react';
+import { Database, CheckCircle2, AlertCircle, RefreshCw, Copy, ShieldCheck, Play, Sparkles, Cloud } from 'lucide-react';
 
 type S3Status = {
   configured: boolean;
@@ -19,6 +19,7 @@ export default function StorageSettingsPage() {
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
   const [testError, setTestError] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'r2' | 'aws'>('r2');
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -82,10 +83,10 @@ export default function StorageSettingsPage() {
       {/* Header */}
       <section>
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-primary">Cloud Infrastructure</p>
-        <h2 className="mt-2 text-3xl font-black text-white">AWS S3 Cloud Storage & Pre-Signed URLs</h2>
+        <h2 className="mt-2 text-3xl font-black text-white">Cloudflare R2 &amp; AWS S3 Storage</h2>
         <p className="mt-2 text-sm text-white/55">
-          Configure direct client-to-cloud file uploads via AWS S3 Pre-Signed URLs. Eliminates backend server load and
-          accelerates asset generation exports.
+          Configure direct client-to-cloud file uploads via Pre-Signed URLs. Cloudflare R2 offers 10GB free storage and
+          zero bandwidth egress charges.
         </p>
       </section>
 
@@ -97,8 +98,8 @@ export default function StorageSettingsPage() {
               <Database className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-white">AWS S3 Connection Status</h3>
-              <p className="text-xs text-white/50">Direct PUT Pre-Signed URL Engine</p>
+              <h3 className="text-lg font-black text-white">Storage Engine Status</h3>
+              <p className="text-xs text-white/50">Direct PUT Pre-Signed URL Pipeline</p>
             </div>
           </div>
 
@@ -109,11 +110,11 @@ export default function StorageSettingsPage() {
               </span>
             ) : status?.configured ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
-                <CheckCircle2 className="h-3.5 w-3.5" /> S3 Configured & Ready
+                <CheckCircle2 className="h-3.5 w-3.5" /> Storage Configured &amp; Ready
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400">
-                <AlertCircle className="h-3.5 w-3.5" /> Missing Environment Variables
+                <AlertCircle className="h-3.5 w-3.5" /> Missing Credentials in .env
               </span>
             )}
           </div>
@@ -129,14 +130,14 @@ export default function StorageSettingsPage() {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-            <span className="text-[11px] font-semibold text-white/50">AWS Region:</span>
+            <span className="text-[11px] font-semibold text-white/50">Region:</span>
             <p className="mt-1 font-mono text-sm font-bold text-white">
-              {status?.region || <span className="text-white/30">us-east-1 (Default)</span>}
+              {status?.region || <span className="text-white/30">auto / us-east-1</span>}
             </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-            <span className="text-[11px] font-semibold text-white/50">S3 Endpoint:</span>
+            <span className="text-[11px] font-semibold text-white/50">Endpoint:</span>
             <p className="mt-1 truncate font-mono text-xs font-bold text-white">
               {status?.endpoint || 'AWS Standard'}
             </p>
@@ -153,11 +154,11 @@ export default function StorageSettingsPage() {
           >
             {testing ? (
               <>
-                <RefreshCw className="h-4 w-4 animate-spin" /> Generating Pre-Signed URL...
+                <RefreshCw className="h-4 w-4 animate-spin" /> Testing Pre-Signed URL...
               </>
             ) : (
               <>
-                <Play className="h-4 w-4" /> Test Pre-Signed URL Generation
+                <Play className="h-4 w-4" /> Test Pre-Signed URL Upload
               </>
             )}
           </button>
@@ -197,59 +198,164 @@ export default function StorageSettingsPage() {
         )}
       </div>
 
-      {/* Step-by-Step Setup Guide */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
-        <h3 className="flex items-center gap-2 text-lg font-black text-white">
-          <ShieldCheck className="h-5 w-5 text-primary" /> How to Setup AWS S3 in `.env`
-        </h3>
-        <p className="mt-1 text-xs text-white/55">
-          Add the following environment variables in your server <code className="text-primary">.env</code> file:
-        </p>
+      {/* Provider Selector Tabs */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab('r2')}
+          className={`flex items-center gap-2 rounded-2xl border px-5 py-3 text-sm font-bold transition ${
+            activeTab === 'r2'
+              ? 'border-primary bg-primary/15 text-primary shadow-lg ring-1 ring-primary/30'
+              : 'border-white/10 bg-white/[0.03] text-white/60 hover:text-white'
+          }`}
+        >
+          <Cloud className="h-4 w-4" />
+          <span>Cloudflare R2 Setup (100% Free - Recommended)</span>
+        </button>
 
-        <div className="relative mt-4 rounded-2xl border border-white/10 bg-black/60 p-4 font-mono text-xs text-white/90">
-          <button
-            type="button"
-            onClick={() =>
-              copyText(
-                'env',
-                `AWS_REGION=us-east-1\nAWS_ACCESS_KEY_ID=your_access_key_id\nAWS_SECRET_ACCESS_KEY=your_secret_access_key\nAWS_S3_BUCKET_NAME=your-bucket-name\n# Optional:\n# AWS_S3_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com\n# AWS_S3_PUBLIC_DOMAIN=https://cdn.yourdomain.com`
-              )
-            }
-            className="absolute right-3 top-3 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/60 hover:text-white"
-            title="Copy ENV Template"
-          >
-            {copied === 'env' ? <span className="text-xs font-bold text-primary">Copied!</span> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          <pre className="overflow-x-auto leading-relaxed text-emerald-400">
+        <button
+          type="button"
+          onClick={() => setActiveTab('aws')}
+          className={`flex items-center gap-2 rounded-2xl border px-5 py-3 text-sm font-bold transition ${
+            activeTab === 'aws'
+              ? 'border-primary bg-primary/15 text-primary shadow-lg ring-1 ring-primary/30'
+              : 'border-white/10 bg-white/[0.03] text-white/60 hover:text-white'
+          }`}
+        >
+          <Database className="h-4 w-4" />
+          <span>AWS S3 Setup</span>
+        </button>
+      </div>
+
+      {/* Cloudflare R2 Step-by-Step Setup Guide */}
+      {activeTab === 'r2' ? (
+        <div className="space-y-6 rounded-3xl border border-primary/20 bg-white/[0.03] p-6 sm:p-8">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-lg font-black text-white">
+              <Sparkles className="h-5 w-5 text-primary" /> Cloudflare R2 Setup Guide (10GB Free Forever)
+            </h3>
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
+              Zero Bandwidth Fees
+            </span>
+          </div>
+
+          <div className="space-y-4 text-xs leading-relaxed text-white/70">
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+              <p className="font-bold text-white">১. Cloudflare ড্যাশবোর্ডে লগইন করুন ও R2 Bucket বানান:</p>
+              <p className="mt-1 text-white/60">
+                Cloudflare Dashboard &gt; <strong>R2 Object Storage</strong> &gt; <strong>Create bucket</strong> (যেমন নাম দিন:{' '}
+                <code className="text-primary">mcustock-assets</code>)
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+              <p className="font-bold text-white">২. R2 API Token তৈরি করুন:</p>
+              <p className="mt-1 text-white/60">
+                R2 &gt; <strong>Manage R2 API Tokens</strong> &gt; <strong>Create API token</strong> &gt; Permissions দিন{' '}
+                <strong>Object Read &amp; Write</strong>। এটি তৈরি করার পর আপনি পাবেন:
+              </p>
+              <ul className="mt-2 list-disc pl-5 space-y-1 text-white/80 font-mono text-[11px]">
+                <li>Access Key ID</li>
+                <li>Secret Access Key</li>
+                <li>Endpoint URL (e.g. <code>https://&lt;ACCOUNT_ID&gt;.r2.cloudflarestorage.com</code>)</li>
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+              <p className="font-bold text-white">৩. আপনার `.env` ফাইলে ভ্যালুগুলো পেস্ট করুন:</p>
+              <div className="relative mt-3 rounded-xl border border-white/10 bg-black/80 p-4 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyText(
+                      'r2_env',
+                      `AWS_REGION=auto\nAWS_ACCESS_KEY_ID=your_cloudflare_r2_access_key_id\nAWS_SECRET_ACCESS_KEY=your_cloudflare_r2_secret_access_key\nAWS_S3_BUCKET_NAME=mcustock-assets\nAWS_S3_ENDPOINT=https://<YOUR_ACCOUNT_ID>.r2.cloudflarestorage.com\n# Optional public domain if enabled in R2:\n# AWS_S3_PUBLIC_DOMAIN=https://pub-<id>.r2.dev`
+                    )
+                  }
+                  className="absolute right-3 top-3 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/60 hover:text-white"
+                  title="Copy R2 ENV"
+                >
+                  {copied === 'r2_env' ? <span className="text-xs font-bold text-primary">Copied!</span> : <Copy className="h-3.5 w-3.5" />}
+                </button>
+                <pre className="overflow-x-auto text-emerald-400">
+{`AWS_REGION=auto
+AWS_ACCESS_KEY_ID=your_cloudflare_r2_access_key_id
+AWS_SECRET_ACCESS_KEY=your_cloudflare_r2_secret_access_key
+AWS_S3_BUCKET_NAME=mcustock-assets
+AWS_S3_ENDPOINT=https://<YOUR_ACCOUNT_ID>.r2.cloudflarestorage.com
+
+# Optional Public Domain (if Custom Domain or r2.dev is enabled):
+# AWS_S3_PUBLIC_DOMAIN=https://pub-<id>.r2.dev`}
+                </pre>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+              <p className="font-bold text-white">৪. R2 Bucket CORS রুলস অন করুন:</p>
+              <p className="mt-1 text-white/60">
+                আপনার R2 Bucket &gt; <strong>Settings</strong> &gt; <strong>CORS Policy</strong> &gt; <strong>Add CORS rule</strong> এ পেস্ট করুন:
+              </p>
+              <div className="relative mt-2 rounded-xl border border-white/10 bg-black/80 p-3 font-mono text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => copyText('r2_cors', corsSample)}
+                  className="absolute right-2.5 top-2.5 rounded-lg border border-white/10 bg-white/5 p-1 text-white/60 hover:text-white"
+                >
+                  {copied === 'r2_cors' ? <span className="text-xs font-bold text-primary">Copied!</span> : <Copy className="h-3 w-3" />}
+                </button>
+                <pre className="overflow-x-auto text-white/80">{corsSample}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* AWS S3 Step-by-Step Setup Guide */
+        <div className="space-y-6 rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+          <h3 className="flex items-center gap-2 text-lg font-black text-white">
+            <ShieldCheck className="h-5 w-5 text-primary" /> AWS S3 Setup Guide
+          </h3>
+          <p className="text-xs text-white/55">
+            Add the following environment variables in your server <code className="text-primary">.env</code> file:
+          </p>
+
+          <div className="relative rounded-2xl border border-white/10 bg-black/60 p-4 font-mono text-xs text-white/90">
+            <button
+              type="button"
+              onClick={() =>
+                copyText(
+                  'aws_env',
+                  `AWS_REGION=us-east-1\nAWS_ACCESS_KEY_ID=your_access_key_id\nAWS_SECRET_ACCESS_KEY=your_secret_access_key\nAWS_S3_BUCKET_NAME=your-bucket-name`
+                )
+              }
+              className="absolute right-3 top-3 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/60 hover:text-white"
+              title="Copy AWS ENV"
+            >
+              {copied === 'aws_env' ? <span className="text-xs font-bold text-primary">Copied!</span> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+            <pre className="overflow-x-auto text-emerald-400">
 {`AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your_access_key_id
 AWS_SECRET_ACCESS_KEY=your_secret_access_key
-AWS_S3_BUCKET_NAME=your-bucket-name
+AWS_S3_BUCKET_NAME=your-bucket-name`}
+            </pre>
+          </div>
 
-# Optional Custom CDN or R2 Endpoint:
-# AWS_S3_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
-# AWS_S3_PUBLIC_DOMAIN=https://cdn.yourdomain.com`}
-          </pre>
+          <h4 className="text-sm font-bold text-white">AWS S3 Bucket CORS Configuration:</h4>
+          <p className="text-xs text-white/50">
+            AWS S3 Console &gt; Bucket &gt; Permissions &gt; Cross-origin resource sharing (CORS):
+          </p>
+          <div className="relative rounded-2xl border border-white/10 bg-black/60 p-4 font-mono text-xs text-white/80">
+            <button
+              type="button"
+              onClick={() => copyText('aws_cors', corsSample)}
+              className="absolute right-3 top-3 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/60 hover:text-white"
+            >
+              {copied === 'aws_cors' ? <span className="text-xs font-bold text-primary">Copied!</span> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+            <pre className="overflow-x-auto text-[11px] leading-relaxed text-white/70">{corsSample}</pre>
+          </div>
         </div>
-
-        {/* CORS configuration */}
-        <h4 className="mt-6 text-sm font-bold text-white">Required AWS S3 Bucket CORS Configuration:</h4>
-        <p className="mt-1 text-xs text-white/50">
-          In your AWS S3 Console &gt; Bucket &gt; Permissions &gt; Cross-origin resource sharing (CORS):
-        </p>
-
-        <div className="relative mt-3 rounded-2xl border border-white/10 bg-black/60 p-4 font-mono text-xs text-white/80">
-          <button
-            type="button"
-            onClick={() => copyText('cors', corsSample)}
-            className="absolute right-3 top-3 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/60 hover:text-white"
-            title="Copy CORS JSON"
-          >
-            {copied === 'cors' ? <span className="text-xs font-bold text-primary">Copied!</span> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          <pre className="overflow-x-auto text-[11px] leading-relaxed text-white/70">{corsSample}</pre>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -81,6 +81,7 @@ export async function generateUploadPresignedUrl({
   const client = getS3Client();
   const bucket = process.env.AWS_S3_BUCKET_NAME?.trim();
   const region = process.env.AWS_REGION?.trim() || 'us-east-1';
+  const endpoint = process.env.AWS_S3_ENDPOINT?.trim();
   const customDomain = process.env.AWS_S3_PUBLIC_DOMAIN?.trim();
 
   if (!client || !bucket) {
@@ -107,9 +108,15 @@ export async function generateUploadPresignedUrl({
     expiresIn: expiresInSeconds,
   });
 
-  const publicUrl = customDomain
-    ? `${customDomain.replace(/\/+$/, '')}/${fileKey}`
-    : `https://${bucket}.s3.${region}.amazonaws.com/${fileKey}`;
+  let publicUrl = '';
+  if (customDomain) {
+    publicUrl = `${customDomain.replace(/\/+$/, '')}/${fileKey}`;
+  } else if (endpoint) {
+    const cleanEndpoint = endpoint.replace(/\/+$/, '');
+    publicUrl = `${cleanEndpoint}/${bucket}/${fileKey}`;
+  } else {
+    publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileKey}`;
+  }
 
   return {
     uploadUrl,
