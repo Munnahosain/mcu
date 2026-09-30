@@ -5,6 +5,8 @@ import { User } from "@/server/models/User";
 import { Plan } from "@/server/models/Plan";
 import { hashPassword } from "@/server/auth/hash";
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from "@/server/auth/jwt";
+import { hasMongoDbConfig } from "@/server/db/database-config";
+import { findDevUser, createDevUser } from "@/server/auth/dev-auth";
 
 type GoogleToken = { aud?: string; email?: string; email_verified?: string; name?: string; picture?: string };
 
@@ -22,6 +24,36 @@ export async function POST(req: Request) {
     const googleUser = await tokenResponse.json() as GoogleToken;
     if (!tokenResponse.ok || googleUser.aud !== clientId || googleUser.email_verified !== "true" || !googleUser.email) {
       return NextResponse.json({ success: false, error: "Google account verification failed." }, { status: 401 });
+    }
+
+    if (!hasMongoDbConfig()) {
+      let devUser = findDevUser(googleUser.email.toLowerCase());
+      if (!devUser) {
+        devUser = createDevUser(googleUser.name || googleUser.email.split('@')[0], googleUser.email.toLowerCase(), undefined, mode === 'admin' ? 'super_admin' : 'user');
+      }
+      if (!devUser) {
+        devUser = findDevUser(googleUser.email.toLowerCase()) || {
+          id: 'dev-google-user',
+          _id: 'dev-google-user',
+          name: googleUser.name || googleUser.email.split('@')[0],
+          email: googleUser.email.toLowerCase(),
+          role: mode === 'admin' ? 'super_admin' : 'user',
+          status: 'active',
+          credits: { monthly: 2000, bonus: 500, used: 0 },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      const userId = String(devUser.id || devUser._id);
+      const accessToken = await createAccessToken(userId);
+      const refreshToken = await createRefreshToken(userId);
+      const response = NextResponse.json({
+        success: true,
+        user: { id: userId, name: devUser.name, email: devUser.email, avatarUrl: googleUser.picture || '' },
+        accessToken,
+      });
+      response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+      return response;
     }
 
     await connectToDatabase();

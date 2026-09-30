@@ -12,8 +12,24 @@ type GoogleCredentialResponse = { credential?: string };
 type GoogleApi = {
   accounts: {
     id: {
-      initialize: (options: { client_id: string; auto_select?: boolean; callback: (response: GoogleCredentialResponse) => void }) => void;
-      renderButton: (element: HTMLElement, options: { type: "standard"; theme: "outline"; size: "large"; text: "continue_with"; shape: "rectangular"; width: number }) => void;
+      initialize: (options: {
+        client_id: string;
+        auto_select?: boolean;
+        callback: (response: GoogleCredentialResponse) => void;
+      }) => void;
+      renderButton: (
+        element: HTMLElement,
+        options: {
+          type?: "standard" | "icon";
+          theme?: "outline" | "filled_blue" | "filled_black";
+          size?: "large" | "medium" | "small";
+          text?: "signin_with" | "signup_with" | "continue_with" | "signin";
+          shape?: "rectangular" | "pill" | "circle" | "square";
+          logo_alignment?: "left" | "center";
+          width?: number | string;
+        }
+      ) => void;
+      prompt?: (momentListener?: (notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => void) => void;
       cancel: () => void;
       disableAutoSelect: () => void;
     };
@@ -21,12 +37,14 @@ type GoogleApi = {
 };
 
 declare global {
-  interface Window { google?: GoogleApi }
+  interface Window {
+    google?: GoogleApi;
+  }
 }
 
 export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMode }) {
   const router = useRouter();
-  const buttonRef = useRef<HTMLDivElement>(null);
+  const buttonContainerRef = useRef<HTMLDivElement>(null);
   const [clientId, setClientId] = useState("");
   const [configLoaded, setConfigLoaded] = useState(false);
   const [configError, setConfigError] = useState("");
@@ -54,21 +72,23 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
       .catch(() => {
         if (active) {
           setConfigLoaded(true);
-          setConfigError("Google sign-in is unavailable right now.");
+          setConfigError("Google sign-in configuration unavailable.");
           setIsScriptLoading(false);
         }
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [retryCount]);
 
-  // 2. Initialize Google GSI Script & Render Button
-  const initGoogleButton = useCallback(() => {
-    if (!clientId || !buttonRef.current) return;
+  // 2. Initialize Google Identity Services & Render Native Button
+  const renderGoogleButton = useCallback(() => {
+    if (!clientId || !buttonContainerRef.current) return;
     setIsScriptLoading(true);
     setError("");
 
-    const renderGsi = () => {
-      if (!window.google || !buttonRef.current) return;
+    const doRender = () => {
+      if (!window.google || !buttonContainerRef.current) return;
       try {
         window.google.accounts.id.initialize({
           client_id: clientId,
@@ -119,48 +139,54 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
           },
         });
 
-        buttonRef.current.replaceChildren();
-        window.google.accounts.id.renderButton(buttonRef.current, {
+        // Determine container width
+        const containerWidth = buttonContainerRef.current.parentElement?.clientWidth || 360;
+        const targetWidth = Math.min(380, Math.max(240, containerWidth));
+
+        // Clear existing children and render native Google button visibly
+        buttonContainerRef.current.replaceChildren();
+        window.google.accounts.id.renderButton(buttonContainerRef.current, {
           type: "standard",
           theme: "outline",
           size: "large",
           text: "continue_with",
           shape: "rectangular",
-          width: Math.min(360, buttonRef.current.clientWidth || 360),
+          logo_alignment: "left",
+          width: targetWidth,
         });
 
         setIsReady(true);
         setIsScriptLoading(false);
       } catch (err) {
-        console.error("Failed to initialize Google button:", err);
+        console.error("Failed to render Google button:", err);
         setError("Failed to load Google Sign-in. Please try again.");
         setIsScriptLoading(false);
       }
     };
 
     if (window.google) {
-      renderGsi();
+      doRender();
       return;
     }
 
-    // Handle script loading with timeout
+    // Script loading timeout
     const scriptTimeout = setTimeout(() => {
       if (!window.google) {
         setIsScriptLoading(false);
-        setError("Google script took too long to load.");
+        setError("Google script took too long to load (Check adblocker or connection).");
       }
-    }, 8000);
+    }, 7000);
 
     const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-gsi="true"]');
     if (existingScript) {
       const handleLoad = () => {
         clearTimeout(scriptTimeout);
-        renderGsi();
+        doRender();
       };
       const handleError = () => {
         clearTimeout(scriptTimeout);
         setIsScriptLoading(false);
-        setError("Google sign-in is unavailable right now.");
+        setError("Google sign-in is blocked by browser or connection.");
       };
       existingScript.addEventListener("load", handleLoad, { once: true });
       existingScript.addEventListener("error", handleError, { once: true });
@@ -174,21 +200,21 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
     script.dataset.googleGsi = "true";
     script.onload = () => {
       clearTimeout(scriptTimeout);
-      renderGsi();
+      doRender();
     };
     script.onerror = () => {
       clearTimeout(scriptTimeout);
       setIsScriptLoading(false);
-      setError("Google sign-in is unavailable right now.");
+      setError("Google sign-in is blocked by browser or connection.");
     };
     document.head.appendChild(script);
   }, [clientId, mode, router]);
 
   useEffect(() => {
     if (clientId) {
-      initGoogleButton();
+      renderGoogleButton();
     }
-  }, [clientId, initGoogleButton]);
+  }, [clientId, renderGoogleButton]);
 
   const handleRetry = () => {
     setError("");
@@ -215,41 +241,28 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
   }
 
   return (
-    <div className="space-y-2">
-      <div className="relative h-11 w-full overflow-hidden rounded-xl">
-        <button
-          type="button"
-          disabled={loading || isScriptLoading || !isReady}
-          className="absolute inset-0 z-0 inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-foreground/10 bg-foreground/[0.035] px-4 text-sm font-semibold text-foreground shadow-[0_8px_24px_rgba(7,27,23,0.07)] transition-all hover:border-primary/35 hover:bg-primary/[0.06] hover:shadow-[0_10px_28px_rgba(22,199,132,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span>Signing in...</span>
-            </>
-          ) : isScriptLoading && !isReady ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              <span className="text-muted-foreground text-xs">Loading Google Sign-in...</span>
-            </>
-          ) : (
-            <>
-              <img
-                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                alt="Google"
-                className="h-5 w-5"
-              />
-              <span>Continue with Google</span>
-            </>
-          )}
-        </button>
+    <div className="w-full space-y-3">
+      <div className="relative min-h-[44px] w-full flex items-center justify-center">
+        {/* Loading / Processing State */}
+        {loading && (
+          <div className="flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-primary/30 bg-primary/10 px-4 text-sm font-bold text-primary">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>Signing in to MCUSTOCK...</span>
+          </div>
+        )}
 
-        {/* The Google iframe overlay is ONLY clickable and active when fully ready & not loading */}
+        {/* Script Loading State */}
+        {!loading && (isScriptLoading || !isReady) && (
+          <div className="flex h-11 w-full animate-pulse items-center justify-center gap-2.5 rounded-xl border border-foreground/10 bg-foreground/[0.035] px-4 text-xs font-semibold text-foreground/60">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>Loading Google Sign-in...</span>
+          </div>
+        )}
+
+        {/* Official Google GSI Native Render Container (Visible, Zero Opacity Tricks) */}
         <div
-          ref={buttonRef}
-          className={`absolute inset-0 min-h-11 opacity-0 transition-opacity ${
-            isReady && !loading ? "z-10 pointer-events-auto cursor-pointer" : "z-0 pointer-events-none"
-          }`}
+          ref={buttonContainerRef}
+          className={`w-full flex justify-center ${loading || isScriptLoading || !isReady ? "hidden" : "block"}`}
         />
       </div>
 
@@ -268,3 +281,4 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
     </div>
   );
 }
+
