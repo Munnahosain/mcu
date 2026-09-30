@@ -462,7 +462,7 @@ export default function PricingPage() {
 
         {paymentMessage ? <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-center text-sm font-bold text-primary">Payment submitted successfully. Payment ID: {paymentMessage}. Verification is pending.</div> : null}
 
-        {checkoutPlan ? <PaymentCheckoutModal plan={checkoutPlan} billingCycle={billingCycle} onClose={() => setCheckoutPlan(null)} onSubmitted={(paymentId) => { setPaymentMessage(paymentId); setCheckoutPlan(null); }} /> : null}
+        {checkoutPlan ? <PaymentCheckoutModal plan={checkoutPlan} billingCycle={billingCycle} onClose={() => setCheckoutPlan(null)} onSubmitted={(paymentId) => { setPaymentMessage(paymentId); }} /> : null}
 
         {/* Feature Comparison Section */}
         <div className="mx-auto max-w-6xl rounded-3xl border border-foreground/10 bg-foreground/[0.02] p-6 sm:p-10 space-y-8 shadow-xl">
