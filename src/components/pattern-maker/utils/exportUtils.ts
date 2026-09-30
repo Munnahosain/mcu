@@ -147,7 +147,12 @@ export async function exportHighResTile(
   await drawTileToCanvas(ctx, elements, settings, size, size, true);
 
   const filename = `fabric-pattern-tile-${settings.physicalSize}${settings.physicalUnit}-${size}x${size}px.png`;
-  triggerDownload(canvas.toDataURL('image/png'), filename);
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, filename);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, 'image/png');
 }
 
 /**
@@ -214,7 +219,12 @@ export async function exportTiledFabric(
   }
 
   const filename = `fabric-yardage-${repeatCols}x${repeatRows}-repeat-${settings.repeatType}.png`;
-  triggerDownload(canvas.toDataURL('image/png'), filename);
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, filename);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, 'image/png');
 }
 
 /**

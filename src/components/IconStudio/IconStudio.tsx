@@ -773,6 +773,50 @@ function applyLightingPreset(preset: LightingPreset, lightsGroup: THREE.Group) {
   }
 }
 
+let exportCanvasInstance: HTMLCanvasElement | null = null;
+let exportRendererInstance: THREE.WebGLRenderer | null = null;
+let exportPmremInstance: THREE.PMREMGenerator | null = null;
+let exportEnvTextureInstance: THREE.Texture | null = null;
+
+function getSharedExportRenderer(size: number, alpha: boolean) {
+  if (!exportCanvasInstance) {
+    exportCanvasInstance = document.createElement("canvas");
+  }
+  exportCanvasInstance.width = size;
+  exportCanvasInstance.height = size;
+
+  const isContextLost = exportRendererInstance?.getContext()?.isContextLost();
+  if (!exportRendererInstance || isContextLost) {
+    if (exportRendererInstance) {
+      try {
+        exportRendererInstance.dispose();
+      } catch {}
+    }
+    exportRendererInstance = new THREE.WebGLRenderer({
+      canvas: exportCanvasInstance,
+      antialias: true,
+      alpha,
+      preserveDrawingBuffer: true,
+      powerPreference: "high-performance",
+    });
+    exportRendererInstance.setPixelRatio(1);
+    exportRendererInstance.outputColorSpace = THREE.SRGBColorSpace;
+    exportRendererInstance.toneMapping = THREE.ACESFilmicToneMapping;
+    exportRendererInstance.toneMappingExposure = 1.15;
+
+    exportPmremInstance = new THREE.PMREMGenerator(exportRendererInstance);
+    exportPmremInstance.compileEquirectangularShader();
+    exportEnvTextureInstance = exportPmremInstance.fromScene(new RoomEnvironment(), 0.04).texture;
+  }
+
+  exportRendererInstance.setSize(size, size, false);
+  return {
+    canvas: exportCanvasInstance,
+    renderer: exportRendererInstance,
+    envTexture: exportEnvTextureInstance,
+  };
+}
+
 const IconPreview = forwardRef<
   PreviewHandle,
   { asset?: IconAsset; controls: StudioControls; onError: (error: string) => void }
@@ -1116,22 +1160,7 @@ const IconPreview = forwardRef<
       },
       exportBlob: async (targetAsset, format, resolution) => {
         const size = resolutionSize[resolution];
-        const offCanvas = document.createElement("canvas");
-        offCanvas.width = size;
-        offCanvas.height = size;
-
-        const offRenderer = new THREE.WebGLRenderer({
-          canvas: offCanvas,
-          antialias: true,
-          alpha: controls.alpha,
-          preserveDrawingBuffer: true,
-          powerPreference: "high-performance",
-        });
-        offRenderer.setSize(size, size, false);
-        offRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        offRenderer.outputColorSpace = THREE.SRGBColorSpace;
-        offRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-        offRenderer.toneMappingExposure = 1.15;
+        const { canvas: offCanvas, renderer: offRenderer, envTexture } = getSharedExportRenderer(size, controls.alpha);
 
         const bgHex = new THREE.Color(controls.bgColor).getHex();
         offRenderer.setClearColor(controls.alpha ? 0x000000 : bgHex, controls.alpha ? 0 : 1);
@@ -1141,10 +1170,9 @@ const IconPreview = forwardRef<
         offCamera.position.set(0, 0, 7.2);
         offCamera.lookAt(0, 0, 0);
 
-        const pmremGenerator = new THREE.PMREMGenerator(offRenderer);
-        pmremGenerator.compileEquirectangularShader();
-        const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-        offScene.environment = envTexture;
+        if (envTexture) {
+          offScene.environment = envTexture;
+        }
 
         const offLights = new THREE.Group();
         offScene.add(offLights);
@@ -1194,11 +1222,10 @@ const IconPreview = forwardRef<
           );
         });
 
+        // Clean up only geometry and mesh objects; keep persistent WebGL context alive for the next batch icon!
         offScene.remove(exportGroup);
         disposeObject(exportGroup);
-        envTexture.dispose();
-        pmremGenerator.dispose();
-        offRenderer.dispose();
+        offScene.clear();
 
         return blob;
       },
@@ -2034,33 +2061,46 @@ export default function IconStudio() {
 
   const exportBatch = async () => {
     if (!assets.length || !previewRef.current) return;
+    const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
+    const targets = selectedAssets.length ? selectedAssets : assets;
+    if (!targets.length) return;
+
     cancelBatch.current = false;
-    setBatch({ running: true, current: "", completed: 0, failed: 0 });
+    setBatch({ running: true, current: `Starting 4K export (0/${targets.length})...`, completed: 0, failed: 0 });
     try {
-      await consumeFeatureCredit("three_d_generation", assets.length);
+      await consumeFeatureCredit("three_d_generation", targets.length);
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       let completed = 0;
       let failed = 0;
-      for (const asset of assets) {
+      for (let idx = 0; idx < targets.length; idx++) {
         if (cancelBatch.current) break;
+        const asset = targets[idx];
+        const statusLabel = `(${idx + 1}/${targets.length}) ${asset.name}`;
+        setBatch({ running: true, current: statusLabel, completed, failed });
         await yieldToBrowser();
-        setBatch({ running: true, current: asset.name, completed, failed });
         try {
           const blob = await previewRef.current.exportBlob(asset, "png", controls.resolution);
           zip.file(`${asset.name.replace(/\.svg$/i, "")}-3d-${controls.resolution}.png`, blob);
           completed += 1;
-        } catch {
+        } catch (itemErr) {
+          console.error(`Export failed for ${asset.name}:`, itemErr);
           failed += 1;
         }
-        setBatch({ running: true, current: asset.name, completed, failed });
-        // Let React paint progress and process cancellation before the next WebGL export.
-        await yieldToBrowser();
+        setBatch({ running: true, current: statusLabel, completed, failed });
+        // Let React paint progress and allow memory/GPU buffer cleanup between 4K renders
+        await new Promise((r) => setTimeout(r, 40));
       }
       if (!cancelBatch.current && completed > 0) {
+        setBatch((cur) => ({ ...cur, current: "Building ZIP archive..." }));
         await yieldToBrowser();
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        downloadBlob(zipBlob, `3d-icons-${controls.resolution}.zip`);
+        const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+          setBatch((cur) => ({ ...cur, current: `Packaging ZIP (${Math.round(metadata.percent)}%)...` }));
+        });
+        downloadBlob(zipBlob, `3d-icons-${controls.resolution}-${completed}-items.zip`);
+      }
+      if (failed > 0) {
+        setError(`${completed} exported successfully, ${failed} failed.`);
       }
     } catch (zipError) {
       setError(zipError instanceof Error ? zipError.message : "Batch export failed.");
@@ -2763,7 +2803,7 @@ export default function IconStudio() {
                 className="flex items-center gap-1.5 rounded-xl border border-primary/35 bg-primary/10 hover:bg-primary/20 px-3 py-2 text-xs font-bold text-primary transition-all disabled:opacity-40"
               >
                 {batch.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileArchive className="h-3.5 w-3.5" />}
-                <span>ZIP ({assets.length})</span>
+                <span>ZIP ({selectedIds.length ? `${selectedIds.length} Selected` : `All ${assets.length}`}) [{controls.resolution}]</span>
               </button>
               <button
                 onClick={() => void exportSelectedVideos()}

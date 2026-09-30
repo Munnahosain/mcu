@@ -234,6 +234,18 @@ export default function App() {
     setActiveTab('artboard');
   };
 
+  // Load complex pre-designed pattern arrangement from preset library
+  const handleLoadPatternPreset = (presetElements: DesignElement[], bg?: string) => {
+    pushHistory();
+    setElements(JSON.parse(JSON.stringify(presetElements)));
+    if (bg) {
+      setSettings((prev) => ({ ...prev, backgroundColor: bg }));
+    }
+    setSelectedId(null);
+    setActiveTab('artboard');
+    setToastMessage('Pattern preset loaded into Artboard!');
+  };
+
   // Insert Custom SVG path
   const handleAddCustomSvgPath = (path: string, fill: string) => {
     pushHistory();
@@ -478,6 +490,7 @@ export default function App() {
         onClose={() => setIsShapeLibraryOpen(false)}
         onSelectShape={handleAddShape}
         onAddCustomSvgPath={handleAddCustomSvgPath}
+        onLoadPatternPreset={handleLoadPatternPreset}
       />
 
       {/* Help & Zero-Math Edge Wrapping Guide Modal */}

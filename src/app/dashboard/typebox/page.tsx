@@ -381,13 +381,14 @@ export default function TypeboxStudioPage() {
     try {
       await consumeFeatureCredit("typebox_generation");
       const svgStr = generateSvgExport(state);
-      const filename = `typebox-${state.activeEffect}.svg`;
+      const filename = `typebox-${state.sourceMode === "svg" ? "vector" : state.activeEffect}.svg`;
       downloadText(svgStr, filename, "image/svg+xml;charset=utf-8");
 
       setCopiedNotification("SVG vector exported successfully!");
       setTimeout(() => setCopiedNotification(null), 3000);
     } catch (err) {
-      alert("SVG export error: " + (err instanceof Error ? err.message : "Unknown error"));
+      setCopiedNotification("SVG export error: " + (err instanceof Error ? err.message : "Unable to export SVG"));
+      setTimeout(() => setCopiedNotification(null), 4000);
     }
   };
 

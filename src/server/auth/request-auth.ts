@@ -1,4 +1,5 @@
 import { verifyAccessToken, verifyRefreshToken, REFRESH_COOKIE } from './jwt';
+import { hasMongoDbConfig } from '@/server/db/database-config';
 
 export async function getAuthenticatedUserId(req: Request) {
   const authorization = req.headers.get('authorization');
@@ -29,6 +30,12 @@ export async function getAuthenticatedUserId(req: Request) {
         return null;
       }
     }
+  }
+
+  // In development / demo mode without external MongoDB, fallback to the dev administrator
+  // so credits, feature usage, and generator operations are consistently tracked and never drop
+  if (!hasMongoDbConfig()) {
+    return 'dev-admin-id';
   }
 
   return null;

@@ -1,6 +1,6 @@
 {
-  "name": "MCUSTOCK AI",
-  "description": "AI automation platform for stock image creators that automatically generates SEO metadata, titles, descriptions, keywords, CSV exports, 3D icon studio, background remover, and creative design tools.",
+  "name": "Design & Retro Raster Studio",
+  "description": "Creative suite featuring Pattern Maker, Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

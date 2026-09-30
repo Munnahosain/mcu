@@ -282,42 +282,64 @@ export default function GridStudio() {
 
   // Export high-res PNG
   const handleExportPng = async () => {
-    await consumeFeatureCredit("grid_generation");
-    const fullSvg = buildGridSvg(config, width, height, { isExport: true });
-    const svgBlob = new Blob([fullSvg], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
-    const img = new Image();
+    try {
+      await consumeFeatureCredit("grid_generation");
+      const fullSvg = buildGridSvg(config, width, height, { isExport: true });
+      const svgBlob = new Blob([fullSvg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
 
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            URL.revokeObjectURL(url);
+            notify("Canvas context error");
+            return;
+          }
 
-      if (config.bgMode === "dark") {
-        ctx.fillStyle = config.bgColor || "#0c131a";
-        ctx.fillRect(0, 0, width, height);
-      } else if (config.bgMode === "light") {
-        ctx.fillStyle = "#f4f7f6";
-        ctx.fillRect(0, 0, width, height);
-      } else if (config.bgMode === "custom") {
-        ctx.fillStyle = config.bgColor;
-        ctx.fillRect(0, 0, width, height);
-      }
+          if (config.bgMode === "dark") {
+            ctx.fillStyle = config.bgColor || "#0c131a";
+            ctx.fillRect(0, 0, width, height);
+          } else if (config.bgMode === "light") {
+            ctx.fillStyle = "#f4f7f6";
+            ctx.fillRect(0, 0, width, height);
+          } else if (config.bgMode === "custom") {
+            ctx.fillStyle = config.bgColor;
+            ctx.fillRect(0, 0, width, height);
+          }
 
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
+          ctx.drawImage(img, 0, 0, width, height);
+          URL.revokeObjectURL(url);
 
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const filename = `smart-grid-${config.type}-${width}x${height}.png`;
-        downloadBlob(blob, filename);
-        notify("High-res PNG exported!");
-      }, "image/png");
-    };
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              notify("PNG blob creation failed");
+              return;
+            }
+            const filename = `smart-grid-${config.type}-${width}x${height}.png`;
+            downloadBlob(blob, filename);
+            notify("High-res PNG exported!");
+          }, "image/png");
+        } catch (canvasErr) {
+          URL.revokeObjectURL(url);
+          notify(canvasErr instanceof Error ? canvasErr.message : "Failed to generate PNG");
+        }
+      };
 
-    img.src = url;
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        notify("Unable to rasterize SVG to PNG");
+      };
+
+      img.src = url;
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Unable to export PNG");
+    }
   };
 
   // Save grid preset

@@ -3,7 +3,7 @@ import { CreditLedger } from '@/server/models/CreditLedger';
 import { User } from '@/server/models/User';
 import { SystemSetting } from '@/server/models/SystemSetting';
 import { hasMongoDbConfig } from '@/server/db/database-config';
-import { updateDevUserCredits } from '@/server/auth/dev-auth';
+import { updateDevUserCredits, deductDevUserCredits } from '@/server/auth/dev-auth';
 
 type CreditCostKey =
   | 'metadata_generation'
@@ -20,7 +20,8 @@ type CreditCostKey =
   | 'bento_generation'
   | 'ascii_generation'
   | 'trading_generation'
-  | 'splitter_export';
+  | 'splitter_export'
+  | 'pattern_generation';
 
 async function resolveCreditAmount(amount: number, costKey?: CreditCostKey) {
   if (!costKey) return amount;
@@ -45,8 +46,13 @@ export async function consumeCredits(userId: string, amount = 1, reason = 'Featu
   if (!Number.isInteger(amount) || amount <= 0) throw new Error('Credit amount must be a positive integer.');
 
   if (!hasMongoDbConfig()) {
-    updateDevUserCredits(userId, -amount, 0, amount);
-    return { _id: userId, credits: { monthly: 2000, bonus: 500, used: amount } };
+    const effectiveAmount = await resolveCreditAmount(amount, costKey);
+    try {
+      const updated = deductDevUserCredits(userId, effectiveAmount);
+      return { _id: userId, credits: updated?.credits || { monthly: 2000, bonus: 500, used: effectiveAmount } };
+    } catch {
+      throw new InsufficientCreditsError();
+    }
   }
 
   await connectToDatabase();

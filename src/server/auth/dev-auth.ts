@@ -78,8 +78,8 @@ export function findDevUserById(id: string): DevUser | null {
   }
   if (id === 'dev-admin-id') return DEFAULT_DEV_ADMIN;
 
-  // Provide a valid authenticated user object fallback
-  return {
+  // Provide a valid authenticated user object fallback and store it persistently in memory
+  const fallback: DevUser = {
     id,
     _id: id,
     name: 'MCU Creator',
@@ -90,10 +90,37 @@ export function findDevUserById(id: string): DevUser | null {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+  store.users.set(id, fallback);
+  return fallback;
 }
 
 export function listDevUsers(): DevUser[] {
   return Array.from(store.users.values());
+}
+
+export function deductDevUserCredits(id: string, amount: number): DevUser | null {
+  const user = findDevUserById(id);
+  if (!user) return null;
+  const available = (user.credits.monthly || 0) + (user.credits.bonus || 0);
+  if (available < amount) {
+    throw new Error('You do not have enough credits to use this feature.');
+  }
+
+  // Deduct from monthly credits first, then remaining from bonus credits
+  const deductFromMonthly = Math.min(user.credits.monthly, amount);
+  const deductFromBonus = amount - deductFromMonthly;
+
+  user.credits.monthly = Math.max(0, user.credits.monthly - deductFromMonthly);
+  user.credits.bonus = Math.max(0, user.credits.bonus - deductFromBonus);
+  user.credits.used = (user.credits.used || 0) + amount;
+  user.updatedAt = new Date().toISOString();
+
+  store.users.set(user.id, user);
+  store.users.set(user._id, user);
+  if (user.email) {
+    store.users.set(user.email.toLowerCase().trim(), user);
+  }
+  return user;
 }
 
 export function updateDevUserCredits(id: string, monthlyDelta = 0, bonusDelta = 0, usedDelta = 0): DevUser | null {
@@ -103,6 +130,12 @@ export function updateDevUserCredits(id: string, monthlyDelta = 0, bonusDelta = 
   user.credits.bonus = Math.max(0, user.credits.bonus + bonusDelta);
   user.credits.used = Math.max(0, user.credits.used + usedDelta);
   user.updatedAt = new Date().toISOString();
+  // Ensure it's keyed in store by id
+  store.users.set(user.id, user);
+  store.users.set(user._id, user);
+  if (user.email) {
+    store.users.set(user.email.toLowerCase().trim(), user);
+  }
   return user;
 }
 

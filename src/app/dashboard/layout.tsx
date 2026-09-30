@@ -39,7 +39,7 @@ const navLinks = [
   { name: "Palette", href: "/dashboard/palette", icon: Pipette },
   { name: "Typebox", href: "/dashboard/typebox", icon: Type },
   { name: "Pattern Maker", href: "/dashboard/pattern-maker", icon: Scissors },
-  { name: "ASCII", href: "/dashboard/ascii", icon: Binary },
+  { name: "Halftone • Dither • ASCII", href: "/dashboard/ascii", icon: Binary },
   { name: "Events", href: "/dashboard/events", icon: Calendar },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
 ];
