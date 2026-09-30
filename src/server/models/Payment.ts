@@ -16,7 +16,7 @@ const PaymentSchema = new Schema({
     durationDays: { type: Number, required: true, min: 1 },
     billingInterval: { type: String, enum: ['month', 'year'], default: 'month' },
   },
-  provider: { type: String, enum: ['bkash'], required: true, default: 'bkash' },
+  provider: { type: String, enum: ['bkash', 'nagad', 'rocket', 'upay'], required: true, default: 'bkash' },
   amount: { type: Number, required: true, min: 0 },
   currency: { type: String, required: true, default: 'BDT' },
   senderNumber: { type: String, required: true, trim: true },
