@@ -15,7 +15,10 @@ export async function POST(req: Request) {
     if (!clientId) return NextResponse.json({ success: false, error: "Google sign-in is not configured." }, { status: 503 });
     if (!credential) return NextResponse.json({ success: false, error: "Google credential is missing." }, { status: 400 });
 
-    const tokenResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`, { cache: "no-store" });
+    const tokenResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
     const googleUser = await tokenResponse.json() as GoogleToken;
     if (!tokenResponse.ok || googleUser.aud !== clientId || googleUser.email_verified !== "true" || !googleUser.email) {
       return NextResponse.json({ success: false, error: "Google account verification failed." }, { status: 401 });
