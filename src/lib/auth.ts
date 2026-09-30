@@ -1,3 +1,5 @@
+import { clearAllWorkspaceStorage } from "@/lib/safeStorage";
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -98,6 +100,7 @@ export const clearAuthUser = () => {
   logoutRequested = false;
   localStorage.removeItem(USER_KEY);
   clearAccessToken();
+  void clearAllWorkspaceStorage();
 };
 
 export const getDownloadsKey = (email?: string | null) => {

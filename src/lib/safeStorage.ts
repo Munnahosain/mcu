@@ -126,3 +126,26 @@ export function removeSessionValue(key: string): void {
     // Ignore
   }
 }
+
+export async function clearAllWorkspaceStorage(): Promise<void> {
+  memoryCache.clear();
+  try {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("mcustock_studio_assets");
+      window.sessionStorage.removeItem("mcustock_studio_import");
+      window.sessionStorage.removeItem("mcustock_splitter_workspace");
+      window.sessionStorage.removeItem("mcustock_3d_studio_controls");
+    }
+    const db = await getIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+    });
+  } catch {
+    // Ignore
+  }
+}
+
