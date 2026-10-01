@@ -6,18 +6,32 @@ import { Upload, Image as ImageIcon, Download, Trash2, Eraser, X, CheckCircle2 }
 import { motion, AnimatePresence } from "framer-motion";
 
 import { ensureAccessToken } from "@/lib/auth";
+import { usePersistentState } from "@/lib/usePersistentState";
+
+const BG_REMOVER_IMAGES_KEY = "mcustock_bg_remover_images";
 
 interface BgImage {
   id: string;
   file: File;
   preview: string;
+  resultBlob?: Blob;
   resultPreview?: string;
   status: "pending" | "processing" | "done" | "error";
   error?: string;
 }
 
 export default function BackgroundRemoverPage() {
-  const [images, setImages] = useState<BgImage[]>([]);
+  const [images, setImages] = usePersistentState<BgImage[]>(BG_REMOVER_IMAGES_KEY, [], {
+    serialize: (current) => current.map((image) => ({ ...image, preview: "", resultPreview: undefined })),
+    deserialize: (saved) => Array.isArray(saved)
+      ? (saved as Omit<BgImage, "preview" | "resultPreview">[]).map((image) => ({
+          ...image,
+          preview: URL.createObjectURL(image.file),
+          resultPreview: image.resultBlob ? URL.createObjectURL(image.resultBlob) : undefined,
+          status: image.status === "processing" ? "pending" : image.status,
+        }))
+      : [],
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +88,7 @@ export default function BackgroundRemoverPage() {
         setImages((prev) =>
           prev.map((i) =>
             i.id === img.id
-              ? { ...i, status: "done", resultPreview: objectUrl }
+              ? { ...i, status: "done", resultBlob: blob, resultPreview: objectUrl }
               : i
           )
         );

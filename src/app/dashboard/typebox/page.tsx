@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { downloadDataUrl, downloadText } from "@/lib/downloadHelper";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
+import { usePersistentState } from "@/lib/usePersistentState";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ThemedSelect from "@/components/ui/ThemedSelect";
 import {
@@ -73,6 +74,26 @@ const TYPEBOX_COLOR_PRESETS = [
   { name: "Pastel Lavender", textColor: "#e0e7ff", bgColor: "#1e1b4b" },
 ];
 const TYPEBOX_SETTINGS_KEY = "mcustock_typebox_settings";
+
+type TypeboxUploadedAssets = {
+  svgContent: string | null;
+  svgFileName: string | null;
+  shardSvgContent: string | null;
+  shardSvgName: string | null;
+  customFontData: ArrayBuffer | null;
+  customFontName: string | null;
+  customFontUrl: string | null;
+};
+
+const EMPTY_TYPEBOX_ASSETS: TypeboxUploadedAssets = {
+  svgContent: null,
+  svgFileName: null,
+  shardSvgContent: null,
+  shardSvgName: null,
+  customFontData: null,
+  customFontName: null,
+  customFontUrl: null,
+};
 
 // Pro Slider Component matching 3D Icon Studio style with full number input support
 function StudioSlider({
@@ -138,6 +159,10 @@ export default function TypeboxStudioPage() {
     language: "en",
   });
   const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [uploadedAssets, setUploadedAssets, uploadedAssetsHydrated] = usePersistentState<TypeboxUploadedAssets>(
+    "mcustock_typebox_uploaded_assets",
+    EMPTY_TYPEBOX_ASSETS
+  );
   const [zoom, setZoom] = useState<number>(0.85);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
@@ -161,12 +186,10 @@ export default function TypeboxStudioPage() {
         restored.slice = { ...DEFAULT_TYPEBOX_STATE.slice, ...restored.slice };
         restored.boom = { ...DEFAULT_TYPEBOX_STATE.boom, ...restored.boom };
         restored.crack = { ...DEFAULT_TYPEBOX_STATE.crack, ...restored.crack };
-        restored.sourceMode = "text";
         restored.svgContent = null;
         restored.svgFileName = null;
         restored.customFontUrl = null;
         restored.customFontName = null;
-        restored.fontFamily = restored.fontFamily === "Custom" ? DEFAULT_TYPEBOX_STATE.fontFamily : restored.fontFamily;
         restored.boom.shardSvgContent = null;
         restored.boom.shardSvgName = null;
         setState(restored);
@@ -181,12 +204,10 @@ export default function TypeboxStudioPage() {
     if (!settingsHydrated) return;
     const settings = {
       ...state,
-      sourceMode: "text" as const,
       svgContent: null,
       svgFileName: null,
       customFontUrl: null,
       customFontName: null,
-      fontFamily: state.fontFamily === "Custom" ? DEFAULT_TYPEBOX_STATE.fontFamily : state.fontFamily,
       boom: { ...state.boom, shardSvgContent: null, shardSvgName: null },
     };
     try {
@@ -194,6 +215,34 @@ export default function TypeboxStudioPage() {
     } catch {
     }
   }, [state, settingsHydrated]);
+
+  useEffect(() => {
+    if (!uploadedAssetsHydrated) return;
+    setState((current) => ({
+      ...current,
+      ...(uploadedAssets.svgContent ? {
+        svgContent: uploadedAssets.svgContent,
+        svgFileName: uploadedAssets.svgFileName,
+      } : {}),
+      ...(uploadedAssets.customFontData ? {
+        customFontName: uploadedAssets.customFontName,
+        customFontUrl: uploadedAssets.customFontUrl,
+      } : {}),
+      boom: {
+        ...current.boom,
+        ...(uploadedAssets.shardSvgContent ? {
+          shardSvgContent: uploadedAssets.shardSvgContent,
+          shardSvgName: uploadedAssets.shardSvgName,
+        } : {}),
+      },
+    }));
+
+    if (uploadedAssets.customFontData && uploadedAssets.customFontName) {
+      void new FontFace(uploadedAssets.customFontName, uploadedAssets.customFontData)
+        .load()
+        .then((fontFace) => document.fonts.add(fontFace));
+    }
+  }, [uploadedAssets, uploadedAssetsHydrated]);
 
   // Drag interaction tracking
   const dragStartRef = useRef<{ clientX: number; clientY: number; initialX: number; initialY: number }>({
@@ -339,6 +388,12 @@ export default function TypeboxStudioPage() {
           customFontName: fontName,
           customFontUrl: file.name,
         }));
+        setUploadedAssets((prev) => ({
+          ...prev,
+          customFontData: arrayBuffer,
+          customFontName: fontName,
+          customFontUrl: file.name,
+        }));
       } catch (err) {
         alert("Failed to parse font file: " + (err instanceof Error ? err.message : "Unknown error"));
       }
@@ -361,6 +416,7 @@ export default function TypeboxStudioPage() {
           svgContent: text,
           svgFileName: file.name,
         }));
+        setUploadedAssets((prev) => ({ ...prev, svgContent: text, svgFileName: file.name }));
       }
     };
     reader.readAsText(file);
@@ -384,6 +440,7 @@ export default function TypeboxStudioPage() {
             shardSvgName: file.name,
           },
         }));
+        setUploadedAssets((prev) => ({ ...prev, shardSvgContent: text, shardSvgName: file.name }));
       }
     };
     reader.readAsText(file);

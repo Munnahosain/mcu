@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   DesignElement,
   PatternSettings,
@@ -17,14 +17,24 @@ import {
   ChevronDown,
   CheckCircle2,
   Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+  GripVertical,
 } from 'lucide-react';
 import { isElementCrossingEdge } from '../utils/seamlessMath';
+import { getPresetByKind } from '../utils/shapeLibrary';
 
 interface PropertiesPanelProps {
   elements: DesignElement[];
   selectedElement: DesignElement | null;
   selectedId: string | null;
+  selectedIds: string[];
   setSelectedId: (id: string | null) => void;
+  onSelectLayer: (id: string, extend: boolean) => void;
+  onToggleVisibility: (id: string) => void;
+  onToggleLock: (id: string) => void;
+  onReorderLayer: (draggedId: string, targetId: string) => void;
   onUpdateElement: (updated: Partial<DesignElement>) => void;
   onDuplicateElement: () => void;
   onDeleteElement: () => void;
@@ -56,11 +66,40 @@ function sliderProgress(value: number, minimum: number, maximum: number): React.
   return { '--range-progress': `${Math.max(0, Math.min(100, percentage))}%` } as React.CSSProperties;
 }
 
+function LayerPreview({ element }: { element: DesignElement }) {
+  const extent = Math.max(element.width, element.height, 1);
+  const scale = 72 / extent;
+
+  return (
+    <svg viewBox="0 0 100 100" className="h-10 w-10 shrink-0 rounded-md border border-[#30363e] bg-[#101114]" aria-hidden="true">
+      <g transform={`translate(50 50) rotate(${element.rotation}) scale(${scale})`}>
+        {element.type === 'shape' && element.shapeKind && (
+          <path d={getPresetByKind(element.shapeKind).path} transform="translate(-50 -50)" fill={element.fill} stroke={element.stroke || 'none'} strokeWidth={element.strokeWidth || 0} />
+        )}
+        {element.type === 'path' && element.pathData && (
+          <path d={element.pathData} transform={`translate(${-element.width / 2} ${-element.height / 2})`} fill={element.fill} stroke={element.stroke || 'none'} strokeWidth={element.strokeWidth || 0} strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {element.type === 'text' && (
+          <text x="0" y="0" fontFamily={element.fontFamily || 'sans-serif'} fontSize={element.fontSize || 32} fill={element.fill} textAnchor="middle" dominantBaseline="central" fontWeight="bold">{element.textContent || 'Aa'}</text>
+        )}
+        {element.type === 'image' && element.imageUrl && (
+          <image href={element.imageUrl} x={-element.width / 2} y={-element.height / 2} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
+        )}
+      </g>
+    </svg>
+  );
+}
+
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   elements,
   selectedElement,
   selectedId,
+  selectedIds,
   setSelectedId,
+  onSelectLayer,
+  onToggleVisibility,
+  onToggleLock,
+  onReorderLayer,
   onUpdateElement,
   onDuplicateElement,
   onDeleteElement,
@@ -68,13 +107,39 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   settings,
   setSettings,
 }) => {
+  const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
+  const dragSourceId = useRef<string | null>(null);
+  const reorderLayerRef = useRef(onReorderLayer);
+
+  useEffect(() => {
+    reorderLayerRef.current = onReorderLayer;
+  }, [onReorderLayer]);
+
+  useEffect(() => {
+    const finishLayerDrag = (event: PointerEvent) => {
+      const sourceId = dragSourceId.current;
+      if (!sourceId) return;
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-layer-id]');
+      const targetId = target?.dataset.layerId;
+      if (targetId && targetId !== sourceId) reorderLayerRef.current(sourceId, targetId);
+      dragSourceId.current = null;
+      setDraggingLayerId(null);
+    };
+
+    window.addEventListener('pointerup', finishLayerDrag);
+    window.addEventListener('pointercancel', finishLayerDrag);
+    return () => {
+      window.removeEventListener('pointerup', finishLayerDrag);
+      window.removeEventListener('pointercancel', finishLayerDrag);
+    };
+  }, []);
   const crossing = selectedElement
     ? isElementCrossingEdge(selectedElement, settings.artboardSize)
     : null;
   const isCrossingAny = crossing && (crossing.left || crossing.right || crossing.top || crossing.bottom);
 
   return (
-    <aside className="flex h-full w-[clamp(260px,22vw,320px)] max-w-[30vw] shrink-0 flex-col overflow-y-auto border-r border-[var(--card-border)] bg-[var(--card-bg)] text-xs text-foreground select-none">
+    <aside className="pattern-maker-inspector flex h-full w-[clamp(260px,22vw,320px)] max-w-[30vw] shrink-0 flex-col overflow-y-auto border-r border-[var(--card-border)] bg-[var(--card-bg)] text-xs text-foreground select-none">
       {/* Panel Header */}
       <div className="p-3.5 border-b border-[#252a31] flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -85,7 +150,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
         {selectedElement && (
           <span className="font-mono text-[10px] text-[#18c98a] bg-[#18c98a]/10 px-2 py-0.5 rounded border border-[#18c98a]/30">
-            {selectedElement.name || selectedElement.type}
+            {selectedIds.length > 1 ? `${selectedIds.length} selected` : selectedElement.name || selectedElement.type}
           </span>
         )}
       </div>
@@ -96,21 +161,46 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <span>Layers</span>
             <span>{elements.length}</span>
           </div>
-          <div className="max-h-48 space-y-1 overflow-y-auto">
+          <div className="max-h-64 space-y-1 overflow-y-auto">
             {[...elements].sort((a, b) => b.zIndex - a.zIndex).map((element) => (
-              <button
+              <div
                 key={element.id}
-                type="button"
-                onClick={() => setSelectedId(element.id)}
-                className={`flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
-                  selectedId === element.id
+                data-layer-id={element.id}
+                className={`flex min-w-0 items-center gap-1 rounded-md border p-1 transition ${
+                  selectedIds.includes(element.id)
                     ? 'border-[#18c98a]/50 bg-[#18c98a]/10 text-[#18c98a]'
                     : 'border-transparent bg-[#17191e] text-[#aeb5bf] hover:border-[#30363e] hover:text-[#f5f7f8]'
-                }`}
+                } ${draggingLayerId === element.id ? 'opacity-40' : ''}`}
               >
-                <span className="w-8 shrink-0 font-mono text-[9px] text-[#77808c]">{element.type}</span>
-                <span className="min-w-0 flex-1 truncate text-[11px]">{element.name || element.type}</span>
-              </button>
+                <button
+                  type="button"
+                  aria-label={`Drag ${element.name} to reorder`}
+                  title="Drag to reorder"
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) return;
+                    dragSourceId.current = element.id;
+                    setDraggingLayerId(element.id);
+                  }}
+                  className="flex h-9 w-5 shrink-0 touch-none cursor-grab items-center justify-center text-[#77808c] active:cursor-grabbing"
+                >
+                  <GripVertical className="h-4 w-3" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => onSelectLayer(element.id, event.shiftKey)}
+                  title={element.name || element.type}
+                  className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left"
+                >
+                  <LayerPreview element={element} />
+                  <span className="truncate text-[10px] uppercase text-[#aeb5bf]">{element.type}</span>
+                </button>
+                <button type="button" onClick={() => onToggleVisibility(element.id)} aria-label={element.visible === false ? `Show ${element.name}` : `Hide ${element.name}`} title={element.visible === false ? 'Show layer' : 'Hide layer'} className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[#aeb5bf] hover:bg-[#2a2f36] hover:text-[#f5f7f8]">
+                  {element.visible === false ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+                <button type="button" onClick={() => onToggleLock(element.id)} aria-label={element.locked ? `Unlock ${element.name}` : `Lock ${element.name}`} title={element.locked ? 'Unlock layer' : 'Lock layer'} className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-[#aeb5bf] hover:bg-[#2a2f36] hover:text-[#f5f7f8]">
+                  {element.locked ? <Lock className="h-3.5 w-3.5 text-[#18c98a]" /> : <Unlock className="h-3.5 w-3.5" />}
+                </button>
+              </div>
             ))}
             {elements.length === 0 && (
               <p className="rounded-md bg-[#17191e] px-2.5 py-3 text-[11px] text-[#77808c]">No layers yet</p>

@@ -137,6 +137,8 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
   }, [elements, settings, repeatCount, showTileBorders]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    containerRef.current?.setPointerCapture(e.pointerId);
     setIsPanning(true);
     setStartPan({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
@@ -273,7 +275,7 @@ export const TilingPreview: React.FC<TilingPreviewProps> = ({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        className={`flex-1 overflow-hidden flex items-center justify-center relative cursor-grab active:cursor-grabbing ${
+        className={`flex-1 overflow-hidden flex items-center justify-center relative ${isPanning ? 'cursor-grabbing' : 'cursor-grab'} ${
           settings.backgroundTransparent ? 'bg-transparency-grid-dark' : 'bg-[#0b0c0e]'
         }`}
       >

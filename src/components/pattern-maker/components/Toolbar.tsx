@@ -95,7 +95,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <aside className="pattern-maker-toolbar flex w-14 shrink-0 flex-col items-center justify-between border-r border-[#252a31] bg-[#101114] py-3 text-[#f5f7f8] select-none">
+    <aside className="pattern-maker-toolbar flex w-14 shrink-0 flex-col items-center justify-between overflow-y-auto border-r border-[#252a31] bg-[#101114] py-3 text-[#f5f7f8] select-none">
       {/* Primary Vector Creation & Manipulation Tools */}
       <div className="flex flex-col items-center gap-1.5 w-full px-2">
         <button
@@ -139,8 +139,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button
           id="tool-draw"
           onClick={() => setToolMode('draw')}
-          title="Seamless Edge Brush / Pen Tool (P)"
-          className={`w-10 h-10 rounded-lg flex items-center justify-center transition ${
+          title="Pen Tool: Draw a freehand motif (P)"
+          aria-label="Pen tool"
+          className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition ${
             toolMode === 'draw'
               ? 'bg-[#18c98a] text-[#071b17] font-bold shadow-md shadow-[#18c98a]/20'
               : 'text-[#aeb5bf] hover:text-[#f5f7f8] hover:bg-[#17191e]'

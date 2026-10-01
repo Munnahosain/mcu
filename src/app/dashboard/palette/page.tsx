@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
 import ThemedSelect from "@/components/ui/ThemedSelect";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 // --- Helpers ---
 function rgbToHex(r: number, g: number, b: number) {
@@ -108,6 +109,7 @@ interface ExtractedColor {
 const PALETTE_SETTINGS_KEY = "mcustock_palette_settings";
 
 export default function ColorPalettePage() {
+  const [sourceFile, setSourceFile] = usePersistentState<File | null>("mcustock_palette_source_file", null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [colorsCount, setColorsCount] = useState<number>(6);
@@ -177,22 +179,30 @@ export default function ColorPalettePage() {
     img.src = src;
   };
 
+  useEffect(() => {
+    if (!sourceFile) {
+      setImagePreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(sourceFile);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [sourceFile]);
+
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
     if (!file.type.startsWith("image/")) return;
 
-    const url = URL.createObjectURL(file);
-    setImagePreview(url);
+    setSourceFile(file);
     setPickedColor(null);
-    processImage(url, colorsCount);
   };
 
   useEffect(() => {
      if (imagePreview) {
          processImage(imagePreview, colorsCount);
      }
-  }, [colorsCount]);
+  }, [colorsCount, imagePreview]);
 
   const copyToClipboard = (text: string, index: number) => {
      navigator.clipboard.writeText(text);
@@ -411,7 +421,7 @@ export default function ColorPalettePage() {
                 </div>
 
                 <div 
-                    onClick={() => { setImagePreview(null); setPalette([]); setPickedColor(null); }}
+                    onClick={() => { setSourceFile(null); setImagePreview(null); setPalette([]); setPickedColor(null); }}
                     className="flex items-center gap-3 px-6 py-4 bg-primary/5 hover:bg-primary/10 border border-dashed border-primary/20 rounded-2xl cursor-pointer text-primary/70 transition-colors"
                 >
                     <ImagePlus className="w-5 h-5 opacity-60" />

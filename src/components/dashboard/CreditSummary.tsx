@@ -35,6 +35,36 @@ function getExpiryLabel(expiresAt?: string | null) {
 
 // Module-level cache so the credit data is available immediately across dropdown opens
 let cachedCreditData: CreditSummaryData | null = null;
+let creditRequest: Promise<CreditSummaryData | null> | null = null;
+
+function requestCreditData() {
+  if (creditRequest) return creditRequest;
+
+  creditRequest = (async () => {
+    try {
+      const token = await ensureAccessToken();
+      const response = await fetch("/api/account/credits", {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) return null;
+
+      const payload = (await response.json()) as CreditSummaryData;
+      cachedCreditData = payload;
+      return payload;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    creditRequest = null;
+  });
+
+  return creditRequest;
+}
+
+export function prefetchCreditSummary() {
+  void requestCreditData();
+}
 
 export default function CreditSummary({ compact = false }: CreditSummaryProps) {
   const [data, setData] = useState<CreditSummaryData | null>(cachedCreditData);
@@ -43,19 +73,12 @@ export default function CreditSummary({ compact = false }: CreditSummaryProps) {
 
   const fetchCredits = useCallback(async () => {
     try {
-      const token = await ensureAccessToken();
-      const response = await fetch("/api/account/credits", {
-        credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      if (!response.ok) {
+      const payload = await requestCreditData();
+      if (!payload) {
         setHasError(true);
         return;
       }
 
-      const payload = (await response.json()) as CreditSummaryData;
-      cachedCreditData = payload;
       setData(payload);
       setHasError(false);
     } catch {

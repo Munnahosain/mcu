@@ -7,6 +7,9 @@ import { ensureAccessToken } from "@/lib/auth";
 import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { prepareImageForUpload } from "@/lib/client-image";
 import { downloadText } from "@/lib/downloadHelper";
+import { usePersistentState } from "@/lib/usePersistentState";
+
+const PROMPT_IMAGES_KEY = "mcustock_prompt_images";
 
 interface ImageFile {
   id: string;
@@ -18,7 +21,16 @@ interface ImageFile {
 }
 
 export default function PromptsPage() {
-  const [images, setImages] = useState<ImageFile[]>([]);
+  const [images, setImages] = usePersistentState<ImageFile[]>(PROMPT_IMAGES_KEY, [], {
+    serialize: (current) => current.map((image) => ({ ...image, preview: "" })),
+    deserialize: (saved) => Array.isArray(saved)
+      ? (saved as ImageFile[]).map((image) => ({
+          ...image,
+          preview: URL.createObjectURL(image.file),
+          status: image.status === "generating" ? "pending" : image.status,
+        }))
+      : [],
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   // Handle File Select

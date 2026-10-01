@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
+import { usePersistentState } from "@/lib/usePersistentState";
+import ThemedSelect from "@/components/ui/ThemedSelect";
 import {
   HalftoneOptions,
   DEFAULT_HALFTONE_OPTIONS,
@@ -75,8 +77,12 @@ export default function RetroRasterStudioPage() {
   const [activeStudioMode, setActiveStudioMode] = useState<StudioMode>("halftone");
 
   // Shared image state
-  const [image, setImage] = useState<string | null>(null);
-  const [imageName, setImageName] = useState<string>("untitled");
+  const [sourceImage, setSourceImage] = usePersistentState<{ dataUrl: string; name: string } | null>(
+    "mcustock_ascii_source_image",
+    null
+  );
+  const image = sourceImage?.dataUrl ?? null;
+  const imageName = sourceImage?.name ?? "untitled";
   const [imageSize, setImageSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(84);
   const [exportScale, setExportScale] = useState<number>(1);
@@ -189,8 +195,7 @@ export default function RetroRasterStudioPage() {
         showToast("Could not read this image", "error");
         return;
       }
-      setImage(result);
-      setImageName(file.name);
+      setSourceImage({ dataUrl: result, name: file.name });
 
       const img = new Image();
       img.onload = () => {
@@ -210,7 +215,7 @@ export default function RetroRasterStudioPage() {
       showToast("Could not read this image", "error");
     };
     reader.readAsDataURL(file);
-  }, [showToast]);
+  }, [setSourceImage, showToast]);
 
   // Clipboard paste listener
   useEffect(() => {
@@ -547,8 +552,7 @@ export default function RetroRasterStudioPage() {
   };
 
   const handleClearAll = () => {
-    setImage(null);
-    setImageName("untitled");
+    setSourceImage(null);
     setImageSize({ width: 0, height: 0 });
     sourceImgRef.current = null;
     showToast("Image cleared");
@@ -563,7 +567,7 @@ export default function RetroRasterStudioPage() {
   };
 
   return (
-    <div className="flex flex-col h-auto lg:h-[calc(100vh-8rem)] w-full min-w-0 bg-[#07080b] text-[#f1f5f9] overflow-x-hidden lg:overflow-hidden rounded-[24px] border border-[#1e222a] shadow-2xl">
+    <div className="retro-raster-studio flex flex-col h-auto lg:h-[calc(100vh-8rem)] w-full min-w-0 bg-[#07080b] text-[#f1f5f9] overflow-x-hidden lg:overflow-hidden rounded-[24px] border border-[#1e222a] shadow-2xl">
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
@@ -806,29 +810,35 @@ export default function RetroRasterStudioPage() {
                       {/* Algorithm */}
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Algorithm</label>
-                        <select
+                        <ThemedSelect
                           value={halftoneOptions.algorithm}
-                          onChange={(e) => setHalftoneOptions(p => ({ ...p, algorithm: e.target.value as any }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="am">Amplitude Modulation</option>
-                          <option value="fm">Frequency Modulation</option>
-                          <option value="dotGain">Dot Gain / Concentric</option>
-                        </select>
+                          onChange={(value) => setHalftoneOptions((current) => ({ ...current, algorithm: value as any }))}
+                          ariaLabel="Algorithm"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "am", label: "Amplitude Modulation" },
+                            { value: "fm", label: "Frequency Modulation" },
+                            { value: "dotGain", label: "Dot Gain / Concentric" },
+                          ]}
+                        />
                       </div>
 
                       {/* Fit Mode */}
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Fit Mode</label>
-                        <select
+                        <ThemedSelect
                           value={halftoneOptions.fitMode}
-                          onChange={(e) => setHalftoneOptions(p => ({ ...p, fitMode: e.target.value as any }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="fit">Fit</option>
-                          <option value="fill">Fill</option>
-                          <option value="original">Original</option>
-                        </select>
+                          onChange={(value) => setHalftoneOptions((current) => ({ ...current, fitMode: value as any }))}
+                          ariaLabel="Fit mode"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "fit", label: "Fit" },
+                            { value: "fill", label: "Fill" },
+                            { value: "original", label: "Original" },
+                          ]}
+                        />
                       </div>
 
                       {/* Blur Slider */}
@@ -904,15 +914,18 @@ export default function RetroRasterStudioPage() {
                       {/* Grid Type */}
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Grid Type</label>
-                        <select
+                        <ThemedSelect
                           value={halftoneOptions.gridType}
-                          onChange={(e) => setHalftoneOptions(p => ({ ...p, gridType: e.target.value as any }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="square">Square</option>
-                          <option value="hexagonal">Hexagonal</option>
-                          <option value="radial">Radial</option>
-                        </select>
+                          onChange={(value) => setHalftoneOptions((current) => ({ ...current, gridType: value as any }))}
+                          ariaLabel="Grid type"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "square", label: "Square" },
+                            { value: "hexagonal", label: "Hexagonal" },
+                            { value: "radial", label: "Radial" },
+                          ]}
+                        />
                       </div>
 
                       {/* Spacing */}
@@ -969,17 +982,20 @@ export default function RetroRasterStudioPage() {
                     <div className="p-3 border-t border-[#252a31] space-y-3 text-xs">
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Channel</label>
-                        <select
+                        <ThemedSelect
                           value={halftoneOptions.channel}
-                          onChange={(e) => setHalftoneOptions(p => ({ ...p, channel: e.target.value as any }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="invLum">Inverse Luminance</option>
-                          <option value="lum">Luminance</option>
-                          <option value="red">Red</option>
-                          <option value="green">Green</option>
-                          <option value="blue">Blue</option>
-                        </select>
+                          onChange={(value) => setHalftoneOptions((current) => ({ ...current, channel: value as any }))}
+                          ariaLabel="Color channel"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "invLum", label: "Inverse Luminance" },
+                            { value: "lum", label: "Luminance" },
+                            { value: "red", label: "Red" },
+                            { value: "green", label: "Green" },
+                            { value: "blue", label: "Blue" },
+                          ]}
+                        />
                       </div>
 
                       <div className="flex items-center justify-between pt-1">
@@ -1012,18 +1028,21 @@ export default function RetroRasterStudioPage() {
                     <div className="p-3 border-t border-[#252a31] space-y-3 text-xs">
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Style</label>
-                        <select
+                        <ThemedSelect
                           value={halftoneOptions.dotStyle}
-                          onChange={(e) => setHalftoneOptions(p => ({ ...p, dotStyle: e.target.value as any }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="circle">Circle</option>
-                          <option value="square">Square</option>
-                          <option value="diamond">Diamond</option>
-                          <option value="cross">Cross</option>
-                          <option value="ring">Ring</option>
-                          <option value="line">Line / Stripe</option>
-                        </select>
+                          onChange={(value) => setHalftoneOptions((current) => ({ ...current, dotStyle: value as any }))}
+                          ariaLabel="Dot style"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "circle", label: "Circle" },
+                            { value: "square", label: "Square" },
+                            { value: "diamond", label: "Diamond" },
+                            { value: "cross", label: "Cross" },
+                            { value: "ring", label: "Ring" },
+                            { value: "line", label: "Line / Stripe" },
+                          ]}
+                        />
                       </div>
 
                       <div className="flex items-center justify-between">
@@ -1164,15 +1183,18 @@ export default function RetroRasterStudioPage() {
                     <div className="p-3 border-t border-[#252a31] space-y-2.5 text-xs">
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">PNG Scale</label>
-                        <select
-                          value={exportScale}
-                          onChange={(e) => setExportScale(Number(e.target.value))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="1">1x Scale</option>
-                          <option value="2">2x Scale</option>
-                          <option value="4">4x Scale</option>
-                        </select>
+                        <ThemedSelect
+                          value={String(exportScale)}
+                          onChange={(value) => setExportScale(Number(value))}
+                          ariaLabel="Halftone PNG scale"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "1", label: "1x Scale" },
+                            { value: "2", label: "2x Scale" },
+                            { value: "4", label: "4x Scale" },
+                          ]}
+                        />
                       </div>
 
                       <button
@@ -1337,21 +1359,24 @@ export default function RetroRasterStudioPage() {
                       {/* Method */}
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Method</label>
-                        <select
+                        <ThemedSelect
                           value={ditherOptions.method}
-                          onChange={(e) => setDitherOptions(p => ({ ...p, method: e.target.value as any }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="bayer8">Bayer 8×8 (Classic)</option>
-                          <option value="bayer4">Bayer 4×4</option>
-                          <option value="bayer2">Bayer 2×2</option>
-                          <option value="floydSteinberg">Floyd-Steinberg</option>
-                          <option value="atkinson">Atkinson (Mac Classic)</option>
-                          <option value="sierraLite">Sierra Lite</option>
-                          <option value="burkes">Burkes</option>
-                          <option value="stucki">Stucki</option>
-                          <option value="noise">Random Noise</option>
-                        </select>
+                          onChange={(value) => setDitherOptions((current) => ({ ...current, method: value as any }))}
+                          ariaLabel="Dither method"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "bayer8", label: "Bayer 8×8 (Classic)" },
+                            { value: "bayer4", label: "Bayer 4×4" },
+                            { value: "bayer2", label: "Bayer 2×2" },
+                            { value: "floydSteinberg", label: "Floyd-Steinberg" },
+                            { value: "atkinson", label: "Atkinson (Mac Classic)" },
+                            { value: "sierraLite", label: "Sierra Lite" },
+                            { value: "burkes", label: "Burkes" },
+                            { value: "stucki", label: "Stucki" },
+                            { value: "noise", label: "Random Noise" },
+                          ]}
+                        />
                       </div>
 
                       {/* Pixel Size */}
@@ -1494,24 +1519,27 @@ export default function RetroRasterStudioPage() {
                     <div className="p-3 border-t border-[#252a31] space-y-3 text-xs">
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Color Palette</label>
-                        <select
-                          value={ditherOptions.colorCount}
-                          onChange={(e) => {
-                            const val = e.target.value as any;
+                        <ThemedSelect
+                          value={String(ditherOptions.colorCount)}
+                          onChange={(value) => {
+                            const val = value as any;
                             setDitherOptions(p => ({
                               ...p,
                               colorCount: val,
                               colors: PRESET_PALETTES[val] || PRESET_PALETTES['2'],
                             }));
                           }}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="2">2 Colors (Custom / 1-Bit)</option>
-                          <option value="4">Game Boy (4 Colors)</option>
-                          <option value="cyberpunk">Cyberpunk Neon</option>
-                          <option value="amber">Amber CRT Monochrome</option>
-                          <option value="sepia">Vintage Sepia Newspaper</option>
-                        </select>
+                          ariaLabel="Color palette"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "2", label: "2 Colors (Custom / 1-Bit)" },
+                            { value: "4", label: "Game Boy (4 Colors)" },
+                            { value: "cyberpunk", label: "Cyberpunk Neon" },
+                            { value: "amber", label: "Amber CRT Monochrome" },
+                            { value: "sepia", label: "Vintage Sepia Newspaper" },
+                          ]}
+                        />
                       </div>
 
                       {/* Swatches */}
@@ -1559,15 +1587,18 @@ export default function RetroRasterStudioPage() {
                     <div className="p-3 border-t border-[#252a31] space-y-2.5 text-xs">
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">PNG Scale</label>
-                        <select
-                          value={exportScale}
-                          onChange={(e) => setExportScale(Number(e.target.value))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="1">1x Scale</option>
-                          <option value="2">2x Scale</option>
-                          <option value="4">4x Scale</option>
-                        </select>
+                        <ThemedSelect
+                          value={String(exportScale)}
+                          onChange={(value) => setExportScale(Number(value))}
+                          ariaLabel="Dither PNG scale"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "1", label: "1x Scale" },
+                            { value: "2", label: "2x Scale" },
+                            { value: "4", label: "4x Scale" },
+                          ]}
+                        />
                       </div>
 
                       <button
@@ -1670,17 +1701,20 @@ export default function RetroRasterStudioPage() {
                       {/* Character Set */}
                       <div className="space-y-1">
                         <label className="text-[11px] text-gray-400">Character set</label>
-                        <select
+                        <ThemedSelect
                           value={asciiOptions.charSet}
-                          onChange={(e) => setAsciiOptions(p => ({ ...p, charSet: e.target.value as CharSet }))}
-                          className="w-full bg-[#20242a] border border-[#30363e] text-gray-200 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                        >
-                          <option value="standard">Standard</option>
-                          <option value="dense">Dense</option>
-                          <option value="light">Light</option>
-                          <option value="blocks">Blocks</option>
-                          <option value="custom">Custom</option>
-                        </select>
+                          onChange={(value) => setAsciiOptions(p => ({ ...p, charSet: value as CharSet }))}
+                          ariaLabel="Character set"
+                          portalMenu
+                          className="w-full"
+                          options={[
+                            { value: "standard", label: "Standard" },
+                            { value: "dense", label: "Dense" },
+                            { value: "light", label: "Light" },
+                            { value: "blocks", label: "Blocks" },
+                            { value: "custom", label: "Custom" },
+                          ]}
+                        />
                       </div>
 
                       {asciiOptions.charSet === "custom" && (
@@ -1784,7 +1818,7 @@ export default function RetroRasterStudioPage() {
         <div className="flex-1 flex flex-col min-w-0 bg-[#101114] relative overflow-hidden">
           {/* Subtle Studio Blueprint Grid Background */}
           <div
-            className="absolute inset-0 pointer-events-none opacity-20"
+            className="retro-raster-grid absolute inset-0 pointer-events-none opacity-20"
             style={{
               backgroundImage:
                 "linear-gradient(to right, #252b3b 1px, transparent 1px), linear-gradient(to bottom, #252b3b 1px, transparent 1px)",

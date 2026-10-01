@@ -19,6 +19,8 @@ interface ArtboardCanvasProps {
   setElements: React.Dispatch<React.SetStateAction<DesignElement[]>>;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
   settings: PatternSettings;
   toolMode: ToolMode;
   zoom: number;
@@ -27,10 +29,12 @@ interface ArtboardCanvasProps {
 }
 
 type DragAction =
-  | { type: 'move'; startX: number; startY: number; initialElX: number; initialElY: number; isAltDuplicated?: boolean }
+  | { type: 'move'; startX: number; startY: number; elements: Array<{ id: string; x: number; y: number }> }
   | { type: 'resize'; handle: string; startX: number; startY: number; initialX: number; initialY: number; initialW: number; initialH: number; initialRot: number }
   | { type: 'rotate'; startAngle: number; initialRot: number; centerX: number; centerY: number }
   | { type: 'pan'; startX: number; startY: number; initialPanX: number; initialPanY: number }
+  | { type: 'zoom'; startY: number; initialZoom: number; anchorX: number; anchorY: number; initialPanX: number; initialPanY: number }
+  | { type: 'marquee'; startX: number; startY: number; endX: number; endY: number; additive: boolean; baseSelectedIds: string[] }
   | { type: 'draw'; points: { x: number; y: number }[] }
   | null;
 
@@ -39,6 +43,8 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   setElements,
   selectedId,
   setSelectedId,
+  selectedIds,
+  setSelectedIds,
   settings,
   toolMode,
   zoom,
@@ -100,6 +106,13 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   }, []);
 
   const selectedElement = elements.find((e) => e.id === selectedId) || null;
+  const selectedElements = elements.filter((element) => selectedIds.includes(element.id) && element.visible !== false);
+  const selectionBounds = selectedElements.length > 1 ? {
+    left: Math.min(...selectedElements.map((element) => element.x - element.width / 2)),
+    top: Math.min(...selectedElements.map((element) => element.y - element.height / 2)),
+    right: Math.max(...selectedElements.map((element) => element.x + element.width / 2)),
+    bottom: Math.max(...selectedElements.map((element) => element.y + element.height / 2)),
+  } : null;
 
   // Convert screen mouse coordinates to Artboard canvas coordinates
   const screenToCanvas = useCallback(
@@ -142,6 +155,29 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
     }
   };
 
+  const startZoomGesture = (e: React.PointerEvent) => {
+    if (e.button !== 0 || (!e.ctrlKey && !e.metaKey)) return false;
+    e.stopPropagation();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return true;
+    containerRef.current?.setPointerCapture(e.pointerId);
+    setDragAction({
+      type: 'zoom',
+      startY: e.clientY,
+      initialZoom: zoom,
+      anchorX: e.clientX - rect.left,
+      anchorY: e.clientY - rect.top,
+      initialPanX: pan.x,
+      initialPanY: pan.y,
+    });
+    return true;
+  };
+
+  const updateSelection = (ids: string[]) => {
+    setSelectedId(ids[ids.length - 1] || null);
+    setSelectedIds(ids);
+  };
+
   // Keyboard navigation & deletion
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,19 +186,19 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
         return;
       }
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length) {
         onPushHistory();
-        setElements((prev) => prev.filter((el) => el.id !== selectedId));
-        setSelectedId(null);
+        setElements((prev) => prev.filter((el) => !selectedIds.includes(el.id)));
+        updateSelection([]);
       } else if (e.key === 'Escape') {
-        setSelectedId(null);
-      } else if (selectedId && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        updateSelection([]);
+      } else if (selectedIds.length && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
         e.preventDefault();
         onPushHistory();
         const step = e.shiftKey ? 10 : 1;
         setElements((prev) =>
           prev.map((el) => {
-            if (el.id !== selectedId) return el;
+            if (!selectedIds.includes(el.id) || el.locked) return el;
             let nx = el.x;
             let ny = el.y;
             if (e.key === 'ArrowLeft') nx -= step;
@@ -181,11 +217,12 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, S, onPushHistory, setElements, setSelectedId]);
+  }, [selectedIds, S, onPushHistory, setElements]);
 
   // Pointer Down on canvas or background
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
     containerRef.current?.setPointerCapture(e.pointerId);
+    if (startZoomGesture(e)) return;
     if (e.button === 1 || toolMode === 'pan' || (e.button === 0 && spacePressed)) {
       // Pan
       setDragAction({
@@ -210,9 +247,17 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       return;
     }
 
-    // If clicked empty space, deselect
-    if ((e.target as HTMLElement).id === 'artboard-workspace' || (e.target as HTMLElement).id === 'artboard-svg') {
-      setSelectedId(null);
+    const targetId = (e.target as HTMLElement).id;
+    if (targetId === 'artboard-workspace' || targetId === 'artboard-svg' || targetId === 'master-artboard') {
+      setDragAction({
+        type: 'marquee',
+        startX: x,
+        startY: y,
+        endX: x,
+        endY: y,
+        additive: e.shiftKey || e.ctrlKey || e.metaKey,
+        baseSelectedIds: selectedIds,
+      });
     }
   };
 
@@ -221,15 +266,26 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
     e: React.PointerEvent,
     element: DesignElement
   ) => {
+    if (startZoomGesture(e)) return;
     e.stopPropagation();
     containerRef.current?.setPointerCapture(e.pointerId);
     if (toolMode === 'pan') return;
 
-    setSelectedId(element.id);
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    const nextSelectedIds = additive
+      ? selectedIds.includes(element.id)
+        ? selectedIds.filter((id) => id !== element.id)
+        : [...selectedIds, element.id]
+      : selectedIds.includes(element.id)
+        ? selectedIds
+        : [element.id];
+    updateSelection(nextSelectedIds);
+    if (element.locked) return;
+
     onPushHistory();
 
     const isAlt = e.altKey;
-    let targetEl = element;
+    let moveElements = elements.filter((item) => nextSelectedIds.includes(item.id) && !item.locked);
 
     // Alt + Drag duplicates like Illustrator
     if (isAlt) {
@@ -240,17 +296,15 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
         zIndex: elements.length + 1,
       };
       setElements((prev) => [...prev, newEl]);
-      setSelectedId(newEl.id);
-      targetEl = newEl;
+      updateSelection([newEl.id]);
+      moveElements = [newEl];
     }
 
     setDragAction({
       type: 'move',
       startX: e.clientX,
       startY: e.clientY,
-      initialElX: targetEl.x,
-      initialElY: targetEl.y,
-      isAltDuplicated: isAlt,
+      elements: moveElements.map((item) => ({ id: item.id, x: item.x, y: item.y })),
     });
   };
 
@@ -258,7 +312,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   const handleResizePointerDown = (e: React.PointerEvent, handle: string) => {
     e.stopPropagation();
     containerRef.current?.setPointerCapture(e.pointerId);
-    if (!selectedElement) return;
+    if (!selectedElement || selectedElement.locked || selectedElement.visible === false) return;
     onPushHistory();
 
     setDragAction({
@@ -278,7 +332,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   const handleRotatePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     containerRef.current?.setPointerCapture(e.pointerId);
-    if (!selectedElement) return;
+    if (!selectedElement || selectedElement.locked || selectedElement.visible === false) return;
     onPushHistory();
 
     if (!containerRef.current) return;
@@ -314,6 +368,26 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       return;
     }
 
+    if (dragAction.type === 'zoom') {
+      const nextZoom = Math.min(3.5, Math.max(0.3, dragAction.initialZoom * Math.exp((dragAction.startY - e.clientY) * 0.006)));
+      const ratio = nextZoom / dragAction.initialZoom;
+      setPan({
+        x: dragAction.anchorX - (dragAction.anchorX - dragAction.initialPanX) * ratio,
+        y: dragAction.anchorY - (dragAction.anchorY - dragAction.initialPanY) * ratio,
+      });
+      setZoom(nextZoom);
+      return;
+    }
+
+    if (dragAction.type === 'marquee') {
+      setDragAction({
+        ...dragAction,
+        endX: x,
+        endY: y,
+      });
+      return;
+    }
+
     if (dragAction.type === 'draw') {
       const newPts = [...dragAction.points, { x, y }];
       setDragAction({ ...dragAction, points: newPts });
@@ -321,31 +395,22 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       return;
     }
 
-    if (dragAction.type === 'move' && selectedElement) {
+    if (dragAction.type === 'move') {
       const dx = (e.clientX - dragAction.startX) / zoom;
       const dy = (e.clientY - dragAction.startY) / zoom;
-
-      let newX = dragAction.initialElX + dx;
-      let newY = dragAction.initialElY + dy;
-
-      if (settings.gridSnap) {
-        const gs = settings.gridSize || 20;
-        newX = Math.round(newX / gs) * gs;
-        newY = Math.round(newY / gs) * gs;
-      }
-
-      // Toroidal coordinates wrap smoothly:
-      // If the object's center moves past 0 or S, it gracefully wraps to opposite side!
-      // This is the core reason user asked for: no math needed, automatic seamless edge stitching!
-      const wrappedX = wrapCoordinate(newX, S);
-      const wrappedY = wrapCoordinate(newY, S);
-
       setElements((prev) =>
-        prev.map((el) =>
-          el.id === selectedElement.id
-            ? { ...el, x: wrappedX, y: wrappedY }
-            : el
-        )
+        prev.map((el) => {
+          const initial = dragAction.elements.find((item) => item.id === el.id);
+          if (!initial || el.locked) return el;
+          let newX = initial.x + dx;
+          let newY = initial.y + dy;
+          if (settings.gridSnap) {
+            const gs = settings.gridSize || 20;
+            newX = Math.round(newX / gs) * gs;
+            newY = Math.round(newY / gs) * gs;
+          }
+          return { ...el, x: wrapCoordinate(newX, S), y: wrapCoordinate(newY, S) };
+        })
       );
       return;
     }
@@ -414,6 +479,23 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
 
   // Pointer Up
   const handlePointerUp = () => {
+    if (dragAction?.type === 'marquee') {
+      const left = Math.min(dragAction.startX, dragAction.endX);
+      const right = Math.max(dragAction.startX, dragAction.endX);
+      const top = Math.min(dragAction.startY, dragAction.endY);
+      const bottom = Math.max(dragAction.startY, dragAction.endY);
+      const dragged = Math.abs(dragAction.endX - dragAction.startX) > 2 || Math.abs(dragAction.endY - dragAction.startY) > 2;
+      const hits = dragged ? elements.filter((element) => {
+        if (element.visible === false) return false;
+        const elementLeft = element.x - element.width / 2;
+        const elementRight = element.x + element.width / 2;
+        const elementTop = element.y - element.height / 2;
+        const elementBottom = element.y + element.height / 2;
+        return elementRight >= left && elementLeft <= right && elementBottom >= top && elementTop <= bottom;
+      }).map((element) => element.id) : [];
+      updateSelection(dragAction.additive ? [...new Set([...dragAction.baseSelectedIds, ...hits])] : hits);
+    }
+
     if (dragAction?.type === 'draw' && drawingPoints.length > 1) {
       // Convert points array into smooth SVG path data
       // Compute bounding box
@@ -464,7 +546,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
       };
 
       setElements((prev) => [...prev, newElement]);
-      setSelectedId(newElement.id);
+      updateSelection([newElement.id]);
       setDrawingPoints([]);
     }
 
@@ -472,12 +554,19 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
   };
 
   const unitLabel = settings.physicalUnit;
+  const workspaceCursor = dragAction?.type === 'pan'
+    ? 'cursor-grabbing'
+    : toolMode === 'pan' || spacePressed
+      ? 'cursor-grab'
+      : toolMode === 'draw'
+        ? 'cursor-crosshair'
+        : 'cursor-default';
 
   return (
     <div
       ref={containerRef}
       id="artboard-workspace"
-      className="pattern-maker-canvas flex-1 h-full relative overflow-hidden bg-stone-950 select-none cursor-default"
+      className={`pattern-maker-canvas flex-1 h-full relative overflow-hidden bg-stone-950 select-none ${workspaceCursor}`}
       onWheel={handleWheel}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handlePointerMove}
@@ -668,6 +757,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
             {[...elements]
               .sort((a, b) => a.zIndex - b.zIndex)
               .map((el) => {
+                if (el.visible === false) return null;
                 // Get all toroidal instances (the center one + any edge wrap clones)
                 const instances = getToroidalInstances(el, S);
 
@@ -684,7 +774,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
                           key={`${el.id}-inst-${idx}`}
                           transform={`translate(${inst.x}, ${inst.y}) rotate(${el.rotation}) scale(${el.scaleX}, ${el.scaleY})`}
                           opacity={inst.isPrimary ? el.opacity : el.opacity * 0.75}
-                          className="cursor-move"
+                          className={spacePressed || toolMode === 'pan' ? (dragAction?.type === 'pan' ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-move'}
                           onPointerDown={(e) =>
                             handleElementPointerDown(e, el)
                           }
@@ -782,7 +872,31 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
           </svg>
 
           {/* Illustrator-Style Bounding Box & Transform Controls for Selected Element */}
-          {selectedElement && (
+          {selectionBounds && (
+            <div
+              className="absolute pointer-events-none border border-dashed border-[#18c98a]"
+              style={{
+                left: selectionBounds.left,
+                top: selectionBounds.top,
+                width: selectionBounds.right - selectionBounds.left,
+                height: selectionBounds.bottom - selectionBounds.top,
+              }}
+            />
+          )}
+
+          {dragAction?.type === 'marquee' && (
+            <div
+              className="absolute z-30 border border-[#18c98a] bg-[#18c98a]/15 pointer-events-none"
+              style={{
+                left: Math.min(dragAction.startX, dragAction.endX),
+                top: Math.min(dragAction.startY, dragAction.endY),
+                width: Math.abs(dragAction.endX - dragAction.startX),
+                height: Math.abs(dragAction.endY - dragAction.startY),
+              }}
+            />
+          )}
+
+          {selectedElement && !selectedElement.locked && selectedElement.visible !== false && selectedIds.length <= 1 && (
             <div
               className="absolute pointer-events-none"
               style={{

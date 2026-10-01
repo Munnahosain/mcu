@@ -13,23 +13,29 @@ import { Toolbar } from './components/Toolbar';
 import { ArtboardCanvas } from './components/ArtboardCanvas';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { TilingPreview } from './components/TilingPreview';
-import { FabricSpecView } from './components/FabricSpecView';
 import { MockupView } from './components/MockupView';
 import { ShapeLibraryModal } from './components/ShapeLibraryModal';
 import { HelpModal } from './components/HelpModal';
 import { ColorwayModal } from './components/ColorwayModal';
 import { TextPromptModal } from './components/TextPromptModal';
 import { importVectorFile } from './utils/vectorImport';
+import { usePersistentState } from '@/lib/usePersistentState';
 
 const SETTINGS_STORAGE_KEY = 'mcustock_pattern_maker_settings';
+const ELEMENTS_STORAGE_KEY = 'mcustock_pattern_maker_elements';
 
 export default function App() {
   const defaultTemplate = STARTER_TEMPLATES[0];
 
-  const [elements, setElements] = useState<DesignElement[]>(
+  const [elements, setElements] = usePersistentState<DesignElement[]>(ELEMENTS_STORAGE_KEY,
     JSON.parse(JSON.stringify(defaultTemplate.elements))
   );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const setSelectedId = (id: string | null) => {
+    setSelectedIdState(id);
+    setSelectedIds(id ? [id] : []);
+  };
 
   // History stack for Undo / Redo
   const [history, setHistory] = useState<{
@@ -138,6 +144,11 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        const ids = elements.filter((element) => element.visible !== false && !element.locked).map((element) => element.id);
+        setSelectedIds(ids);
+        setSelectedIdState(ids[ids.length - 1] || null);
       } else if (e.key.toLowerCase() === 'v') {
         setToolMode('select');
       } else if (e.key.toLowerCase() === 'h') {
@@ -151,7 +162,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [elements, handleUndo, handleRedo]);
 
   // Update selected element
   const handleUpdateElement = (updated: Partial<DesignElement>) => {
@@ -183,10 +194,42 @@ export default function App() {
 
   // Delete selected element
   const handleDeleteElement = () => {
-    if (!selectedId) return;
+    if (!selectedIds.length) return;
     pushHistory();
-    setElements((prev) => prev.filter((el) => el.id !== selectedId));
+    setElements((prev) => prev.filter((el) => !selectedIds.includes(el.id)));
     setSelectedId(null);
+  };
+
+  const handleToggleVisibility = (id: string) => {
+    pushHistory();
+    setElements((prev) => prev.map((el) => el.id === id ? { ...el, visible: el.visible === false } : el));
+  };
+
+  const handleToggleLock = (id: string) => {
+    pushHistory();
+    setElements((prev) => prev.map((el) => el.id === id ? { ...el, locked: !el.locked } : el));
+  };
+
+  const handleSelectLayer = (id: string, extend: boolean) => {
+    const nextIds = extend
+      ? selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id]
+      : [id];
+    setSelectedIdState(id);
+    setSelectedIds(nextIds);
+  };
+
+  const handleReorderLayer = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    pushHistory();
+    setElements((prev) => {
+      const ordered = [...prev].sort((a, b) => b.zIndex - a.zIndex);
+      const fromIndex = ordered.findIndex((el) => el.id === draggedId);
+      const toIndex = ordered.findIndex((el) => el.id === targetId);
+      if (fromIndex < 0 || toIndex < 0) return prev;
+      const [dragged] = ordered.splice(fromIndex, 1);
+      ordered.splice(toIndex, 0, dragged);
+      return ordered.map((el, index) => ({ ...el, zIndex: ordered.length - index }));
+    });
   };
 
   // Reorder layer
@@ -436,7 +479,7 @@ export default function App() {
       />
 
       {/* Main Workspace Body */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div className="pattern-maker-workspace relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {/* Compact tool rail and settings inspector stay together on the left. */}
         {activeTab === 'artboard' && (
           <Toolbar
@@ -459,7 +502,12 @@ export default function App() {
             elements={elements}
             selectedElement={selectedElement}
             selectedId={selectedId}
+            selectedIds={selectedIds}
             setSelectedId={setSelectedId}
+            onSelectLayer={handleSelectLayer}
+            onToggleVisibility={handleToggleVisibility}
+            onToggleLock={handleToggleLock}
+            onReorderLayer={handleReorderLayer}
             onUpdateElement={handleUpdateElement}
             onDuplicateElement={handleDuplicateElement}
             onDeleteElement={handleDeleteElement}
@@ -470,13 +518,15 @@ export default function App() {
         )}
 
         {/* View Switcher based on Active Tab */}
-        <main className="relative order-3 flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <main className="pattern-maker-stage relative order-3 flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {activeTab === 'artboard' && (
             <ArtboardCanvas
               elements={elements}
               setElements={setElements}
               selectedId={selectedId}
               setSelectedId={setSelectedId}
+              selectedIds={selectedIds}
+              setSelectedIds={setSelectedIds}
               settings={settings}
               toolMode={toolMode}
               zoom={zoom}
@@ -487,14 +537,6 @@ export default function App() {
 
           {activeTab === 'tiling' && (
             <TilingPreview
-              elements={elements}
-              settings={settings}
-              setSettings={setSettings}
-            />
-          )}
-
-          {activeTab === 'fabric-spec' && (
-            <FabricSpecView
               elements={elements}
               settings={settings}
               setSettings={setSettings}

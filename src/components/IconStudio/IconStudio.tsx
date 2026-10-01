@@ -1665,6 +1665,16 @@ export default function IconStudio() {
     if (initializationStartedRef.current) return;
     initializationStartedRef.current = true;
 
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    if (navigation?.type === "reload") {
+      removeSessionValue(STUDIO_ASSETS_KEY);
+      removeSessionValue("mcustock_studio_import");
+      void idbRemove(STUDIO_ASSETS_KEY);
+      void idbRemove("mcustock_studio_import");
+      restoredAssetsRef.current = true;
+      return;
+    }
+
     const initAssets = async () => {
       // 1. Restore existing assets from memory / IndexedDB
       const existingAssets: IconAsset[] =

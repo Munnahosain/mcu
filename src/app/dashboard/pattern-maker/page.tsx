@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function DashboardPatternMakerPage() {
-  return <div className="pattern-maker-route h-[calc(100vh-7rem)] min-h-[620px] w-full overflow-hidden bg-background text-foreground"><PatternMakerApp /></div>;
+  return <div className="pattern-maker-route h-[calc(100dvh-7rem)] min-h-0 w-full overflow-hidden bg-background text-foreground"><PatternMakerApp /></div>;
 }

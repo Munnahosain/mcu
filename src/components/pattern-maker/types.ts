@@ -43,6 +43,7 @@ export interface DesignElement {
   groupName?: string;
   sourceFormat?: 'svg' | 'eps' | 'image';
   zIndex: number;
+  visible?: boolean;
   locked?: boolean;
 }
 
@@ -71,4 +72,4 @@ export interface PatternSettings {
 
 export type ToolMode = 'select' | 'draw' | 'shape' | 'text' | 'pan';
 
-export type ActiveTab = 'artboard' | 'tiling' | 'fabric-spec' | 'mockups';
+export type ActiveTab = 'artboard' | 'tiling' | 'mockups';

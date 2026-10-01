@@ -37,6 +37,7 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePersistentState } from "@/lib/usePersistentState";
 import ThemeToggle from "@/components/ThemeToggle";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import { GridConfig, GridType, LineStyle, BgMode, CanvasPreset, CompositionScores, ReferenceAnalysis } from "@/lib/grid/types";
@@ -46,6 +47,7 @@ import { consumeFeatureCredit } from "@/lib/feature-credits";
 import {
   createDefaultConfig,
   generateSeed,
+  seedToFloat,
   calculateCompositionScores,
   buildGridSvg,
   analyzeComposition,
@@ -75,7 +77,97 @@ const ASPECT_RATIO_PRESETS = [
   { label: "A4", name: "Print Doc", w: 1240, h: 1754 },
 ];
 
+type LayoutZone = {
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: "text" | "visual" | "action";
+};
+
+type LayoutBlueprint = {
+  name: string;
+  summary: string;
+  rules: string[];
+  zones: LayoutZone[];
+};
+
+const LAYOUT_BLUEPRINTS: LayoutBlueprint[][] = [
+  [
+    {
+      name: "Asymmetric Feature",
+      summary: "Headline leads; image carries the right-side weight.",
+      rules: ["Keep the headline to 2–3 lines.", "Align copy and CTA to the same left edge.", "Leave the image area free of text."],
+      zones: [
+        { label: "HEADLINE", x: 8, y: 9, width: 43, height: 19, kind: "text" },
+        { label: "SUPPORTING COPY", x: 8, y: 34, width: 32, height: 20, kind: "text" },
+        { label: "VISUAL", x: 49, y: 24, width: 43, height: 53, kind: "visual" },
+        { label: "CTA", x: 8, y: 68, width: 24, height: 10, kind: "action" },
+      ],
+    },
+    {
+      name: "Centered Stack",
+      summary: "A centered headline sets the hierarchy above one strong visual.",
+      rules: ["Center-align the title and supporting copy.", "Use one clear focal image.", "Keep the CTA below the image with generous breathing room."],
+      zones: [
+        { label: "HEADLINE", x: 14, y: 8, width: 72, height: 17, kind: "text" },
+        { label: "VISUAL", x: 13, y: 29, width: 74, height: 43, kind: "visual" },
+        { label: "SUPPORTING COPY", x: 17, y: 75, width: 66, height: 8, kind: "text" },
+        { label: "CTA", x: 36, y: 87, width: 28, height: 8, kind: "action" },
+      ],
+    },
+    {
+      name: "Editorial Rail",
+      summary: "A compact text rail balances a large, quiet image field.",
+      rules: ["Keep all text on one vertical alignment rail.", "Let the image occupy the largest area.", "Use the CTA as the final stop in the reading path."],
+      zones: [
+        { label: "VISUAL", x: 8, y: 12, width: 53, height: 72, kind: "visual" },
+        { label: "HEADLINE", x: 66, y: 16, width: 26, height: 23, kind: "text" },
+        { label: "SUPPORTING COPY", x: 66, y: 45, width: 26, height: 20, kind: "text" },
+        { label: "CTA", x: 66, y: 74, width: 26, height: 10, kind: "action" },
+      ],
+    },
+  ],
+  [
+    {
+      name: "Text-First Split",
+      summary: "A strong left column gives the message a clear entry point.",
+      rules: ["Align title, copy, and CTA to one left edge.", "Keep the title visibly larger than supporting text.", "Reserve the right side for a single visual."],
+      zones: [
+        { label: "HEADLINE", x: 8, y: 14, width: 38, height: 22, kind: "text" },
+        { label: "SUPPORTING COPY", x: 8, y: 42, width: 32, height: 19, kind: "text" },
+        { label: "CTA", x: 8, y: 72, width: 22, height: 10, kind: "action" },
+        { label: "VISUAL", x: 52, y: 13, width: 40, height: 74, kind: "visual" },
+      ],
+    },
+    {
+      name: "Visual-First Split",
+      summary: "The image draws attention first; the right rail explains and converts.",
+      rules: ["Keep title and copy aligned on the right rail.", "Use a short headline to preserve a clear hierarchy.", "Place the CTA after the supporting copy."],
+      zones: [
+        { label: "VISUAL", x: 8, y: 14, width: 47, height: 72, kind: "visual" },
+        { label: "HEADLINE", x: 62, y: 16, width: 30, height: 21, kind: "text" },
+        { label: "SUPPORTING COPY", x: 62, y: 43, width: 28, height: 20, kind: "text" },
+        { label: "CTA", x: 62, y: 73, width: 24, height: 10, kind: "action" },
+      ],
+    },
+    {
+      name: "Topline Editorial",
+      summary: "A broad title anchors two aligned columns below it.",
+      rules: ["Use the title as the first and widest read.", "Align the copy rail and CTA to each other.", "Keep a consistent gap between the two columns."],
+      zones: [
+        { label: "HEADLINE", x: 10, y: 9, width: 80, height: 19, kind: "text" },
+        { label: "VISUAL", x: 8, y: 35, width: 49, height: 51, kind: "visual" },
+        { label: "SUPPORTING COPY", x: 63, y: 39, width: 29, height: 21, kind: "text" },
+        { label: "CTA", x: 63, y: 71, width: 24, height: 10, kind: "action" },
+      ],
+    },
+  ],
+];
+
 export default function GridStudio() {
+  const [referenceFile, setReferenceFile] = usePersistentState<File | null>("mcustock_grid_reference_file", null);
   const [mode, setMode] = useState<"generate" | "analyze">("generate");
   const [width, setWidth] = useState(1080);
   const [height, setHeight] = useState(1080);
@@ -83,7 +175,10 @@ export default function GridStudio() {
   const [heightInput, setHeightInput] = useState("1080");
   const [isAspectLocked, setIsAspectLocked] = useState(false);
   const [config, setConfig] = useState<GridConfig>(() => createDefaultConfig("smart"));
+  const [layoutIndex, setLayoutIndex] = useState(() => Math.floor(seedToFloat(config.seed, 9) * 3));
   const [zoom, setZoom] = useState(1.0);
+  const [transparentPng, setTransparentPng] = useState(true);
+  const [showLayoutGuides, setShowLayoutGuides] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [savedGrids, setSavedGrids] = useState<{ id: string; seed: string; width: number; height: number; config: GridConfig; createdAt: string }[]>([]);
@@ -192,6 +287,7 @@ export default function GridStudio() {
   const handleGenerateNew = (type?: GridType) => {
     const nextType = type || config.type;
     const nextConfig = createDefaultConfig(nextType, generateSeed());
+    setLayoutIndex((index) => (index + 1) % 3);
     setConfig((prev) => ({
       ...nextConfig,
       gridColor: prev.gridColor,
@@ -246,9 +342,17 @@ export default function GridStudio() {
       notify("Please select an image file (PNG, JPG, WebP)");
       return;
     }
-    const url = URL.createObjectURL(file);
+    setReferenceFile(file);
+  };
+
+  useEffect(() => {
+    if (!referenceFile) return;
+
+    let active = true;
+    const url = URL.createObjectURL(referenceFile);
     const img = new Image();
     img.onload = () => {
+      if (!active) return;
       setReferenceImg(url);
       setWidth(img.width);
       setHeight(img.height);
@@ -258,7 +362,11 @@ export default function GridStudio() {
       notify(`Analyzed ${img.width}×${img.height} reference composition`);
     };
     img.src = url;
-  };
+    return () => {
+      active = false;
+      URL.revokeObjectURL(url);
+    };
+  }, [referenceFile]);
 
   // Export SVG vector file
   const handleExportSvg = async () => {
@@ -284,7 +392,8 @@ export default function GridStudio() {
   const handleExportPng = async () => {
     try {
       await consumeFeatureCredit("grid_generation");
-      const fullSvg = buildGridSvg(config, width, height, { isExport: true });
+      const pngConfig = transparentPng ? { ...config, bgMode: "transparent" as const } : config;
+      const fullSvg = buildGridSvg(pngConfig, width, height, { isExport: true });
       const svgBlob = new Blob([fullSvg], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(svgBlob);
       const img = new Image();
@@ -302,14 +411,14 @@ export default function GridStudio() {
             return;
           }
 
-          if (config.bgMode === "dark") {
-            ctx.fillStyle = config.bgColor || "#0c131a";
+          if (pngConfig.bgMode === "dark") {
+            ctx.fillStyle = pngConfig.bgColor || "#0c131a";
             ctx.fillRect(0, 0, width, height);
-          } else if (config.bgMode === "light") {
+          } else if (pngConfig.bgMode === "light") {
             ctx.fillStyle = "#f4f7f6";
             ctx.fillRect(0, 0, width, height);
-          } else if (config.bgMode === "custom") {
-            ctx.fillStyle = config.bgColor;
+          } else if (pngConfig.bgMode === "custom") {
+            ctx.fillStyle = pngConfig.bgColor;
             ctx.fillRect(0, 0, width, height);
           }
 
@@ -369,6 +478,11 @@ export default function GridStudio() {
     return generateCssGridCode(config, width, height);
   }, [config, width, height]);
 
+  const layoutBlueprint = useMemo(() => {
+    const options = width / Math.max(height, 1) > 1.05 ? LAYOUT_BLUEPRINTS[1] : LAYOUT_BLUEPRINTS[0];
+    return options[layoutIndex % options.length];
+  }, [layoutIndex, width, height]);
+
   return (
     <div className="min-h-full w-full text-foreground font-sans space-y-4 pb-12">
       {/* 1. TOP HEADER BANNER */}
@@ -417,6 +531,19 @@ export default function GridStudio() {
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Next Seed
+          </button>
+          <button
+            onClick={() => setShowLayoutGuides((visible) => !visible)}
+            title={showLayoutGuides ? "Hide layout guides" : "Show layout guides"}
+            aria-pressed={showLayoutGuides}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+              showLayoutGuides
+                ? "border-[#f5c451]/40 bg-[#f5c451]/10 text-[#f5c451]"
+                : "border-foreground/10 bg-foreground/5 text-foreground/70 hover:bg-foreground/10"
+            }`}
+          >
+            {showLayoutGuides ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            Layout Guides
           </button>
           <button
             onClick={() => setShowCodeModal(true)}
@@ -470,6 +597,32 @@ export default function GridStudio() {
               <ScoreProgress label="Equilibrium / Balance" value={scores.balance} />
               <ScoreProgress label="Alignment Rhythm" value={scores.alignment} />
               <ScoreProgress label="Negative Space" value={scores.negativeSpace} />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#f5c451]/25 bg-[var(--card-bg)] p-4 space-y-3 shadow-lg">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs font-extrabold uppercase tracking-widest text-[#f5c451] flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5" /> Layout Blueprint
+              </h2>
+              <span className="text-[9px] font-mono text-foreground/40">{layoutBlueprint.name.toUpperCase()}</span>
+            </div>
+            <p className="text-xs leading-relaxed text-foreground/70">{layoutBlueprint.summary}</p>
+            <ol className="space-y-2 border-t border-foreground/10 pt-3">
+              {layoutBlueprint.rules.map((rule, index) => (
+                <li key={rule} className="flex gap-2 text-[11px] leading-relaxed text-foreground/70">
+                  <span className="font-mono font-bold text-[#f5c451]">0{index + 1}</span>
+                  <span>{rule}</span>
+                </li>
+              ))}
+            </ol>
+            <div className="space-y-1.5 border-t border-foreground/10 pt-3">
+              {layoutBlueprint.zones.map((zone) => (
+                <div key={zone.label} className="flex items-center justify-between gap-2 text-[10px]">
+                  <span className="font-bold text-foreground/75">{zone.label}</span>
+                  <span className="font-mono text-foreground/45">X {zone.x}% · Y {zone.y}%</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -923,8 +1076,31 @@ export default function GridStudio() {
                     transition: isDraggingFocal ? "none" : "transform 0.1s ease-out",
                   }}
                   className="relative shadow-2xl rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
-                  dangerouslySetInnerHTML={{ __html: svgOutput }}
-                />
+                >
+                  <div className="absolute inset-0" dangerouslySetInnerHTML={{ __html: svgOutput }} />
+                  {showLayoutGuides && (
+                    <div className="absolute inset-0 pointer-events-none" aria-label={`${layoutBlueprint.name} content placement guide`}>
+                      {layoutBlueprint.zones.map((zone) => {
+                        const zoneStyle = zone.kind === "visual"
+                          ? "border-[#f5c451]/80 bg-[#f5c451]/[0.07] text-[#f5c451]"
+                          : zone.kind === "action"
+                            ? "border-white/70 bg-white/[0.09] text-white"
+                            : "border-[#27e39a]/80 bg-[#27e39a]/[0.07] text-[#27e39a]";
+                        return (
+                          <div
+                            key={zone.label}
+                            className={`absolute rounded-sm border border-dashed ${zoneStyle}`}
+                            style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.width}%`, height: `${zone.height}%` }}
+                          >
+                            <span className="absolute left-1 top-1 rounded-sm bg-black/75 px-1 py-0.5 text-[8px] font-extrabold leading-none tracking-wide">
+                              {zone.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Bottom Quick Tools Bar */}
@@ -943,6 +1119,15 @@ export default function GridStudio() {
                   >
                     <Save className="h-3.5 w-3.5" /> Save Preset
                   </button>
+                  <label className="flex items-center gap-1.5 px-2 text-[11px] font-semibold text-foreground/65 cursor-pointer" title="Export PNG with a transparent background">
+                    <input
+                      type="checkbox"
+                      checked={transparentPng}
+                      onChange={(event) => setTransparentPng(event.target.checked)}
+                      className="accent-primary h-3.5 w-3.5 rounded cursor-pointer"
+                    />
+                    Transparent
+                  </label>
                   <button
                     onClick={handleExportPng}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-foreground/10 bg-foreground/5 hover:bg-foreground/10 text-xs font-bold transition-all text-foreground/80"

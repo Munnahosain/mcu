@@ -27,7 +27,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
-import CreditSummary from "@/components/dashboard/CreditSummary";
+import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/CreditSummary";
 
 const navLinks = [
   { name: "Generator", href: "/dashboard/generator", icon: Sparkles },
@@ -72,6 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (cancelled) return;
 
       let storedUser = getAuthUser();
+      if (token && storedUser) prefetchCreditSummary();
       if (token && storedUser && !storedUser.avatarUrl) {
         const refreshedUser = await refreshAuthSession();
         if (refreshedUser) storedUser = { ...refreshedUser, signedInAt: Date.now() };

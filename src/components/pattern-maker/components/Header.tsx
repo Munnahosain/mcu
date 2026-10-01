@@ -12,20 +12,17 @@ import {
   triggerDownload,
 } from '../utils/exportUtils';
 import {
-  LayoutGrid,
-  Scissors,
-  Shirt,
   Download,
   RotateCcw,
   RotateCw,
   HelpCircle,
-  Layers,
   ChevronDown,
   ArrowLeft,
   Palette,
   Shuffle,
 } from 'lucide-react';
 import Link from 'next/link';
+import ThemedSelect from '@/components/ui/ThemedSelect';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -95,16 +92,16 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="relative z-30 mx-3 mt-3 flex min-h-16 min-w-0 shrink-0 flex-col gap-3 overflow-visible rounded-[20px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3.5 py-3 text-foreground shadow-2xl backdrop-blur-md select-none sm:px-4">
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <div className="flex min-w-0 shrink items-center gap-3">
+    <header className="pattern-maker-header relative z-30 mx-3 mt-3 flex h-16 min-h-14 min-w-0 shrink-0 flex-row items-center gap-2.5 overflow-x-auto overflow-y-hidden rounded-[20px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-foreground shadow-2xl select-none sm:gap-4 sm:px-4">
+      <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
         <Link href="/dashboard" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] transition-all hover:text-primary" aria-label="Back to dashboard">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Textile Studio</p>
           <h1 className="flex flex-wrap items-center gap-x-2 text-xl font-extrabold leading-tight text-foreground sm:text-2xl">
-            Pattern Maker <span className="text-primary font-bold">Fabric Engine</span>
+            Pattern Maker
             <span className="hidden rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase text-primary sm:inline">300 DPI PRO</span>
           </h1>
         </div>
@@ -117,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex h-9 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition shadow-sm"
         >
           <Palette className="w-3.5 h-3.5 text-primary" />
-          <span>Colorways</span>
+          <span className="hidden sm:inline">Colorways</span>
         </button>
 
         {/* Smart Auto-Scatter Motifs */}
@@ -132,70 +129,29 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
       </div>
 
-      <div className="flex min-w-0 items-center justify-between gap-2">
-      {/* Navigation View Tabs */}
-      <div className="flex min-w-0 items-center overflow-x-auto rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5 shadow-inner">
-        <button
-          id="tab-artboard"
-          onClick={() => setActiveTab('artboard')}
-          className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-            activeTab === 'artboard'
-              ? 'bg-primary text-background shadow-sm'
-              : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>1:1 Artboard</span>
-        </button>
-
-        <button
-          id="tab-tiling"
-          onClick={() => setActiveTab('tiling')}
-          className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-            activeTab === 'tiling'
-              ? 'bg-primary text-background shadow-sm'
-              : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
-          }`}
-        >
-          <LayoutGrid className="w-3.5 h-3.5" />
-          <span>Real-Time Tiling</span>
-        </button>
-
-        <button
-          id="tab-fabric-spec"
-          onClick={() => setActiveTab('fabric-spec')}
-          className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-            activeTab === 'fabric-spec'
-              ? 'bg-primary text-background shadow-sm'
-              : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
-          }`}
-        >
-          <Scissors className="w-3.5 h-3.5" />
-          <span>Cutting Map</span>
-        </button>
-
-        <button
-          id="tab-mockups"
-          onClick={() => setActiveTab('mockups')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-            activeTab === 'mockups'
-              ? 'bg-primary text-background shadow-sm'
-              : 'text-[var(--text-secondary)] hover:bg-primary/15 hover:text-primary'
-          }`}
-        >
-          <Shirt className="w-3.5 h-3.5" />
-          <span>Mockups</span>
-        </button>
-      </div>
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+      <ThemedSelect
+        value={activeTab}
+        onChange={(value) => setActiveTab(value as ActiveTab)}
+        ariaLabel="Workspace view"
+        portalMenu
+        className="w-[126px] shrink-0 sm:w-[158px]"
+        options={[
+          { value: 'artboard', label: 'Artboard' },
+          { value: 'tiling', label: 'Real-Time Tiling' },
+          { value: 'mockups', label: 'Mockups' },
+        ]}
+      />
 
       {/* Action Controls: Undo/Redo, Help & Export */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <div className="hidden items-center gap-1 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5 lg:flex">
+        <div className="flex items-center gap-1 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5">
           <button
             onClick={onUndo}
             disabled={!canUndo}
             title="Undo (Ctrl+Z)"
-            className="p-1.5 rounded-lg hover:bg-[var(--card-bg)] text-[var(--text-secondary)] disabled:opacity-30 disabled:pointer-events-none transition"
+            aria-label="Undo"
+            className="rounded-lg p-1 sm:p-1.5 hover:bg-[var(--card-bg)] text-[var(--text-secondary)] disabled:opacity-30 disabled:pointer-events-none transition"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -203,7 +159,8 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onRedo}
             disabled={!canRedo}
             title="Redo (Ctrl+Y)"
-            className="p-1.5 rounded-lg hover:bg-[var(--card-bg)] text-[var(--text-secondary)] disabled:opacity-30 disabled:pointer-events-none transition"
+            aria-label="Redo"
+            className="rounded-lg p-1 sm:p-1.5 hover:bg-[var(--card-bg)] text-[var(--text-secondary)] disabled:opacity-30 disabled:pointer-events-none transition"
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
@@ -218,7 +175,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Export Dropdown */}
-        <div ref={exportMenuRef} className="relative">
+        <div ref={exportMenuRef} className="pattern-maker-export-anchor relative">
           <button
             id="btn-export-dropdown"
             onClick={() => setShowExportMenu(!showExportMenu)}
@@ -230,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {showExportMenu && (
-            <div className="absolute right-0 mt-1 w-64 rounded-xl shadow-2xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1.5 z-50">
+            <div className="pattern-maker-export-menu absolute right-0 mt-1 w-64 rounded-xl shadow-2xl border border-[var(--card-border)] bg-[var(--card-bg)] py-1.5 z-50">
               <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-bold font-mono">
                 Tile Outputs (300 DPI)
               </div>

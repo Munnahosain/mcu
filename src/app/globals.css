@@ -5623,6 +5623,80 @@ html.dark .pattern-maker-app select {
   }
 }
 
+@media (max-width: 640px) {
+  .pattern-maker-workspace {
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .pattern-maker-app .pattern-maker-toolbar {
+    order: 0;
+    width: 100%;
+    min-height: 48px;
+    height: 48px;
+    flex-direction: row;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--card-border);
+    padding: 4px;
+  }
+
+  .pattern-maker-app .pattern-maker-toolbar > div {
+    flex-shrink: 0;
+  }
+
+  .pattern-maker-app .pattern-maker-toolbar {
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  .pattern-maker-app .pattern-maker-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pattern-maker-app .pattern-maker-toolbar > div {
+    width: max-content;
+    flex-direction: row;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .pattern-maker-app .pattern-maker-toolbar > div > div.w-6 {
+    width: 1px;
+    height: 24px;
+    border-bottom: 0;
+    border-right: 1px solid var(--card-border);
+    margin: 0 3px;
+  }
+
+  .pattern-maker-app aside.pattern-maker-inspector {
+    order: 1;
+    width: 100%;
+    max-width: none;
+    height: 34vh;
+    min-height: 170px;
+    max-height: 280px;
+    flex-shrink: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .pattern-maker-app .pattern-maker-stage {
+    order: 2;
+    flex: 0 0 48vh;
+    min-height: 280px;
+  }
+
+  .pattern-maker-canvas {
+    width: 100%;
+    min-height: 280px;
+    margin-left: 0;
+  }
+}
+
 .liquid-switch,
 html.dark .liquid-switch,
 html.light .liquid-switch {
@@ -6605,6 +6679,83 @@ html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/65,
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/70,
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
 
+/* Raster Lab follows light theme surfaces while keeping generated artwork untouched. */
+html.light .retro-raster-studio {
+  color: var(--foreground) !important;
+  background-color: var(--main-bg) !important;
+  border-color: var(--card-border) !important;
+}
+
+html.light .retro-raster-studio [class~="bg-[#07080b]"],
+html.light .retro-raster-studio [class~="bg-[#101114]"] {
+  background-color: var(--main-bg) !important;
+}
+
+html.light .retro-raster-studio [class~="bg-[#17191e]"],
+html.light .retro-raster-studio [class~="bg-[#17191e]/90"] {
+  background-color: var(--sidebar-bg) !important;
+}
+
+html.light .retro-raster-studio [class~="bg-[#131720]"],
+html.light .retro-raster-studio [class~="bg-[#20242a]"] {
+  background-color: var(--input-bg) !important;
+}
+
+html.light .retro-raster-studio [class~="bg-[#11141c]"] {
+  background-color: var(--card-bg) !important;
+}
+
+html.light .retro-raster-studio [class~="hover:bg-[#30363e]"]:hover {
+  background-color: var(--hover-bg-strong) !important;
+}
+
+html.light .retro-raster-studio [class~="hover:bg-[#17191e]"]:hover,
+html.light .retro-raster-studio [class~="hover:bg-[#20242a]"]:hover {
+  background-color: var(--hover-bg) !important;
+}
+
+html.light .retro-raster-studio [class~="border-[#1e222a]"],
+html.light .retro-raster-studio [class~="border-[#252a31]"] {
+  border-color: var(--card-border) !important;
+}
+
+html.light .retro-raster-studio [class~="border-[#30363e]"],
+html.light .retro-raster-studio [class~="border-[#2e3748]"],
+html.light .retro-raster-studio [class~="border-[#232936]"] {
+  border-color: var(--input-border) !important;
+}
+
+html.light body .retro-raster-studio .text-white:not([class*="bg-red-"]):not([class*="bg-primary"]):not([class*="bg-emerald-"]):not([class*="bg-indigo-"]):not([class*="bg-black"]):not([class*="bg-slate-900"]):not(.force-white) {
+  color: var(--foreground) !important;
+}
+
+html.light .retro-raster-studio .text-gray-200 { color: var(--foreground) !important; }
+html.light .retro-raster-studio .text-gray-300 { color: var(--text-secondary) !important; }
+html.light .retro-raster-studio .text-gray-400,
+html.light .retro-raster-studio .text-gray-500 { color: var(--text-muted) !important; }
+html.light .retro-raster-studio .text-gray-600 { color: #59636e !important; }
+html.light .retro-raster-studio [class~="text-[#aeb5bf]"] { color: var(--text-secondary) !important; }
+html.light .retro-raster-studio [class~="text-[#77808c]"] { color: var(--text-muted) !important; }
+html.light .retro-raster-studio [class~="hover:text-white"]:hover { color: var(--primary) !important; }
+
+html.light .retro-raster-studio input:not([type="range"]):not([type="checkbox"]):not([type="color"]),
+html.light .retro-raster-studio select,
+html.light .retro-raster-studio textarea {
+  color: var(--foreground) !important;
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+}
+
+html.light .retro-raster-studio option {
+  color: var(--foreground);
+  background-color: var(--input-bg);
+}
+
+html.light .retro-raster-studio .retro-raster-grid {
+  opacity: 0.48 !important;
+  background-image: linear-gradient(to right, #dce2e8 1px, transparent 1px), linear-gradient(to bottom, #dce2e8 1px, transparent 1px) !important;
+}
+
 html.light body .admin-shell[data-admin-theme="adaptive"] .admin-mobile-nav {
   background: rgba(255, 255, 255, 0.94) !important;
   border: 1px solid rgba(23, 32, 30, 0.12) !important;
@@ -7179,10 +7330,30 @@ html.dark select option {
   color: #edf2ef;
 }
 
+button:not(:disabled):not([class*="cursor-"]),
+a[href]:not([class*="cursor-"]),
+[role="button"]:not([aria-disabled="true"]):not([class*="cursor-"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 html.dark select option:hover,
 html.dark select option:checked {
   background: #16c784 linear-gradient(#16c784, #16c784) !important;
   color: #06251b !important;
+}
+
+@media (max-width: 640px) {
+  .pattern-maker-header .pattern-maker-export-menu {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 4.5rem);
+    right: 0.75rem;
+    margin-top: 0;
+  }
 }
 
 /* Marketing navigation labels stay white across themes, while inactive dark-mode labels retain muted contrast. */
