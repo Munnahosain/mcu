@@ -22,6 +22,7 @@ import {
   Calendar,
   CreditCard,
   LifeBuoy,
+  Film,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
@@ -31,6 +32,7 @@ import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/Cre
 
 const navLinks = [
   { name: "Generator", href: "/dashboard/generator", icon: Sparkles },
+  { name: "SVG Motion", href: "/dashboard/svg-motion", icon: Film },
   { name: "3D Studio", href: "/dashboard/3d-icon-studio", icon: Box },
   { name: "BG Remover", href: "/dashboard/bg-remover", icon: Eraser },
   { name: "Bento", href: "/dashboard/bento", icon: LayoutIcon },
@@ -152,9 +154,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ? { label: 'FREE', className: 'dashboard-plan-badge dashboard-plan-badge-free' }
     : { label: (activePlan?.name || 'PRO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${activePlan?.slug || 'pro'}` };
 
+  const isSvgMotion = pathname?.startsWith('/dashboard/svg-motion');
+
   return (
     <GeneratorStateProvider>
-      <div className="relative min-h-screen w-full flex flex-col bg-[var(--main-bg)] text-foreground selection:bg-primary selection:text-white">
+      <div className={`relative w-full flex flex-col bg-[var(--main-bg)] text-foreground selection:bg-primary selection:text-white ${
+        isSvgMotion ? "h-screen overflow-hidden" : "min-h-screen"
+      }`}>
         <Link
           href="/"
           className="dashboard-mobile-home-logo fixed left-3 top-3 z-50 flex h-12 w-12 items-center justify-center rounded-2xl"
@@ -425,7 +431,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         <nav
-          className="dashboard-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden"
+          className={`dashboard-mobile-nav fixed bottom-0 left-0 right-0 z-50 lg:hidden ${
+            isSvgMotion ? "hidden" : ""
+          }`}
           aria-label="Mobile navigation"
           style={{
             backdropFilter: "blur(24px) saturate(1.2)",
@@ -477,14 +485,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* 2. FULL-WIDTH WORKSPACE CONTENT */}
-        <main className="flex-1 w-full min-w-0 bg-transparent relative z-10 px-3 py-2 pb-20 sm:px-6 sm:py-4 lg:pb-4">
-          <div className="mx-auto w-full max-w-[1920px]">
+        <main
+          className={`flex-1 w-full min-w-0 bg-transparent relative z-10 flex flex-col ${
+            isSvgMotion
+              ? "px-0 pb-0 pt-1.5 sm:pt-2 overflow-hidden"
+              : "px-3 py-2 pb-20 sm:px-6 sm:py-4 lg:pb-4"
+          }`}
+        >
+          <div className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "mx-auto w-full max-w-[1920px]"}>
             <motion.div
               key={pathname}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="w-full"
+              className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "w-full"}
             >
               {children}
             </motion.div>

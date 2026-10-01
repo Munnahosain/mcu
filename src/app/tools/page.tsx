@@ -9,6 +9,7 @@ import {
   PenTool,
   Sparkles,
   Type,
+  Film,
 } from "lucide-react";
 import MarketingChrome from "../../components/MarketingChrome";
 import MarketingFooter from "../../components/MarketingFooter";
@@ -20,6 +21,14 @@ export const metadata: Metadata = {
 };
 
 const tools = [
+  {
+    icon: <Film className="h-8 w-8 text-primary" />,
+    title: "MCU SVG Motion Studio",
+    description:
+      "Browser-based vector animation suite. Upload SVGs, detect layers, rig semantic characters, and animate with timeline keyframes.",
+    isNew: true,
+    href: "/svg-motion-studio",
+  },
   {
     icon: <ImageIcon className="h-8 w-8 text-primary" />,
     title: "AI Metadata Engine",

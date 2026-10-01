@@ -1741,15 +1741,13 @@ html.light .force-white {
 html.light input,
 html.light select,
 html.light textarea {
-  color: var(--neutral-900) !important;
-  background-color: var(--white) !important;
-  border-color: var(--neutral-300) !important;
+  color: var(--foreground);
 }
 
 html.dark input,
 html.dark select,
 html.dark textarea {
-  color: var(--foreground) !important;
+  color: var(--foreground);
 }
 
 /* Bento Grid Builder Styles */
