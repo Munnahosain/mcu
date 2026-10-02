@@ -28,7 +28,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
-import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/CreditSummary";
+import CreditSummary, { prefetchCreditSummary, CreditBadge } from "@/components/dashboard/CreditSummary";
 
 const navLinks = [
   { name: "Generator", href: "/dashboard/generator", icon: Sparkles },
@@ -177,7 +177,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           />
         </Link>
 
-        <div ref={mobileProfileRef} className="fixed right-3 top-3 z-[60] lg:hidden">
+        <div ref={mobileProfileRef} className="fixed right-3 top-3 z-[60] lg:hidden flex items-center gap-2">
+          <CreditBadge />
           <button type="button" onClick={() => setIsProfileOpen((current) => !current)} className="relative flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-background/90 p-1 shadow-lg backdrop-blur-xl" aria-label="Open account menu">
             <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#27e39a] text-xs font-extrabold text-[#071b17]">
               {userInitials}
@@ -296,6 +297,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Right: Theme Toggle, Profile Pill (2 Short Letters), Sign Out (Snugly attached) */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <CreditBadge />
+
               {/* Theme Toggle */}
               <div className="hidden sm:flex items-center justify-center">
                 <ThemeToggle iconOnly />

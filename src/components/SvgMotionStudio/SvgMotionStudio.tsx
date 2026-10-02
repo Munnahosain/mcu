@@ -17,7 +17,14 @@ import { DEMO_SVG_STRING } from './demoCharacter';
 import { autoDetectCharacterSlots, CHARACTER_PRESETS } from './characterMode';
 import { ANIMATION_PRESETS } from './presets';
 import { AiAnimationPlan } from './aiAssistant';
-import { downloadFile } from './exportEngine';
+import { computeElementStylesAtTime } from './animationEngine';
+import {
+  recordPropertyKeyframe,
+  recordAllTransformKeyframes,
+  applyEasingToElementTransforms,
+  getAdjacentKeyframes,
+} from './keyframeManager';
+import { downloadText } from '@/lib/downloadHelper';
 import { TopBar } from './TopBar';
 import { LayersPanel } from './LayersPanel';
 import { CanvasViewport } from './CanvasViewport';
@@ -413,7 +420,7 @@ export const SvgMotionStudio: React.FC = () => {
     );
 
     const filename = `${project.name.toLowerCase().replace(/[^a-z0-9_]/g, '_')}.mcuproj`;
-    downloadFile(jsonStr, filename, 'application/json');
+    downloadText(jsonStr, filename, 'application/json');
 
     // Also persist to localStorage
     try {

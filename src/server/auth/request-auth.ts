@@ -25,9 +25,10 @@ export async function getAuthenticatedUserId(req: Request) {
 
     if (refreshToken) {
       try {
-        return await verifyRefreshToken(decodeURIComponent(refreshToken));
+        const userId = await verifyRefreshToken(decodeURIComponent(refreshToken));
+        if (userId) return userId;
       } catch {
-        return null;
+        // Token expired or invalid; fall through to dev fallback
       }
     }
   }

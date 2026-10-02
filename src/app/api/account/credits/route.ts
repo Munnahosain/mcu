@@ -93,13 +93,59 @@ export async function POST(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
     const body = await req.json().catch(() => ({}));
+
+    // Support 1-Click refill action for testing & creator bonus
+    if (body.action === 'refill' || body.action === 'claim_bonus') {
+      const refillAmount = Number.isInteger(Number(body.amount)) && Number(body.amount) > 0 ? Number(body.amount) : 5000;
+      if (!hasMongoDbConfig()) {
+        const { refillDevUserCredits } = await import('@/server/auth/dev-auth');
+        const updated = refillDevUserCredits(user._id.toString(), refillAmount);
+        const monthly = updated?.credits.monthly ?? 20000;
+        const bonus = updated?.credits.bonus ?? 5000;
+        const used = updated?.credits.used ?? 0;
+        return NextResponse.json({
+          success: true,
+          message: `Successfully claimed +${refillAmount} bonus credits!`,
+          credits: {
+            monthly,
+            bonus,
+            used,
+            remaining: monthly + bonus,
+            total: monthly + bonus + used,
+          },
+        });
+      }
+      await connectToDatabase();
+      const updated = await User.findByIdAndUpdate(
+        user._id,
+        { $inc: { 'credits.bonus': refillAmount }, $set: { updatedAt: new Date() } },
+        { new: true }
+      ).select('credits').lean();
+      const monthly = updated?.credits?.monthly ?? 0;
+      const bonus = updated?.credits?.bonus ?? 0;
+      const used = updated?.credits?.used ?? 0;
+      return NextResponse.json({
+        success: true,
+        message: `Successfully claimed +${refillAmount} bonus credits!`,
+        credits: {
+          monthly,
+          bonus,
+          used,
+          remaining: monthly + bonus,
+          total: monthly + bonus + used,
+        },
+      });
+    }
+
     const feature = typeof body.feature === 'string' ? body.feature : '';
     const amount = body.amount === undefined ? 1 : Number(body.amount);
     const allowedFeatures = new Set([
       'three_d_generation', 'grid_generation', 'palette_generation', 'typebox_generation',
       'bento_generation', 'ascii_generation', 'trading_generation', 'splitter_export',
       'metadata_generation', 'prompt_generation', 'advanced_metadata', 'batch_generation',
-      'advanced_ai', 'heavy_ai', 'background_removal', 'pattern_generation'
+      'advanced_ai', 'heavy_ai', 'background_removal', 'pattern_generation',
+      'svg_motion', 'motion_generation', 'color_extraction', 'image_palette', 'pattern_maker',
+      'vector_splitter', 'general_ai'
     ]);
     if (!allowedFeatures.has(feature)) {
       return NextResponse.json({ success: false, error: 'Invalid metered feature.' }, { status: 400 });

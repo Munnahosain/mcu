@@ -14,6 +14,7 @@ import {
   Eye,
   Ruler,
   Magnet,
+  Pipette,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -28,6 +29,7 @@ interface ToolbarProps {
   onAddText: () => void;
   onUploadImages: (images: { dataUrl: string; width: number; height: number }[]) => void;
   onImportVector: (fileName: string, data: ArrayBuffer | string) => void;
+  onOpenImagePalette?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -42,6 +44,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAddText,
   onUploadImages,
   onImportVector,
+  onOpenImagePalette,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -167,6 +170,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <Upload className="w-4 h-4" />
         </button>
+
+        {onOpenImagePalette && (
+          <button
+            id="tool-extract-palette"
+            onClick={onOpenImagePalette}
+            title="Extract Palette from Image (1-Click Apply)"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-[#18c98a] bg-[#18c98a]/10 hover:bg-[#18c98a]/20 border border-[#18c98a]/30 transition group relative"
+          >
+            <Pipette className="w-4 h-4" />
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"

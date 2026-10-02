@@ -21,7 +21,14 @@ type CreditCostKey =
   | 'ascii_generation'
   | 'trading_generation'
   | 'splitter_export'
-  | 'pattern_generation';
+  | 'pattern_generation'
+  | 'svg_motion'
+  | 'motion_generation'
+  | 'color_extraction'
+  | 'image_palette'
+  | 'pattern_maker'
+  | 'vector_splitter'
+  | 'general_ai';
 
 async function resolveCreditAmount(amount: number, costKey?: CreditCostKey) {
   if (!costKey) return amount;

@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Palette,
   Shuffle,
+  Pipette,
 } from 'lucide-react';
 import Link from 'next/link';
 import ThemedSelect from '@/components/ui/ThemedSelect';
@@ -35,6 +36,7 @@ interface HeaderProps {
   onRedo: () => void;
   onOpenHelp: () => void;
   onOpenColorways: () => void;
+  onOpenImagePalette?: () => void;
   onScatterMotifs: () => void;
 }
 
@@ -116,6 +118,17 @@ export const Header: React.FC<HeaderProps> = ({
           <Palette className="w-3.5 h-3.5 text-primary" />
           <span className="hidden sm:inline">Colorways</span>
         </button>
+
+        {onOpenImagePalette && (
+          <button
+            onClick={onOpenImagePalette}
+            title="Extract Color Palette from an uploaded image"
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/15 px-3 text-xs font-bold text-primary hover:bg-primary/25 transition shadow-sm"
+          >
+            <Pipette className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden sm:inline">Image Palette</span>
+          </button>
+        )}
 
         {/* Smart Auto-Scatter Motifs */}
         <button

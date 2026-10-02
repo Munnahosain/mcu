@@ -106,13 +106,15 @@ function FloatingTorus({ position, color, scale = 1, speed = 1 }: { position: [n
 
 // Particle Field
 function ParticleField({ count = 50 }: { count?: number }) {
-  // eslint-disable-next-line react-hooks/purity -- Math.random() is intentional for initial random positions
   const points = useMemo(() => {
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 15;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 15;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 10;
+      const r1 = Math.sin(i * 12.9898 + 78.233);
+      const r2 = Math.sin(i * 93.9898 + 67.345);
+      const r3 = Math.sin(i * 45.1232 + 12.987);
+      positions[i * 3] = ((r1 * 43758.5453) % 1) * 15;
+      positions[i * 3 + 1] = ((r2 * 24634.6345) % 1) * 15;
+      positions[i * 3 + 2] = ((r3 * 58342.1245) % 1) * 10;
     }
     return positions;
   }, [count]);

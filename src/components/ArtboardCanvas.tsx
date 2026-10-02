@@ -202,7 +202,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
     if (isAlt) {
       const newEl: DesignElement = {
         ...element,
-        id: `el-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: `el-${element.id}-${elements.length + 1}`,
         name: `${element.name} Copy`,
         zIndex: elements.length + 1,
       };
@@ -359,7 +359,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
     if (dragAction.type === 'rotate' && selectedElement) {
       const { centerX, centerY, startAngle, initialRot } = dragAction;
       const curAngle = (Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180) / Math.PI;
-      let deltaAngle = curAngle - startAngle;
+      const deltaAngle = curAngle - startAngle;
       let newRot = Math.round(initialRot + deltaAngle);
 
       // Snap to 15 degrees if Shift is held

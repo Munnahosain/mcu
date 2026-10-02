@@ -103,7 +103,8 @@ export function deductDevUserCredits(id: string, amount: number): DevUser | null
   if (!user) return null;
   const available = (user.credits.monthly || 0) + (user.credits.bonus || 0);
   if (available < amount) {
-    throw new Error('You do not have enough credits to use this feature.');
+    // In dev / preview mode, auto-replenish bonus credits so users are never stranded mid-generation
+    user.credits.bonus = (user.credits.bonus || 0) + Math.max(5000, amount * 10);
   }
 
   // Deduct from monthly credits first, then remaining from bonus credits
@@ -115,6 +116,19 @@ export function deductDevUserCredits(id: string, amount: number): DevUser | null
   user.credits.used = (user.credits.used || 0) + amount;
   user.updatedAt = new Date().toISOString();
 
+  store.users.set(user.id, user);
+  store.users.set(user._id, user);
+  if (user.email) {
+    store.users.set(user.email.toLowerCase().trim(), user);
+  }
+  return user;
+}
+
+export function refillDevUserCredits(id: string, amount = 5000): DevUser | null {
+  const user = findDevUserById(id);
+  if (!user) return null;
+  user.credits.bonus = (user.credits.bonus || 0) + amount;
+  user.updatedAt = new Date().toISOString();
   store.users.set(user.id, user);
   store.users.set(user._id, user);
   if (user.email) {

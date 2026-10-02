@@ -175,8 +175,8 @@ export default function EventCalendarPage() {
         return true;
     });
 
-    return filtered.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    }, [currentMonth, currentYear, selectedDate, selectedCategory, selectedCountry, searchQuery, totalEvents]);
+    return [...filtered].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [currentMonth, currentYear, selectedDate, selectedCategory, selectedCountry, searchQuery, totalEvents]);
 
   const totalMonthEventsCount = useMemo(() => {
       let count = 0;

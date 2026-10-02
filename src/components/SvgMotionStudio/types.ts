@@ -135,6 +135,8 @@ export interface ProjectState {
   selectedKeyframeId: string | null;
   currentTime: number; // 0 to duration
   isPlaying: boolean;
+  autoKeyframe?: boolean;
+  defaultEasing?: EasingType;
 }
 
 export interface AnimationPreset {

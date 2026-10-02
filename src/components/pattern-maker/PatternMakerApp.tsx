@@ -17,6 +17,7 @@ import { MockupView } from './components/MockupView';
 import { ShapeLibraryModal } from './components/ShapeLibraryModal';
 import { HelpModal } from './components/HelpModal';
 import { ColorwayModal } from './components/ColorwayModal';
+import { ImagePaletteModal } from './components/ImagePaletteModal';
 import { TextPromptModal } from './components/TextPromptModal';
 import { importVectorFile } from './utils/vectorImport';
 import { usePersistentState } from '@/lib/usePersistentState';
@@ -72,6 +73,8 @@ export default function App() {
   const [isShapeLibraryOpen, setIsShapeLibraryOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isColorwayOpen, setIsColorwayOpen] = useState<boolean>(false);
+  const [isImagePaletteOpen, setIsImagePaletteOpen] = useState<boolean>(false);
+  const [extractedPalette, setExtractedPalette] = useState<string[]>([]);
   const [isTextPromptOpen, setIsTextPromptOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -475,6 +478,7 @@ export default function App() {
         onRedo={handleRedo}
         onOpenHelp={() => setIsHelpOpen(true)}
         onOpenColorways={() => setIsColorwayOpen(true)}
+        onOpenImagePalette={() => setIsImagePaletteOpen(true)}
         onScatterMotifs={handleScatterMotifs}
       />
 
@@ -494,6 +498,7 @@ export default function App() {
             onAddText={handleAddText}
             onUploadImages={handleUploadImages}
             onImportVector={handleImportVector}
+            onOpenImagePalette={() => setIsImagePaletteOpen(true)}
           />
         )}
 
@@ -514,6 +519,8 @@ export default function App() {
             onReorderElement={handleReorderElement}
             settings={settings}
             setSettings={setSettings}
+            onOpenImagePalette={() => setIsImagePaletteOpen(true)}
+            extractedPalette={extractedPalette}
           />
         )}
 
@@ -571,6 +578,20 @@ export default function App() {
         settings={settings}
         setSettings={setSettings}
         onPushHistory={pushHistory}
+      />
+
+      {/* 1-Click Image Palette Extractor Modal */}
+      <ImagePaletteModal
+        isOpen={isImagePaletteOpen}
+        onClose={() => setIsImagePaletteOpen(false)}
+        elements={elements}
+        setElements={setElements}
+        selectedId={selectedId}
+        selectedIds={selectedIds}
+        settings={settings}
+        setSettings={setSettings}
+        onPushHistory={pushHistory}
+        onExtractedPaletteChange={(pal) => setExtractedPalette(pal)}
       />
 
       {/* Text / Monogram Input Modal (zero window.prompt) */}

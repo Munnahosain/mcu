@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  Pipette,
 } from 'lucide-react';
 import { isElementCrossingEdge } from '../utils/seamlessMath';
 import { getPresetByKind } from '../utils/shapeLibrary';
@@ -41,6 +42,8 @@ interface PropertiesPanelProps {
   onReorderElement: (direction: 'front' | 'back' | 'forward' | 'backward') => void;
   settings: PatternSettings;
   setSettings: React.Dispatch<React.SetStateAction<PatternSettings>>;
+  onOpenImagePalette?: () => void;
+  extractedPalette?: string[];
 }
 
 const TEXTILE_PALETTE = [
@@ -106,6 +109,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onReorderElement,
   settings,
   setSettings,
+  onOpenImagePalette,
+  extractedPalette = [],
 }) => {
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
   const dragSourceId = useRef<string | null>(null);
@@ -350,6 +355,55 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {/* Extracted Image Palette (if available) */}
+                  {extractedPalette && extractedPalette.length > 0 && (
+                    <div className="mb-2 pb-2 border-b border-[#252a31]">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-[#18c98a] font-bold flex items-center gap-1">
+                          <Pipette className="w-3 h-3 text-[#18c98a]" /> Extracted Palette
+                        </span>
+                        {onOpenImagePalette && (
+                          <button
+                            type="button"
+                            onClick={onOpenImagePalette}
+                            className="text-[9px] text-[#18c98a] hover:underline font-bold"
+                          >
+                            New Image
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
+                        {extractedPalette.map((col, idx) => (
+                          <button
+                            key={col + idx}
+                            type="button"
+                            onClick={() => onUpdateElement({ fill: col })}
+                            title={`1-Click Apply ${col} as Fill`}
+                            style={{ backgroundColor: col }}
+                            className={`h-6 rounded border transition shadow-sm ${
+                              selectedElement.fill.toLowerCase() === col.toLowerCase()
+                                ? 'border-[#18c98a] scale-110 ring-2 ring-[#18c98a]/40 z-10'
+                                : 'border-white/20 hover:scale-105'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Extract Palette Button */}
+                  {onOpenImagePalette && (!extractedPalette || extractedPalette.length === 0) && (
+                    <button
+                      type="button"
+                      onClick={onOpenImagePalette}
+                      className="w-full py-1.5 px-2 mb-2 rounded-md border border-[#18c98a]/30 bg-[#18c98a]/10 hover:bg-[#18c98a]/20 text-[#18c98a] text-[10px] font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <Pipette className="w-3 h-3" />
+                      <span>Extract Palette from Image</span>
+                    </button>
+                  )}
+
                   {/* Textile Palette Quick Picks */}
                   <div className="grid grid-cols-8 gap-1 pt-1">
                     {TEXTILE_PALETTE.map((col) => (

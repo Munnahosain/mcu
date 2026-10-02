@@ -3,6 +3,8 @@ import { flattenElementTree } from './svgParser';
 import { CHARACTER_PRESETS } from './characterMode';
 import { ANIMATION_PRESETS } from './presets';
 
+import { getProviderKeys } from '@/lib/ai-settings';
+
 export interface AiAnimationPlan {
   prompt: string;
   summary: string[];
@@ -31,6 +33,9 @@ export async function generateAiAnimation(
 
   // Try calling server-side AI endpoint first
   try {
+    const keys = getProviderKeys();
+    const geminiKey = keys.find((k) => k.provider === 'Google Gemini' && k.key)?.key;
+
     const res = await fetch('/api/svg-motion/ai-assist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -40,6 +45,7 @@ export async function generateAiAnimation(
         characterSlots,
         selectedElementId,
         duration: currentDuration,
+        apiKey: geminiKey,
       }),
     });
 
