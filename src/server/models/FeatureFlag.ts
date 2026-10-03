@@ -4,6 +4,7 @@ const FeatureFlagSchema = new Schema({
   key: { type: String, required: true, unique: true, index: true },
   enabled: { type: Boolean, default: false },
   plans: { type: [String], default: [] },
+  message: { type: String, default: '', maxlength: 500 },
 }, { timestamps: true });
 
 export const FeatureFlag = models.FeatureFlag || model('FeatureFlag', FeatureFlagSchema);

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { GlobalControlBehavior } from "@/components/ui/GlobalControlBehavior";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -54,6 +55,7 @@ export default function RootLayout({
         className={`${inter.variable} liquid-site antialiased bg-background text-foreground`}
         suppressHydrationWarning
       >
+        <GlobalControlBehavior />
         {children}
       </body>
     </html>

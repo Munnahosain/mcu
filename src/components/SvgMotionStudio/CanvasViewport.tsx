@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Move, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ProjectState, SvgElementNode, BoundingBox } from './types';
 import { computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
@@ -25,6 +25,22 @@ interface CanvasViewportProps {
   onToggleRightSidebar: () => void;
   onRegisterPlaybackRenderer: (renderer: ((time: number) => void) | null) => void;
 }
+
+const SvgMarkup = React.memo(function SvgMarkup({
+  svgRaw,
+  wrapperRef,
+}: {
+  svgRaw: string;
+  wrapperRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div
+      ref={wrapperRef}
+      className="absolute inset-0 w-full h-full select-none"
+      dangerouslySetInnerHTML={{ __html: svgRaw }}
+    />
+  );
+});
 
 export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   project,
@@ -76,7 +92,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     [project.tracks]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const svgEl = svgWrapperRef.current?.querySelector('svg');
     svgNodesRef.current = svgEl
       ? Array.from(svgEl.querySelectorAll<SVGElement>('[data-mcu-id]'))
@@ -89,7 +105,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const elementNode = elementId ? elementById.get(elementId) : undefined;
       node.style.display = elementNode?.visible === false ? 'none' : '';
     });
-  }, [animatedElementIds, elementById, project.svgRaw]);
+  }, [project, animatedElementIds, elementById]);
   const vbW = viewBox?.width || 800;
   const vbH = viewBox?.height || 600;
 
@@ -168,7 +184,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         `scale(${styles.scaleX / 100}, ${styles.scaleY / 100})`;
       selectionOverlayRef.current.style.transformOrigin = `${styles.originX}% ${styles.originY}%`;
     }
-  }, [animatedElementIds, elementById, project.tracks, selectedElementId]);
+  }, [elementById, project.tracks, selectedElementId]);
+
+  useLayoutEffect(() => {
+    renderAnimationAtTime(currentTime);
+  }, [project, currentTime, renderAnimationAtTime]);
 
   useEffect(() => {
     onRegisterPlaybackRenderer(renderAnimationAtTime);
@@ -340,7 +360,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       if (deltaX !== 0 || deltaY !== 0) {
         e.preventDefault();
-        const currentStyles = computeElementStylesAtTime(project.tracks, selectedElementId, currentTime);
+        const selectedNode = elementById.get(selectedElementId);
+        const currentStyles = computeElementStylesAtTime(
+          project.tracks,
+          selectedElementId,
+          currentTime,
+          selectedNode?.initialTransform,
+          selectedNode?.initialAppearance
+        );
         onUpdateTransform(selectedElementId, {
           x: currentStyles.x + deltaX,
           y: currentStyles.y + deltaY,
@@ -350,11 +377,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElementId, currentTime, project.tracks, onUpdateTransform]);
+  }, [selectedElementId, currentTime, project.tracks, elementById, onUpdateTransform]);
 
   // Selected element current computed transform
   const selectedStyles = selectedElementId
-    ? computeElementStylesAtTime(project.tracks, selectedElementId, currentTime)
+    ? computeElementStylesAtTime(
+        project.tracks,
+        selectedElementId,
+        currentTime,
+        elementById.get(selectedElementId)?.initialTransform,
+        elementById.get(selectedElementId)?.initialAppearance
+      )
     : null;
 
   return (
@@ -533,11 +566,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           </div>
 
           {/* SVG Content Mount */}
-          <div
-            ref={svgWrapperRef}
-            className="absolute inset-0 w-full h-full select-none"
-            dangerouslySetInnerHTML={{ __html: project.svgRaw }}
-          />
+          <SvgMarkup svgRaw={project.svgRaw} wrapperRef={svgWrapperRef} />
 
           {/* Selection Bounding Box & Handles */}
           {selectedElementId && selectionBox && (

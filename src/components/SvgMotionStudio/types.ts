@@ -81,6 +81,8 @@ export interface SvgElementNode {
   originalId: string; // from svg if present
   tagName: SvgTagName;
   name: string; // user-friendly label
+  className?: string;
+  attributes?: Record<string, string>;
   parentId: string | null;
   children: SvgElementNode[];
   isGroup: boolean;
@@ -129,10 +131,13 @@ export interface ProjectState {
   svgRaw: string;
   elements: SvgElementNode[];
   tracks: AnimationTrack[];
+  aiAnimationBaseTracks?: AnimationTrack[] | null;
+  aiAnimationBaseDocument?: DocumentSettings | null;
   characterSlots: Partial<Record<CharacterSlot, string>>; // slot -> elementId
   isSingleFlattenedPath: boolean;
   selectedElementId: string | null;
   selectedKeyframeId: string | null;
+  selectedKeyframeIds?: string[];
   currentTime: number; // 0 to duration
   isPlaying: boolean;
   autoKeyframe?: boolean;

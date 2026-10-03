@@ -40,7 +40,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { usePersistentState } from "@/lib/usePersistentState";
 import ThemeToggle from "@/components/ThemeToggle";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
-import { GridConfig, GridType, LineStyle, BgMode, CanvasPreset, CompositionScores, ReferenceAnalysis } from "@/lib/grid/types";
+import { GridConfig, GridType, LineStyle, BgMode, CanvasPreset, CompositionScores, LayoutGuideZone, ReferenceAnalysis } from "@/lib/grid/types";
 import { CANVAS_PRESETS, GRID_COLOR_PALETTES } from "@/lib/grid/presets";
 import { downloadText, downloadBlob } from "@/lib/downloadHelper";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
@@ -77,14 +77,7 @@ const ASPECT_RATIO_PRESETS = [
   { label: "A4", name: "Print Doc", w: 1240, h: 1754 },
 ];
 
-type LayoutZone = {
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  kind: "text" | "visual" | "action";
-};
+type LayoutZone = LayoutGuideZone;
 
 type LayoutBlueprint = {
   name: string;
@@ -128,6 +121,41 @@ const LAYOUT_BLUEPRINTS: LayoutBlueprint[][] = [
         { label: "CTA", x: 66, y: 74, width: 26, height: 10, kind: "action" },
       ],
     },
+    {
+      name: "Lower Image / Header",
+      summary: "A bold top headline gives way to an image-led lower half.",
+      rules: ["Keep the headline to one or two short lines.", "Use the image as the main proof or mood setter.", "Keep supporting copy and CTA together at the bottom."],
+      zones: [
+        { label: "EYEBROW", x: 8, y: 7, width: 52, height: 7, kind: "text" },
+        { label: "HEADLINE", x: 8, y: 17, width: 76, height: 19, kind: "text" },
+        { label: "VISUAL", x: 8, y: 40, width: 84, height: 38, kind: "visual" },
+        { label: "SUPPORTING COPY", x: 8, y: 82, width: 54, height: 10, kind: "text" },
+        { label: "CTA", x: 70, y: 82, width: 22, height: 10, kind: "action" },
+      ],
+    },
+    {
+      name: "Diagonal Energy",
+      summary: "A diagonal reading path connects a compact title to a bold visual.",
+      rules: ["Place the title in the upper-left safe area.", "Keep the main visual dominant and offset.", "Anchor the CTA opposite the visual's lower edge."],
+      zones: [
+        { label: "HEADLINE", x: 8, y: 9, width: 45, height: 20, kind: "text" },
+        { label: "VISUAL", x: 37, y: 28, width: 55, height: 47, kind: "visual" },
+        { label: "SUPPORTING COPY", x: 8, y: 43, width: 27, height: 22, kind: "text" },
+        { label: "CTA", x: 8, y: 78, width: 28, height: 10, kind: "action" },
+      ],
+    },
+    {
+      name: "Framed Centerpiece",
+      summary: "A quiet frame gives one centered visual room to breathe.",
+      rules: ["Keep the headline and visual centered on one axis.", "Use a short supporting line beneath the visual.", "Treat the outer edge as protected negative space."],
+      zones: [
+        { label: "EYEBROW", x: 25, y: 9, width: 50, height: 7, kind: "text" },
+        { label: "HEADLINE", x: 14, y: 19, width: 72, height: 17, kind: "text" },
+        { label: "VISUAL", x: 22, y: 39, width: 56, height: 37, kind: "visual" },
+        { label: "SUPPORTING COPY", x: 20, y: 79, width: 60, height: 8, kind: "text" },
+        { label: "CTA", x: 36, y: 89, width: 28, height: 7, kind: "action" },
+      ],
+    },
   ],
   [
     {
@@ -163,8 +191,61 @@ const LAYOUT_BLUEPRINTS: LayoutBlueprint[][] = [
         { label: "CTA", x: 63, y: 71, width: 24, height: 10, kind: "action" },
       ],
     },
+    {
+      name: "Split Poster",
+      summary: "A strong upper image hands off to a clear title and action below.",
+      rules: ["Give the visual the first read across the canvas.", "Keep the title on one line when possible.", "Align details and CTA on one shared baseline."],
+      zones: [
+        { label: "VISUAL", x: 6, y: 8, width: 88, height: 53, kind: "visual" },
+        { label: "EYEBROW", x: 8, y: 66, width: 24, height: 7, kind: "text" },
+        { label: "HEADLINE", x: 8, y: 76, width: 54, height: 15, kind: "text" },
+        { label: "SUPPORTING COPY", x: 65, y: 76, width: 18, height: 12, kind: "text" },
+        { label: "CTA", x: 84, y: 76, width: 10, height: 12, kind: "action" },
+      ],
+    },
+    {
+      name: "Wide Side Rail",
+      summary: "A tall visual balances a concise headline and details rail.",
+      rules: ["Keep the visual on the left two-thirds.", "Use the right rail for title, details, and CTA.", "Align all text to a single vertical edge."],
+      zones: [
+        { label: "VISUAL", x: 6, y: 10, width: 62, height: 80, kind: "visual" },
+        { label: "EYEBROW", x: 74, y: 14, width: 20, height: 7, kind: "text" },
+        { label: "HEADLINE", x: 74, y: 25, width: 20, height: 22, kind: "text" },
+        { label: "SUPPORTING COPY", x: 74, y: 53, width: 20, height: 19, kind: "text" },
+        { label: "CTA", x: 74, y: 80, width: 20, height: 10, kind: "action" },
+      ],
+    },
+    {
+      name: "Split Headline",
+      summary: "A full-width headline sets the theme before a balanced image-and-copy row.",
+      rules: ["Keep the headline bold and compact.", "Use the image as the left anchor.", "Give supporting copy and CTA a clean right-side reading path."],
+      zones: [
+        { label: "EYEBROW", x: 8, y: 8, width: 34, height: 7, kind: "text" },
+        { label: "HEADLINE", x: 8, y: 18, width: 84, height: 19, kind: "text" },
+        { label: "VISUAL", x: 8, y: 44, width: 48, height: 44, kind: "visual" },
+        { label: "SUPPORTING COPY", x: 62, y: 48, width: 30, height: 22, kind: "text" },
+        { label: "CTA", x: 62, y: 78, width: 24, height: 10, kind: "action" },
+      ],
+    },
   ],
 ];
+
+const LAYOUT_VARIANTS_PER_ORIENTATION = LAYOUT_BLUEPRINTS[0].length;
+
+function getLayoutBlueprint(width: number, height: number, index: number): LayoutBlueprint {
+  const options = width / Math.max(height, 1) > 1.05 ? LAYOUT_BLUEPRINTS[1] : LAYOUT_BLUEPRINTS[0];
+  return options[index % options.length];
+}
+
+function alignFocalPointToVisual(config: GridConfig, blueprint: LayoutBlueprint): GridConfig {
+  const visualZone = blueprint.zones.find((zone) => zone.kind === "visual");
+  if (!visualZone) return config;
+  return {
+    ...config,
+    focalX: Math.round(visualZone.x + visualZone.width / 2),
+    focalY: Math.round(visualZone.y + visualZone.height / 2),
+  };
+}
 
 export default function GridStudio() {
   const [referenceFile, setReferenceFile] = usePersistentState<File | null>("mcustock_grid_reference_file", null);
@@ -174,14 +255,18 @@ export default function GridStudio() {
   const [widthInput, setWidthInput] = useState("1080");
   const [heightInput, setHeightInput] = useState("1080");
   const [isAspectLocked, setIsAspectLocked] = useState(false);
-  const [config, setConfig] = useState<GridConfig>(() => createDefaultConfig("smart"));
-  const [layoutIndex, setLayoutIndex] = useState(() => Math.floor(seedToFloat(config.seed, 9) * 3));
+  const [config, setConfig] = useState<GridConfig>(() => {
+    const initial = createDefaultConfig("smart");
+    const initialLayoutIndex = Math.floor(seedToFloat(initial.seed, 9) * LAYOUT_VARIANTS_PER_ORIENTATION);
+    return alignFocalPointToVisual(initial, getLayoutBlueprint(1080, 1080, initialLayoutIndex));
+  });
+  const [layoutIndex, setLayoutIndex] = useState(() => Math.floor(seedToFloat(config.seed, 9) * LAYOUT_VARIANTS_PER_ORIENTATION));
   const [zoom, setZoom] = useState(1.0);
   const [transparentPng, setTransparentPng] = useState(true);
   const [showLayoutGuides, setShowLayoutGuides] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [showCodeModal, setShowCodeModal] = useState(false);
-  const [savedGrids, setSavedGrids] = useState<{ id: string; seed: string; width: number; height: number; config: GridConfig; createdAt: string }[]>([]);
+  const [savedGrids, setSavedGrids] = useState<{ id: string; seed: string; width: number; height: number; config: GridConfig; layoutIndex?: number; createdAt: string }[]>([]);
 
   // Reference image state (Analyze mode)
   const [referenceImg, setReferenceImg] = useState<string | null>(null);
@@ -191,6 +276,8 @@ export default function GridStudio() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const canvasFrameRef = useRef<HTMLDivElement>(null);
+  const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
   const [isDraggingFocal, setIsDraggingFocal] = useState(false);
 
   // Sync inputs with state
@@ -222,6 +309,23 @@ export default function GridStudio() {
 
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    const updatePreviewSize = () => {
+      setPreviewSize({
+        width: Math.max(0, container.clientWidth - 48),
+        height: Math.max(0, container.clientHeight - 48),
+      });
+    };
+
+    const observer = new ResizeObserver(updatePreviewSize);
+    observer.observe(container);
+    updatePreviewSize();
+    return () => observer.disconnect();
   }, []);
 
   const notify = (msg: string) => {
@@ -287,9 +391,11 @@ export default function GridStudio() {
   const handleGenerateNew = (type?: GridType) => {
     const nextType = type || config.type;
     const nextConfig = createDefaultConfig(nextType, generateSeed());
-    setLayoutIndex((index) => (index + 1) % 3);
+    const nextLayoutIndex = (layoutIndex + 1) % LAYOUT_VARIANTS_PER_ORIENTATION;
+    const nextBlueprint = getLayoutBlueprint(width, height, nextLayoutIndex);
+    setLayoutIndex(nextLayoutIndex);
     setConfig((prev) => ({
-      ...nextConfig,
+      ...alignFocalPointToVisual(nextConfig, nextBlueprint),
       gridColor: prev.gridColor,
       accentColor: prev.accentColor,
       bgMode: prev.bgMode,
@@ -297,7 +403,7 @@ export default function GridStudio() {
       opacity: prev.opacity,
       lineWidth: prev.lineWidth,
     }));
-    notify(`Generated new ${nextType.toUpperCase()} grid`);
+    notify(`Generated ${nextBlueprint.name} · ${nextType.toUpperCase()} grid`);
   };
 
   // Calculate scores
@@ -313,7 +419,8 @@ export default function GridStudio() {
   // Interactive Focal Point Dragging on Live Canvas
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!config.showFocal) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = canvasFrameRef.current?.getBoundingClientRect();
+    if (!rect || e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
     const clickX = ((e.clientX - rect.left) / rect.width) * 100;
     const clickY = ((e.clientY - rect.top) / rect.height) * 100;
 
@@ -324,7 +431,8 @@ export default function GridStudio() {
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDraggingFocal || !config.showFocal) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = canvasFrameRef.current?.getBoundingClientRect();
+    if (!rect) return;
     const clickX = ((e.clientX - rect.left) / rect.width) * 100;
     const clickY = ((e.clientY - rect.top) / rect.height) * 100;
 
@@ -371,8 +479,11 @@ export default function GridStudio() {
   // Export SVG vector file
   const handleExportSvg = async () => {
     await consumeFeatureCredit("grid_generation");
-    const fullSvg = buildGridSvg(config, width, height, { isExport: true });
-    const filename = `smart-grid-${config.type}-${width}x${height}-${config.seed.toLowerCase()}.svg`;
+    const fullSvg = buildGridSvg(config, width, height, {
+      isExport: true,
+      layoutGuides: showLayoutGuides ? getLayoutBlueprint(width, height, layoutIndex).zones : undefined,
+    });
+    const filename = `poster-grid-${config.type}-${width}x${height}-${config.seed.toLowerCase()}.svg`;
     downloadText(fullSvg, filename, "image/svg+xml;charset=utf-8");
     notify("Vector SVG exported successfully");
   };
@@ -380,7 +491,10 @@ export default function GridStudio() {
   // Copy SVG to clipboard
   const handleCopySvg = async () => {
     try {
-      const fullSvg = buildGridSvg(config, width, height, { isExport: true });
+      const fullSvg = buildGridSvg(config, width, height, {
+        isExport: true,
+        layoutGuides: showLayoutGuides ? getLayoutBlueprint(width, height, layoutIndex).zones : undefined,
+      });
       await navigator.clipboard.writeText(fullSvg);
       notify("SVG vector code copied to clipboard!");
     } catch {
@@ -393,7 +507,10 @@ export default function GridStudio() {
     try {
       await consumeFeatureCredit("grid_generation");
       const pngConfig = transparentPng ? { ...config, bgMode: "transparent" as const } : config;
-      const fullSvg = buildGridSvg(pngConfig, width, height, { isExport: true });
+      const fullSvg = buildGridSvg(pngConfig, width, height, {
+        isExport: true,
+        layoutGuides: showLayoutGuides ? getLayoutBlueprint(width, height, layoutIndex).zones : undefined,
+      });
       const svgBlob = new Blob([fullSvg], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(svgBlob);
       const img = new Image();
@@ -430,7 +547,7 @@ export default function GridStudio() {
               notify("PNG blob creation failed");
               return;
             }
-            const filename = `smart-grid-${config.type}-${width}x${height}.png`;
+            const filename = `poster-grid-${config.type}-${width}x${height}-${config.seed.toLowerCase()}.png`;
             downloadBlob(blob, filename);
             notify("High-res PNG exported!");
           }, "image/png");
@@ -459,6 +576,7 @@ export default function GridStudio() {
       width,
       height,
       config,
+      layoutIndex,
       createdAt: new Date().toLocaleTimeString(),
     };
     const next = [item, ...savedGrids.slice(0, 19)];
@@ -471,6 +589,7 @@ export default function GridStudio() {
     setConfig(saved.config);
     setWidth(saved.width);
     setHeight(saved.height);
+    setLayoutIndex(saved.layoutIndex ?? Math.floor(seedToFloat(saved.seed, 9) * LAYOUT_VARIANTS_PER_ORIENTATION));
     notify(`Restored ${saved.config.type.toUpperCase()} grid (${saved.seed})`);
   };
 
@@ -479,9 +598,20 @@ export default function GridStudio() {
   }, [config, width, height]);
 
   const layoutBlueprint = useMemo(() => {
-    const options = width / Math.max(height, 1) > 1.05 ? LAYOUT_BLUEPRINTS[1] : LAYOUT_BLUEPRINTS[0];
-    return options[layoutIndex % options.length];
+    return getLayoutBlueprint(width, height, layoutIndex);
   }, [layoutIndex, width, height]);
+  const canvasAspectRatio = width / height;
+  const canvasDisplayWidth = Math.min(
+    820,
+    previewSize.width || 820,
+    (previewSize.height || 532) * canvasAspectRatio
+  );
+  const canvasDisplayHeight = canvasDisplayWidth / canvasAspectRatio;
+  const visualZone = layoutBlueprint.zones.find((zone) => zone.kind === "visual");
+  const focalPointIsAligned = visualZone
+    ? config.focalX === Math.round(visualZone.x + visualZone.width / 2) &&
+      config.focalY === Math.round(visualZone.y + visualZone.height / 2)
+    : false;
 
   return (
     <div className="min-h-full w-full text-foreground font-sans space-y-4 pb-12">
@@ -605,7 +735,9 @@ export default function GridStudio() {
               <h2 className="text-xs font-extrabold uppercase tracking-widest text-[#f5c451] flex items-center gap-2">
                 <Sparkles className="h-3.5 w-3.5" /> Layout Blueprint
               </h2>
-              <span className="text-[9px] font-mono text-foreground/40">{layoutBlueprint.name.toUpperCase()}</span>
+              <span className="text-[9px] font-mono text-foreground/40">
+                {layoutBlueprint.name.toUpperCase()} · {layoutIndex + 1}/{LAYOUT_VARIANTS_PER_ORIENTATION}
+              </span>
             </div>
             <p className="text-xs leading-relaxed text-foreground/70">{layoutBlueprint.summary}</p>
             <ol className="space-y-2 border-t border-foreground/10 pt-3">
@@ -618,11 +750,23 @@ export default function GridStudio() {
             </ol>
             <div className="space-y-1.5 border-t border-foreground/10 pt-3">
               {layoutBlueprint.zones.map((zone) => (
-                <div key={zone.label} className="flex items-center justify-between gap-2 text-[10px]">
-                  <span className="font-bold text-foreground/75">{zone.label}</span>
-                  <span className="font-mono text-foreground/45">X {zone.x}% · Y {zone.y}%</span>
+                <div key={zone.label} className="space-y-0.5 text-[10px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-foreground/75">{zone.label}</span>
+                    <span className="font-mono text-foreground/45">
+                      X {zone.x}% · Y {zone.y}% · W {zone.width}% · H {zone.height}%
+                    </span>
+                  </div>
+                  <p className="font-mono text-[9px] text-foreground/40">
+                    {Math.round((width * zone.x) / 100)}, {Math.round((height * zone.y) / 100)} px ·{" "}
+                    {Math.round((width * zone.width) / 100)} × {Math.round((height * zone.height) / 100)} px
+                  </p>
                 </div>
               ))}
+            </div>
+            <div className="border-t border-foreground/10 pt-3 text-[10px] text-foreground/55">
+              Focal point: <span className="font-mono text-primary">X {config.focalX}% · Y {config.focalY}%</span>
+              <span className="ml-1">· {focalPointIsAligned ? "centered on visual zone" : "dragged from suggested position"}</span>
             </div>
           </div>
 
@@ -1067,10 +1211,10 @@ export default function GridStudio() {
               >
                 {/* Scaled Responsive Canvas Box */}
                 <div
+                  ref={canvasFrameRef}
                   style={{
-                    width: width >= height ? "min(100%, 820px)" : `calc(min(100%, 820px) * ${width / height})`,
-                    aspectRatio: `${width} / ${height}`,
-                    maxHeight: "calc(100vh - 16rem)",
+                    width: `${canvasDisplayWidth}px`,
+                    height: `${canvasDisplayHeight}px`,
                     transform: `scale(${zoom})`,
                     transformOrigin: "center center",
                     transition: isDraggingFocal ? "none" : "transform 0.1s ease-out",

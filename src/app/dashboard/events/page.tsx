@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, DownloadCloud, Heart, Sparkles, MapPin, Tag, Plus, X, Globe, Image as ImageIcon, Search } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, DownloadCloud, Heart, Sparkles, MapPin, Tag, Plus, X, Globe, Image as ImageIcon, Search, Copy, Check, ClipboardCopy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAllEvents, CalendarEvent, EventCategory } from "@/data/events2026";
 import { getActiveProvider, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Link from "next/link";
 
 interface GeneratedIdeaData {
   uploader_insight?: {
@@ -44,12 +46,45 @@ export default function EventCalendarPage() {
   const [activeEventForIdea, setActiveEventForIdea] = useState<CalendarEvent | null>(null);
   const [isGeneratingIdea, setIsGeneratingIdea] = useState(false);
   const [generatedIdeaData, setGeneratedIdeaData] = useState<GeneratedIdeaData | null>(null);
+  const [ideaError, setIdeaError] = useState("");
+  const [ideaProvider, setIdeaProvider] = useState("Groq");
+  const [copiedItem, setCopiedItem] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState("");
 
   const [addCustomModalOpen, setAddCustomModalOpen] = useState(false);
   const [newCustomEvent, setNewCustomEvent] = useState<CustomEventForm>({ title: '', date: '', category: 'Custom', country: 'Global' });
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
+
+  const copyPlannerText = async (text: string, item: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItem(item);
+      setCopyFeedback(item === "all" ? "Planner content copied." : "Copied to clipboard.");
+      window.setTimeout(() => setCopiedItem((current) => current === item ? "" : current), 1800);
+      window.setTimeout(() => setCopyFeedback(""), 2500);
+    } catch (error) {
+      console.error("[Event Planner] Clipboard copy failed:", error);
+      setCopiedItem("");
+      setCopyFeedback("Could not copy. Check clipboard permissions and try again.");
+    }
+  };
+
+  const getPlannerCopyText = (data: GeneratedIdeaData) => {
+    const sections = [
+      ["UPLOADER INSIGHT", [
+        data.uploader_insight?.orientation ? `Orientation: ${data.uploader_insight.orientation}` : "",
+        data.uploader_insight?.content_style ? `Content style: ${data.uploader_insight.content_style}` : "",
+        data.uploader_insight?.advice || "",
+      ].filter(Boolean).join("\n")],
+      ["STOCK IMAGE CONCEPTS", (data.stock_ideas || []).map((idea, index) => `${index + 1}. ${idea}`).join("\n")],
+      ["KEYWORDS", (data.keywords || []).join(", ")],
+      ["AI GENERATION PROMPTS", (data.prompts || []).map((prompt, index) => `${index + 1}. ${prompt}`).join("\n\n")],
+      ["SOCIAL MEDIA CAPTIONS", (data.captions || []).map((caption, index) => `${index + 1}. ${caption}`).join("\n\n")],
+    ];
+    return sections.filter(([, content]) => content).map(([title, content]) => `${title}\n${content}`).join("\n\n");
+  };
   
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const fullMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -193,42 +228,43 @@ export default function EventCalendarPage() {
   }, [currentMonth, currentYear, selectedCategory, selectedCountry, searchQuery, totalEvents]);
 
   const startIdeaGeneration = async (event: CalendarEvent) => {
+      const activeProvider = getActiveProvider();
       setActiveEventForIdea(event);
       setIdeaModalOpen(true);
       setGeneratedIdeaData(null);
+      setIdeaError("");
+      setIdeaProvider(activeProvider);
       setIsGeneratingIdea(true);
 
       try {
-         const activeProvider = getActiveProvider();
          const providerKeys = await syncProviderKeys();
          const activeKeyObj = providerKeys.find((k) => k.provider === activeProvider);
          const activeModel = getProviderModels()[activeProvider] || '';
-         
-         if (!activeKeyObj?.key) {
-             throw new Error(`API key required for ${activeProvider}. Please add one in the Generator tool's API Keys panel first.`);
-         }
 
          const response = await fetch('/api/generate-event-ideas', {
             method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 eventTitle: event.title,
                 eventCategory: event.category,
                 eventDate: event.date,
-                apiKey: activeKeyObj.key,
+                ...(activeKeyObj?.key ? { apiKey: activeKeyObj.key } : {}),
                 provider: activeProvider,
                 model: activeModel
             })
          });
 
-         const data = await response.json();
-         if (!data.success) throw new Error(data.error);
+         const data = await response.json() as { success?: boolean; data?: GeneratedIdeaData; error?: string };
+         if (!response.ok || !data.success || !data.data) {
+           throw new Error(data.error || `Unable to generate event ideas (HTTP ${response.status}).`);
+         }
 
          setGeneratedIdeaData(data.data);
+         window.dispatchEvent(new CustomEvent('mcustock:credits-updated'));
       } catch (err: unknown) {
          console.error(err);
-         const message = err instanceof Error ? err.message : 'Failed to generate event ideas';
-         alert(message);
-         setIdeaModalOpen(false);
+         setIdeaError(err instanceof Error ? err.message : 'Failed to generate event ideas');
       } finally {
          setIsGeneratingIdea(false);
       }
@@ -269,15 +305,20 @@ export default function EventCalendarPage() {
       
       {/* Page Header */}
       <div className="max-w-6xl mx-auto w-full flex flex-col items-center justify-center text-center space-y-4 mb-10 pt-4 relative">
-        <button onClick={() => setAddCustomModalOpen(true)} className="liquid-button-primary hidden sm:flex absolute right-0 top-0 items-center gap-2 px-4 py-2 text-white rounded-full text-xs font-bold shadow-md">
-            <Plus className="w-4 h-4" /> Add Event
-        </button>
-        <div className="liquid-chip inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white dark:bg-[#1a1814] border border-gray-200 dark:border-white/10 shadow-sm">
-          <CalendarIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 tracking-wide">AI Event Planner</span>
+        <div className="order-first flex flex-col items-center gap-4">
+          <button
+            onClick={() => setAddCustomModalOpen(true)}
+            className="event-add-button liquid-button-primary relative -top-1 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold shadow-md sm:absolute sm:right-0 sm:top-0"
+          >
+              <Plus className="w-4 h-4" /> Add Event
+          </button>
+          <div className="liquid-chip inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white dark:bg-[#1a1814] border border-gray-200 dark:border-white/10 shadow-sm">
+            <CalendarIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 tracking-wide">AI Event Planner</span>
+          </div>
         </div>
-        <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight">Event Calendar {currentYear}</h1>
-        <p className="text-gray-500 dark:text-gray-400 font-medium text-sm md:text-base max-w-lg leading-relaxed">Discover important events globally and generate smart stock concepts using AI.</p>
+        <h1 className="max-w-full break-words px-2 text-3xl font-extrabold leading-tight tracking-tight text-gray-900 dark:text-white sm:text-4xl md:text-5xl">Event Calendar {currentYear}</h1>
+        <p className="max-w-lg px-3 text-sm font-medium leading-relaxed text-gray-500 dark:text-gray-400 md:px-0 md:text-base">Discover important events globally and generate smart stock concepts using AI.</p>
         
       </div>
 
@@ -456,102 +497,213 @@ export default function EventCalendarPage() {
 
       </div>
 
-      {/* IDEA GENERATOR MODAL */}
-      <AnimatePresence>
+      {typeof document !== "undefined" ? createPortal(
+        <>
+          {/* IDEA GENERATOR MODAL */}
+          <AnimatePresence>
          {ideaModalOpen && activeEventForIdea && (
-             <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+             <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isGeneratingIdea && setIdeaModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="dashboard-liquid-panel relative w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar bg-white dark:bg-[#111] rounded-[24px] shadow-2xl border border-gray-100 dark:border-white/10 flex flex-col p-6 sm:p-8">
+                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="dashboard-liquid-panel relative flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border border-gray-100 bg-white shadow-2xl dark:border-white/10 dark:bg-[#111]">
                      
-                     <div className="flex items-center justify-between mb-6">
-                         <div className="flex items-center gap-3">
-                             <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl">
-                                 <Sparkles className="w-5 h-5" />
+                     <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-white/10 sm:px-7">
+                         <div className="flex min-w-0 items-start gap-3">
+                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                 <Sparkles className="h-5 w-5" />
                              </div>
-                             <div>
-                                 <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight">AI Content Planner</h3>
-                                 <p className="text-xs text-gray-500 font-medium">Smart strategy for {activeEventForIdea.title}</p>
+                             <div className="min-w-0">
+                                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Event strategy</p>
+                                 <h3 className="mt-0.5 text-lg font-bold leading-tight text-gray-900 dark:text-white">AI Content Planner</h3>
+                                 <p className="mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400">{activeEventForIdea.title}</p>
+                                 {generatedIdeaData ? (
+                                   <div className="mt-2 flex flex-wrap gap-1.5">
+                                     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300">{activeEventForIdea.category}</span>
+                                     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300">{activeEventForIdea.date}</span>
+                                   </div>
+                                 ) : null}
                              </div>
                          </div>
-                         <button onClick={() => setIdeaModalOpen(false)} disabled={isGeneratingIdea} className="text-gray-400 hover:text-gray-600 dark:hover:text-white disabled:opacity-50">
-                             <X className="w-5 h-5" />
-                         </button>
+                         <div className="flex shrink-0 items-center gap-2">
+                           {generatedIdeaData ? (
+                             <button
+                               type="button"
+                               onClick={() => void copyPlannerText(getPlannerCopyText(generatedIdeaData), "all")}
+                               className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-2 text-xs font-semibold text-gray-600 transition hover:border-primary/40 hover:text-primary dark:border-white/10 dark:text-gray-300"
+                             >
+                               {copiedItem === "all" ? <Check className="h-3.5 w-3.5" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                               <span className="hidden sm:inline">{copiedItem === "all" ? "Copied" : "Copy all"}</span>
+                             </button>
+                           ) : null}
+                           <button onClick={() => setIdeaModalOpen(false)} disabled={isGeneratingIdea} aria-label="Close content planner" className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white">
+                               <X className="h-5 w-5" />
+                           </button>
+                         </div>
                      </div>
 
+                     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 custom-scrollbar sm:px-7">
                      {isGeneratingIdea ? (
-                         <div className="flex flex-col items-center justify-center py-20">
-                             <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full mb-4" />
-                             <p className="text-sm font-bold text-gray-500">Groq AI is analyzing the event...</p>
+                         <div className="flex min-h-64 flex-col items-center justify-center">
+                             <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-primary" />
+                             <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">{ideaProvider} is analyzing the event...</p>
+                         </div>
+                     ) : ideaError ? (
+                         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5 text-center">
+                             <p role="alert" className="text-sm font-semibold text-red-600 dark:text-red-300">{ideaError}</p>
+                             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                               Check the selected provider and saved key in Generator settings, then retry.
+                             </p>
+                             <div className="mt-4 flex flex-wrap justify-center gap-3">
+                               <button
+                                 type="button"
+                                 onClick={() => activeEventForIdea && void startIdeaGeneration(activeEventForIdea)}
+                                 className="liquid-button-primary rounded-xl px-4 py-2 text-sm font-bold"
+                               >
+                                 Retry
+                               </button>
+                               <Link
+                                 href="/dashboard/generator"
+                                 onClick={() => setIdeaModalOpen(false)}
+                                 className="dashboard-liquid-ghost rounded-xl px-4 py-2 text-sm font-bold"
+                               >
+                                 Open Generator
+                               </Link>
+                             </div>
                          </div>
                      ) : generatedIdeaData ? (
-                         <div className="space-y-6">
-                             {/* Smart Stock Mode */}
-                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-white/[0.05] dark:to-white/[0.02] border border-blue-100 dark:border-white/10 rounded-2xl p-5">
-                                <h4 className="font-bold text-gray-900 dark:text-blue-300 mb-3 flex items-center gap-2 text-sm uppercase tracking-wide">
-                                    <Globe className="w-4 h-4 opacity-70" /> Uploader Insight
-                                </h4>
-                                <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-medium space-y-1.5">
-                                    <p><strong className="text-gray-900 dark:text-white">Orientation:</strong> {generatedIdeaData.uploader_insight?.orientation}</p>
-                                    <p><strong className="text-gray-900 dark:text-white">Content Style:</strong> {generatedIdeaData.uploader_insight?.content_style}</p>
-                                    <p className="mt-2 text-gray-600 dark:text-gray-400 border-l-2 border-blue-200 dark:border-blue-800 pl-3 py-1 italic">{generatedIdeaData.uploader_insight?.advice}</p>
-                                </div>
+                         <div className="space-y-5">
+                             {copyFeedback ? (
+                               <p aria-live="polite" className={`text-xs font-medium ${copiedItem ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-300"}`}>{copyFeedback}</p>
+                             ) : null}
+                             {generatedIdeaData.uploader_insight ? (
+                               <section className="rounded-2xl border border-primary/15 bg-primary/[0.045] p-4 sm:p-5">
+                                 <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-primary">
+                                   <Globe className="h-4 w-4" /> Uploader insight
+                                 </div>
+                                 <div className="grid gap-3 sm:grid-cols-2">
+                                   {generatedIdeaData.uploader_insight.orientation ? (
+                                     <p className="text-sm text-gray-700 dark:text-gray-300"><span className="font-semibold text-gray-900 dark:text-white">Orientation</span><span className="mx-2 text-gray-300 dark:text-gray-600">/</span>{generatedIdeaData.uploader_insight.orientation}</p>
+                                   ) : null}
+                                   {generatedIdeaData.uploader_insight.content_style ? (
+                                     <p className="text-sm text-gray-700 dark:text-gray-300"><span className="font-semibold text-gray-900 dark:text-white">Content style</span><span className="mx-2 text-gray-300 dark:text-gray-600">/</span>{generatedIdeaData.uploader_insight.content_style}</p>
+                                   ) : null}
+                                 </div>
+                                 {generatedIdeaData.uploader_insight.advice ? (
+                                   <p className="mt-3 border-l-2 border-primary/40 pl-3 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{generatedIdeaData.uploader_insight.advice}</p>
+                                 ) : null}
+                               </section>
+                             ) : null}
+
+                             <div className="grid gap-5 md:grid-cols-2">
+                               {(generatedIdeaData.stock_ideas?.length ?? 0) > 0 ? (
+                                 <section className="min-w-0">
+                                   <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+                                     <ImageIcon className="h-4 w-4 text-primary" /> Stock image concepts
+                                   </div>
+                                   <ol className="space-y-2.5">
+                                     {generatedIdeaData.stock_ideas?.map((idea, index) => {
+                                       const itemKey = `idea-${index}`;
+                                       return (
+                                         <li key={itemKey} className="group flex gap-3 rounded-xl border border-gray-200/80 bg-white p-3 dark:border-white/10 dark:bg-white/[0.035]">
+                                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">{index + 1}</span>
+                                           <p className="min-w-0 flex-1 text-sm leading-relaxed text-gray-700 dark:text-gray-300">{idea}</p>
+                                           <button type="button" onClick={() => void copyPlannerText(idea, itemKey)} aria-label={`Copy concept ${index + 1}`} title="Copy concept" className="h-fit rounded-md p-1.5 text-gray-400 transition hover:bg-primary/10 hover:text-primary">
+                                             {copiedItem === itemKey ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                           </button>
+                                         </li>
+                                       );
+                                     })}
+                                   </ol>
+                                 </section>
+                               ) : null}
+                               {(generatedIdeaData.keywords?.length ?? 0) > 0 ? (
+                                 <section className="min-w-0">
+                                   <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+                                     <Tag className="h-4 w-4 text-primary" /> High-value keywords
+                                   </div>
+                                   <div className="flex flex-wrap gap-2">
+                                     {generatedIdeaData.keywords?.map((keyword, index) => {
+                                       const itemKey = `keyword-${index}`;
+                                       return (
+                                         <button key={itemKey} type="button" onClick={() => void copyPlannerText(keyword, itemKey)} title={`Copy ${keyword}`} className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-left text-[11px] font-semibold text-gray-700 transition hover:border-primary/40 hover:text-primary dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+                                           <span className="break-words">{keyword}</span>
+                                           {copiedItem === itemKey ? <Check className="h-3 w-3 shrink-0" /> : <Copy className="h-3 w-3 shrink-0 opacity-50" />}
+                                         </button>
+                                       );
+                                     })}
+                                   </div>
+                                 </section>
+                               ) : null}
                              </div>
 
-                             {/* Ideas and Keywords */}
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                 <div>
-                                     <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> Stock Image Concepts</h5>
-                                     <ul className="text-sm font-medium text-gray-700 dark:text-gray-300 space-y-2 pl-4 list-disc marker:text-blue-500">
-                                         {generatedIdeaData.stock_ideas?.map((idea: string, idx: number) => <li key={idx}>{idea}</li>)}
-                                     </ul>
+                             {(generatedIdeaData.prompts?.length ?? 0) > 0 ? (
+                               <section>
+                                 <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+                                   <Sparkles className="h-4 w-4 text-primary" /> AI generation prompts
                                  </div>
-                                 <div>
-                                     <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> High-Value Keywords</h5>
-                                     <div className="flex flex-wrap gap-2">
-                                         {generatedIdeaData.keywords?.map((k: string) => (
-                                             <span key={k} className="px-2.5 py-1 bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 text-[10px] font-bold uppercase tracking-wider rounded border border-gray-200 dark:border-transparent drop-shadow-sm">{k}</span>
-                                         ))}
-                                     </div>
-                                 </div>
-                             </div>
-
-                             {/* Prompts and Captions */}
-                             <div className="space-y-4">
-                                 <div>
-                                     <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> AI Generation Prompts</h5>
-                                     {generatedIdeaData.prompts?.map((prompt: string, idx: number) => (
-                                         <div key={idx} className="bg-gray-100 dark:bg-black/50 p-4 border border-gray-200 dark:border-white/10 rounded-xl mb-3 text-xs text-gray-800 dark:text-gray-300 leading-relaxed font-medium">
-                                             {prompt}
+                                 <div className="space-y-2.5">
+                                   {generatedIdeaData.prompts?.map((prompt, index) => {
+                                     const itemKey = `prompt-${index}`;
+                                     return (
+                                       <article key={itemKey} className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.035]">
+                                         <div className="mb-2 flex items-center justify-between gap-3">
+                                           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Prompt {index + 1}</span>
+                                           <button type="button" onClick={() => void copyPlannerText(prompt, itemKey)} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-gray-500 transition hover:bg-primary/10 hover:text-primary dark:text-gray-400">
+                                             {copiedItem === itemKey ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                             {copiedItem === itemKey ? "Copied" : "Copy"}
+                                           </button>
                                          </div>
-                                     ))}
+                                         <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{prompt}</p>
+                                       </article>
+                                     );
+                                   })}
                                  </div>
-                                 <div>
-                                     <h5 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Social Media Captions</h5>
-                                     {generatedIdeaData.captions?.map((cap: string, idx: number) => (
-                                         <div key={idx} className="bg-green-50 dark:bg-green-900/10 p-3 border border-green-200 dark:border-green-500/20 rounded-xl mb-3 text-xs text-green-800 dark:text-green-300 leading-relaxed font-medium">
-                                             {cap}
-                                         </div>
-                                     ))}
-                                 </div>
-                             </div>
+                               </section>
+                             ) : null}
 
+                             {(generatedIdeaData.captions?.length ?? 0) > 0 ? (
+                               <section>
+                                 <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+                                   <Tag className="h-4 w-4 text-primary" /> Social media captions
+                                 </div>
+                                 <div className="space-y-2.5">
+                                   {generatedIdeaData.captions?.map((caption, index) => {
+                                     const itemKey = `caption-${index}`;
+                                     return (
+                                       <article key={itemKey} className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4 dark:border-emerald-500/15 dark:bg-emerald-500/[0.06]">
+                                         <div className="mb-2 flex items-center justify-between gap-3">
+                                           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Caption {index + 1}</span>
+                                           <button type="button" onClick={() => void copyPlannerText(caption, itemKey)} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/10 dark:text-emerald-400">
+                                             {copiedItem === itemKey ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                             {copiedItem === itemKey ? "Copied" : "Copy"}
+                                           </button>
+                                         </div>
+                                         <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{caption}</p>
+                                       </article>
+                                     );
+                                   })}
+                                 </div>
+                               </section>
+                             ) : null}
                          </div>
                      ) : null}
+                     </div>
 
                      {!isGeneratingIdea && (
-                         <button onClick={() => setIdeaModalOpen(false)} className="dashboard-liquid-ghost w-full mt-6 py-3.5 font-bold text-sm rounded-xl">
+                         <div className="border-t border-gray-200 px-5 py-3 dark:border-white/10 sm:px-7">
+                         <button onClick={() => setIdeaModalOpen(false)} className="dashboard-liquid-ghost w-full rounded-xl py-3 text-sm font-bold">
                             Close Planner
                          </button>
+                         </div>
                      )}
                  </motion.div>
              </div>
          )}
       </AnimatePresence>
 
-      {/* ADD CUSTOM EVENT MODAL */}
-      <AnimatePresence>
+          {/* ADD CUSTOM EVENT MODAL */}
+          <AnimatePresence>
          {addCustomModalOpen && (
-             <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+             <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAddCustomModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="dashboard-liquid-panel relative w-full max-w-sm bg-white dark:bg-[#111] rounded-[24px] shadow-2xl border border-gray-100 dark:border-white/10 p-6 sm:p-8">
                      <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-6">Add Custom Event</h3>
@@ -583,6 +735,9 @@ export default function EventCalendarPage() {
              </div>
          )}
        </AnimatePresence>
+        </>,
+        document.body
+      ) : null}
     </div>
   );
 }

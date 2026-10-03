@@ -3,43 +3,24 @@ import { CreditLedger } from '@/server/models/CreditLedger';
 import { User } from '@/server/models/User';
 import { SystemSetting } from '@/server/models/SystemSetting';
 import { hasMongoDbConfig } from '@/server/db/database-config';
-import { updateDevUserCredits, deductDevUserCredits } from '@/server/auth/dev-auth';
+import { findDevUserById, updateDevUserCredits, deductDevUserCredits } from '@/server/auth/dev-auth';
+import { inMemoryStore } from '@/server/db/in-memory-store';
+import { CreditCostKey, DEFAULT_CREDIT_COSTS } from '@/server/services/credit-costs';
 
-type CreditCostKey =
-  | 'metadata_generation'
-  | 'prompt_generation'
-  | 'advanced_metadata'
-  | 'batch_generation'
-  | 'advanced_ai'
-  | 'heavy_ai'
-  | 'background_removal'
-  | 'three_d_generation'
-  | 'grid_generation'
-  | 'palette_generation'
-  | 'typebox_generation'
-  | 'bento_generation'
-  | 'ascii_generation'
-  | 'trading_generation'
-  | 'splitter_export'
-  | 'pattern_generation'
-  | 'svg_motion'
-  | 'motion_generation'
-  | 'color_extraction'
-  | 'image_palette'
-  | 'pattern_maker'
-  | 'vector_splitter'
-  | 'general_ai';
+type CreditOptions = { usesOwnApiKey?: boolean };
 
-async function resolveCreditAmount(amount: number, costKey?: CreditCostKey) {
+async function resolveCreditAmount(amount: number, costKey?: CreditCostKey, options: CreditOptions = {}) {
   if (!costKey) return amount;
-  if (!hasMongoDbConfig()) return amount;
-  try {
-    const setting = await SystemSetting.findOne({ key: 'credit_costs' }).lean();
-    const configured = Number((setting?.value as Record<string, unknown> | undefined)?.[costKey]);
-    return Number.isFinite(configured) && configured >= 0 ? amount * Math.floor(configured) : amount;
-  } catch {
-    return amount;
+  const costs = hasMongoDbConfig()
+    ? (await SystemSetting.findOne({ key: 'credit_costs' }).lean())?.value as Record<string, unknown> | undefined
+    : inMemoryStore.creditCosts;
+  const configured = Number(costs?.[costKey] ?? DEFAULT_CREDIT_COSTS[costKey]);
+  const unitCost = Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_CREDIT_COSTS[costKey];
+  if (options.usesOwnApiKey) {
+    if (costs?.byo_api_mode === 'free') return 0;
+    if (costs?.byo_api_mode === 'reduced') return amount * unitCost * 0.5;
   }
+  return amount * unitCost;
 }
 
 export class InsufficientCreditsError extends Error {
@@ -49,23 +30,39 @@ export class InsufficientCreditsError extends Error {
   }
 }
 
-export async function consumeCredits(userId: string, amount = 1, reason = 'Feature usage', costKey?: CreditCostKey) {
+export async function consumeCredits(
+  userId: string,
+  amount = 1,
+  reason = 'Feature usage',
+  costKey?: CreditCostKey,
+  options: CreditOptions = {},
+) {
   if (!Number.isInteger(amount) || amount <= 0) throw new Error('Credit amount must be a positive integer.');
 
+  const effectiveAmount = await resolveCreditAmount(amount, costKey, options);
+  if (effectiveAmount === 0) {
+    if (!hasMongoDbConfig()) {
+      const user = findDevUserById(userId);
+      if (!user) throw new InsufficientCreditsError();
+      return { _id: userId, credits: user.credits };
+    }
+    await connectToDatabase();
+    const user = await User.findById(userId).select('_id credits').lean();
+    if (!user) throw new InsufficientCreditsError();
+    return user;
+  }
+
   if (!hasMongoDbConfig()) {
-    const effectiveAmount = await resolveCreditAmount(amount, costKey);
     try {
       const updated = deductDevUserCredits(userId, effectiveAmount);
-      return { _id: userId, credits: updated?.credits || { monthly: 2000, bonus: 500, used: effectiveAmount } };
+      if (!updated) throw new InsufficientCreditsError();
+      return { _id: userId, credits: updated.credits };
     } catch {
       throw new InsufficientCreditsError();
     }
   }
 
   await connectToDatabase();
-  const effectiveAmount = await resolveCreditAmount(amount, costKey);
-  if (effectiveAmount === 0) return User.findById(userId).select('_id credits').lean();
-
   const updated = await User.findOneAndUpdate(
     {
       _id: userId,
@@ -92,18 +89,24 @@ export async function consumeCredits(userId: string, amount = 1, reason = 'Featu
   return updated;
 }
 
-export async function refundCredits(userId: string, amount = 1, reason = 'Failed feature usage refund', costKey?: CreditCostKey) {
+export async function refundCredits(
+  userId: string,
+  amount = 1,
+  reason = 'Failed feature usage refund',
+  costKey?: CreditCostKey,
+  options: CreditOptions = {},
+) {
   if (!Number.isInteger(amount) || amount <= 0) throw new Error('Credit amount must be a positive integer.');
 
+  const effectiveAmount = await resolveCreditAmount(amount, costKey, options);
+  if (effectiveAmount === 0) return;
+
   if (!hasMongoDbConfig()) {
-    updateDevUserCredits(userId, amount, 0, -amount);
+    updateDevUserCredits(userId, effectiveAmount, 0, -effectiveAmount);
     return;
   }
 
   await connectToDatabase();
-  const effectiveAmount = await resolveCreditAmount(amount, costKey);
-  if (effectiveAmount === 0) return;
-
   await User.findByIdAndUpdate(userId, {
     $inc: { 'credits.bonus': effectiveAmount, 'credits.used': -effectiveAmount },
     $set: { updatedAt: new Date() },

@@ -21,6 +21,7 @@ import { ImagePaletteModal } from './components/ImagePaletteModal';
 import { TextPromptModal } from './components/TextPromptModal';
 import { importVectorFile } from './utils/vectorImport';
 import { usePersistentState } from '@/lib/usePersistentState';
+import { consumeFeatureCredit } from '@/lib/feature-credits';
 
 const SETTINGS_STORAGE_KEY = 'mcustock_pattern_maker_settings';
 const ELEMENTS_STORAGE_KEY = 'mcustock_pattern_maker_elements';
@@ -74,6 +75,7 @@ export default function App() {
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isColorwayOpen, setIsColorwayOpen] = useState<boolean>(false);
   const [isImagePaletteOpen, setIsImagePaletteOpen] = useState<boolean>(false);
+  const [isMobileInspectorOpen, setIsMobileInspectorOpen] = useState(false);
   const [extractedPalette, setExtractedPalette] = useState<string[]>([]);
   const [isTextPromptOpen, setIsTextPromptOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -304,7 +306,13 @@ export default function App() {
   };
 
   // Load complex pre-designed pattern arrangement from preset library
-  const handleLoadPatternPreset = (presetElements: DesignElement[], bg?: string) => {
+  const handleLoadPatternPreset = async (presetElements: DesignElement[], bg?: string) => {
+    try {
+      await consumeFeatureCredit('pattern_generation');
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Unable to reserve credits for pattern generation.');
+      return;
+    }
     pushHistory();
     setElements(JSON.parse(JSON.stringify(presetElements)));
     if (bg) {
@@ -374,9 +382,15 @@ export default function App() {
   };
 
   // Smart Harmonic Motif Auto-Scatter across toroidal repeat
-  const handleScatterMotifs = () => {
+  const handleScatterMotifs = async () => {
     if (elements.length === 0) {
       setToastMessage("Load or add some motifs first before scattering.");
+      return;
+    }
+    try {
+      await consumeFeatureCredit('pattern_generation');
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Unable to reserve credits for pattern generation.');
       return;
     }
     pushHistory();
@@ -480,10 +494,15 @@ export default function App() {
         onOpenColorways={() => setIsColorwayOpen(true)}
         onOpenImagePalette={() => setIsImagePaletteOpen(true)}
         onScatterMotifs={handleScatterMotifs}
+        onToggleInspector={() => setIsMobileInspectorOpen((open) => !open)}
+        isInspectorOpen={isMobileInspectorOpen}
       />
 
       {/* Main Workspace Body */}
-      <div className="pattern-maker-workspace relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div
+        className="pattern-maker-workspace relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+        data-inspector-open={isMobileInspectorOpen}
+      >
         {/* Compact tool rail and settings inspector stay together on the left. */}
         {activeTab === 'artboard' && (
           <Toolbar

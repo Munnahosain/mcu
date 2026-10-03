@@ -7,25 +7,34 @@ import { CreditLedger } from '@/server/models/CreditLedger';
 import { hasMongoDbConfig } from '@/server/db/database-config';
 import { inMemoryStore } from '@/server/db/in-memory-store';
 import { updateDevUserCredits, findDevUserById } from '@/server/auth/dev-auth';
+import { CREDIT_COST_KEYS, DEFAULT_CREDIT_COSTS, MAX_CREDIT_COST } from '@/server/services/credit-costs';
 
-const DEFAULT_CREDIT_COSTS = {
-  metadata_generation: 1,
-  prompt_generation: 1,
-  advanced_metadata: 2,
-  batch_generation: 1,
-  advanced_ai: 2,
-  heavy_ai: 5,
-  background_removal: 5,
-  three_d_generation: 1,
-  grid_generation: 1,
-  palette_generation: 1,
-  typebox_generation: 1,
-  bento_generation: 1,
-  ascii_generation: 1,
-  trading_generation: 1,
-  splitter_export: 1,
-  byo_api_mode: 'charge', // 'charge' | 'free' | 'reduced'
-};
+function validateCreditCosts(input: unknown) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { error: 'Credit costs must be an object.' };
+  }
+
+  const entries = Object.entries(input);
+  const unknownKey = entries.find(([key]) => !CREDIT_COST_KEYS.includes(key as keyof typeof DEFAULT_CREDIT_COSTS));
+  if (unknownKey) return { error: `Unsupported credit cost key: ${unknownKey[0]}.` };
+
+  const costs: Record<string, number | string> = {};
+  for (const [key, value] of entries) {
+    if (key === 'byo_api_mode') {
+      if (value !== 'charge' && value !== 'free' && value !== 'reduced') {
+        return { error: 'BYO API mode must be charge, free, or reduced.' };
+      }
+      costs[key] = value;
+    } else {
+      const amount = Number(value);
+      if (!Number.isInteger(amount) || amount < 1 || amount > MAX_CREDIT_COST) {
+        return { error: `${key} must be an integer between 1 and ${MAX_CREDIT_COST}.` };
+      }
+      costs[key] = amount;
+    }
+  }
+  return { costs };
+}
 
 export async function GET(req: Request) {
   try {
@@ -34,7 +43,7 @@ export async function GET(req: Request) {
     if (!hasMongoDbConfig()) {
       return NextResponse.json({
         success: true,
-        creditCosts: inMemoryStore.creditCosts,
+        creditCosts: { ...DEFAULT_CREDIT_COSTS, ...inMemoryStore.creditCosts },
       });
     }
 
@@ -77,12 +86,14 @@ export async function POST(req: Request) {
         });
       }
 
-      if (body.creditCosts && typeof body.creditCosts === 'object') {
-        Object.assign(inMemoryStore.creditCosts, body.creditCosts);
+      if (body.creditCosts !== undefined) {
+        const validation = validateCreditCosts(body.creditCosts);
+        if (validation.error) return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
+        Object.assign(inMemoryStore.creditCosts, validation.costs);
         return NextResponse.json({
           success: true,
           message: 'Credit costs updated successfully.',
-          creditCosts: inMemoryStore.creditCosts,
+          creditCosts: { ...DEFAULT_CREDIT_COSTS, ...inMemoryStore.creditCosts },
         });
       }
       return NextResponse.json({ success: false, error: 'Invalid request body.' }, { status: 400 });
@@ -149,13 +160,16 @@ export async function POST(req: Request) {
     }
 
     // Save credit costs configuration
-    if (body.creditCosts && typeof body.creditCosts === 'object') {
+    if (body.creditCosts !== undefined) {
+      const validation = validateCreditCosts(body.creditCosts);
+      if (validation.error) return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
+      const existing = await SystemSetting.findOne({ key: 'credit_costs' }).lean();
       const updated = await SystemSetting.findOneAndUpdate(
         { key: 'credit_costs' },
         {
           $set: {
             key: 'credit_costs',
-            value: { ...DEFAULT_CREDIT_COSTS, ...body.creditCosts },
+            value: { ...DEFAULT_CREDIT_COSTS, ...(existing?.value as Record<string, unknown> || {}), ...validation.costs },
             updatedBy: actor._id,
           },
         },

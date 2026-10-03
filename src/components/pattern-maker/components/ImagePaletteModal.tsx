@@ -6,6 +6,7 @@ import {
   SAMPLE_INSPIRATION_IMAGES,
 } from '../utils/colorExtractor';
 import { DesignElement, PatternSettings } from '../types';
+import { consumeFeatureCredit } from '@/lib/feature-credits';
 import {
   Upload,
   Sparkles,
@@ -65,7 +66,7 @@ export const ImagePaletteModal: React.FC<ImagePaletteModalProps> = ({
 
   // Process image source and extract palette
   const handleExtractFromSource = useCallback(
-    async (source: string | File | Blob) => {
+    async (source: string | File | Blob, chargeCredits = true) => {
       setIsProcessing(true);
       try {
         if (typeof source === 'string') {
@@ -75,6 +76,7 @@ export const ImagePaletteModal: React.FC<ImagePaletteModalProps> = ({
         }
 
         const result = await extractPaletteFromImage(source, 7);
+        if (chargeCredits) await consumeFeatureCredit('image_palette');
         setExtractedResult(result);
         setActiveColorIndex(0);
         if (onExtractedPaletteChange) {
@@ -93,7 +95,7 @@ export const ImagePaletteModal: React.FC<ImagePaletteModalProps> = ({
   // Auto-load default inspiration image on first open if no image yet
   useEffect(() => {
     if (isOpen && !extractedResult && !imagePreviewUrl) {
-      void handleExtractFromSource(SAMPLE_INSPIRATION_IMAGES[0].url);
+      void handleExtractFromSource(SAMPLE_INSPIRATION_IMAGES[0].url, false);
     }
   }, [isOpen, extractedResult, imagePreviewUrl, handleExtractFromSource]);
 

@@ -6,6 +6,7 @@ import { Plan } from '@/server/models/Plan';
 import { User } from '@/server/models/User';
 import { consumeCredits, InsufficientCreditsError } from '@/server/services/credit-service';
 import { hasMongoDbConfig } from '@/server/db/database-config';
+import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
 
 export async function GET(req: Request) {
   try {
@@ -94,47 +95,11 @@ export async function POST(req: Request) {
     const user = await requireAuthenticatedUser(req);
     const body = await req.json().catch(() => ({}));
 
-    // Support 1-Click refill action for testing & creator bonus
     if (body.action === 'refill' || body.action === 'claim_bonus') {
-      const refillAmount = Number.isInteger(Number(body.amount)) && Number(body.amount) > 0 ? Number(body.amount) : 5000;
-      if (!hasMongoDbConfig()) {
-        const { refillDevUserCredits } = await import('@/server/auth/dev-auth');
-        const updated = refillDevUserCredits(user._id.toString(), refillAmount);
-        const monthly = updated?.credits.monthly ?? 20000;
-        const bonus = updated?.credits.bonus ?? 5000;
-        const used = updated?.credits.used ?? 0;
-        return NextResponse.json({
-          success: true,
-          message: `Successfully claimed +${refillAmount} bonus credits!`,
-          credits: {
-            monthly,
-            bonus,
-            used,
-            remaining: monthly + bonus,
-            total: monthly + bonus + used,
-          },
-        });
-      }
-      await connectToDatabase();
-      const updated = await User.findByIdAndUpdate(
-        user._id,
-        { $inc: { 'credits.bonus': refillAmount }, $set: { updatedAt: new Date() } },
-        { new: true }
-      ).select('credits').lean();
-      const monthly = updated?.credits?.monthly ?? 0;
-      const bonus = updated?.credits?.bonus ?? 0;
-      const used = updated?.credits?.used ?? 0;
-      return NextResponse.json({
-        success: true,
-        message: `Successfully claimed +${refillAmount} bonus credits!`,
-        credits: {
-          monthly,
-          bonus,
-          used,
-          remaining: monthly + bonus,
-          total: monthly + bonus + used,
-        },
-      });
+      return NextResponse.json(
+        { success: false, error: 'Free credit refill is unavailable. Choose a plan to add credits.' },
+        { status: 410 }
+      );
     }
 
     const feature = typeof body.feature === 'string' ? body.feature : '';
@@ -154,8 +119,49 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Amount must be a positive integer.' }, { status: 400 });
     }
 
-    await consumeCredits(user._id.toString(), amount, `${feature} usage (${amount} creation${amount === 1 ? '' : 's'})`, feature as Parameters<typeof consumeCredits>[3]);
-    return NextResponse.json({ success: true });
+    const aiMeteredFeatures = new Set([
+      'metadata_generation', 'prompt_generation', 'advanced_metadata', 'batch_generation',
+      'advanced_ai', 'heavy_ai', 'background_removal', 'svg_motion', 'general_ai',
+    ]);
+    if (aiMeteredFeatures.has(feature)) {
+      const aiFeatureDenial = await getFeatureFlagDenial(user._id.toString(), 'ai_tools', 'AI tools');
+      if (aiFeatureDenial) return NextResponse.json({ success: false, error: aiFeatureDenial }, { status: 403 });
+    }
+    const legacyKey = feature === 'background_removal' ? 'bg_remover' : undefined;
+    const featureDenial = await getFeatureFlagDenial(user._id.toString(), feature, feature.replaceAll('_', ' '), legacyKey);
+    if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
+    if (feature === 'pattern_generation' || feature === 'image_palette') {
+      const studioDenial = await getFeatureFlagDenial(user._id.toString(), 'pattern_maker', 'Pattern Maker');
+      if (studioDenial) return NextResponse.json({ success: false, error: studioDenial }, { status: 403 });
+    }
+    if (feature === 'image_palette') {
+      const extractionDenial = await getFeatureFlagDenial(user._id.toString(), 'color_extraction', 'Color extraction');
+      if (extractionDenial) return NextResponse.json({ success: false, error: extractionDenial }, { status: 403 });
+    }
+    if (feature === 'splitter_export') {
+      const splitterDenial = await getFeatureFlagDenial(user._id.toString(), 'vector_splitter', 'Vector splitter');
+      if (splitterDenial) return NextResponse.json({ success: false, error: splitterDenial }, { status: 403 });
+    }
+
+    const updated = await consumeCredits(
+      user._id.toString(),
+      amount,
+      `${feature} usage (${amount} creation${amount === 1 ? '' : 's'})`,
+      feature as Parameters<typeof consumeCredits>[3]
+    );
+    const monthly = Number(updated?.credits?.monthly ?? 0);
+    const bonus = Number(updated?.credits?.bonus ?? 0);
+    const used = Number(updated?.credits?.used ?? 0);
+    return NextResponse.json({
+      success: true,
+      credits: {
+        monthly,
+        bonus,
+        used,
+        remaining: monthly + bonus,
+        total: monthly + bonus + used,
+      },
+    });
   } catch (error) {
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });

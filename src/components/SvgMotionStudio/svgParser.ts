@@ -38,6 +38,110 @@ const SHAPE_TAGS: Set<string> = new Set([
   'image',
 ]);
 
+function getStyleValue(element: Element, property: string): string | undefined {
+  const style = element.getAttribute('style') || '';
+  return style.match(new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, 'i'))?.[1]?.trim();
+}
+
+function presentationValue(element: Element, property: string): string | undefined {
+  return element.getAttribute(property) || getStyleValue(element, property);
+}
+
+function parseTransform(transform: string | undefined) {
+  const matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  if (!transform) return matrix;
+
+  const multiply = (right: typeof matrix) => {
+    const left = { ...matrix };
+    matrix.a = left.a * right.a + left.c * right.b;
+    matrix.b = left.b * right.a + left.d * right.b;
+    matrix.c = left.a * right.c + left.c * right.d;
+    matrix.d = left.b * right.c + left.d * right.d;
+    matrix.e = left.a * right.e + left.c * right.f + left.e;
+    matrix.f = left.b * right.e + left.d * right.f + left.f;
+  };
+
+  for (const match of transform.matchAll(/([a-z]+)\s*\(([^)]*)\)/gi)) {
+    const operation = match[1].toLowerCase();
+    const values = match[2].trim().split(/[\s,]+/).map(Number);
+    if (values.some((value) => !Number.isFinite(value))) continue;
+    if (operation === 'matrix' && values.length === 6) {
+      multiply({ a: values[0], b: values[1], c: values[2], d: values[3], e: values[4], f: values[5] });
+    } else if (operation === 'translate' && values.length >= 1) {
+      multiply({ a: 1, b: 0, c: 0, d: 1, e: values[0], f: values[1] || 0 });
+    } else if (operation === 'scale' && values.length >= 1) {
+      multiply({ a: values[0], b: 0, c: 0, d: values[1] ?? values[0], e: 0, f: 0 });
+    } else if (operation === 'rotate' && values.length >= 1) {
+      const radians = values[0] * Math.PI / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      const cx = values[1] || 0;
+      const cy = values[2] || 0;
+      multiply({
+        a: cos,
+        b: sin,
+        c: -sin,
+        d: cos,
+        e: cx - cos * cx + sin * cy,
+        f: cy - sin * cx - cos * cy,
+      });
+    } else if (operation === 'skewx' && values.length === 1) {
+      multiply({ a: 1, b: 0, c: Math.tan(values[0] * Math.PI / 180), d: 1, e: 0, f: 0 });
+    } else if (operation === 'skewy' && values.length === 1) {
+      multiply({ a: 1, b: Math.tan(values[0] * Math.PI / 180), c: 0, d: 1, e: 0, f: 0 });
+    }
+  }
+  return matrix;
+}
+
+function estimateBounds(tag: string, attrs: Record<string, string>, childBounds: Array<BoundingBox | undefined>): BoundingBox | undefined {
+  const number = (key: string, fallback = 0) => {
+    const parsed = parseFloat(attrs[key] || '');
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  if (tag === 'rect' || tag === 'image') {
+    return { x: number('x'), y: number('y'), width: number('width'), height: number('height') };
+  }
+  if (tag === 'circle') {
+    const radius = number('r');
+    return { x: number('cx') - radius, y: number('cy') - radius, width: radius * 2, height: radius * 2 };
+  }
+  if (tag === 'ellipse') {
+    const rx = number('rx');
+    const ry = number('ry');
+    return { x: number('cx') - rx, y: number('cy') - ry, width: rx * 2, height: ry * 2 };
+  }
+  if (tag === 'line') {
+    const x1 = number('x1');
+    const y1 = number('y1');
+    const x2 = number('x2');
+    const y2 = number('y2');
+    return { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+  }
+  if (tag === 'polygon' || tag === 'polyline') {
+    const points = (attrs.points || '').trim().split(/[\s,]+/).map(Number);
+    if (points.length >= 4 && points.every(Number.isFinite)) {
+      const xs = points.filter((_, index) => index % 2 === 0);
+      const ys = points.filter((_, index) => index % 2 === 1);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+    }
+  }
+  if (tag === 'g') {
+    const valid = childBounds.filter((box): box is BoundingBox => Boolean(box));
+    if (valid.length) {
+      const x = Math.min(...valid.map((box) => box.x));
+      const y = Math.min(...valid.map((box) => box.y));
+      const right = Math.max(...valid.map((box) => box.x + box.width));
+      const bottom = Math.max(...valid.map((box) => box.y + box.height));
+      return { x, y, width: right - x, height: bottom - y };
+    }
+  }
+  return undefined;
+}
+
 export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
   if (!rawSvg || typeof rawSvg !== 'string') {
     return {
@@ -74,6 +178,15 @@ export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
       'stroke-miterlimit',
       'xmlns:inkscape',
       'opacity',
+      'clip-path',
+      'mask',
+      'filter',
+      'stop-color',
+      'stop-opacity',
+      'gradientUnits',
+      'gradientTransform',
+      'patternUnits',
+      'patternTransform',
       'points',
       'cx',
       'cy',
@@ -229,20 +342,30 @@ export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
 
     const mcuId = `mcu_el_${elementCounter++}`;
     node.setAttribute('data-mcu-id', mcuId);
+    const attributes = Object.fromEntries(
+      Array.from(node.attributes)
+        .filter((attribute) => attribute.name !== 'data-mcu-id')
+        .map((attribute) => [attribute.name, attribute.value])
+    );
 
     const isGroup = tag === 'g';
     const originalId = node.getAttribute('id') || '';
     const name = generateName(node, tag);
 
     // Initial appearance
-    const fill = node.getAttribute('fill') || undefined;
-    const stroke = node.getAttribute('stroke') || undefined;
-    const strokeWidthAttr = node.getAttribute('stroke-width');
+    const fill = presentationValue(node, 'fill');
+    const stroke = presentationValue(node, 'stroke');
+    const strokeWidthAttr = presentationValue(node, 'stroke-width');
     const strokeWidth = strokeWidthAttr ? parseFloat(strokeWidthAttr) : undefined;
-    const opacityAttr = node.getAttribute('opacity');
-    const opacity = opacityAttr ? parseFloat(opacityAttr) : undefined;
-    const strokeDasharray = node.getAttribute('stroke-dasharray') || undefined;
-    const strokeDashoffsetAttr = node.getAttribute('stroke-dashoffset');
+    const opacityAttr = presentationValue(node, 'opacity');
+    const opacityValue = opacityAttr
+      ? (opacityAttr.endsWith('%') ? parseFloat(opacityAttr) / 100 : parseFloat(opacityAttr))
+      : undefined;
+    const opacity = opacityValue === undefined || !Number.isFinite(opacityValue)
+      ? undefined
+      : Math.max(0, Math.min(1, opacityValue));
+    const strokeDasharray = presentationValue(node, 'stroke-dasharray');
+    const strokeDashoffsetAttr = presentationValue(node, 'stroke-dashoffset');
     const strokeDashoffset = strokeDashoffsetAttr ? parseFloat(strokeDashoffsetAttr) : undefined;
 
     // Approximate or compute path length for path drawing
@@ -265,16 +388,27 @@ export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
       }
     });
 
+    const transform = parseTransform(presentationValue(node, 'transform'));
+    const transformOrigin = presentationValue(node, 'transform-origin')?.split(/[\s,]+/);
+    const originValue = (index: number) => {
+      const value = transformOrigin?.[index];
+      if (!value) return 50;
+      if (value.endsWith('%')) return Math.max(0, Math.min(100, parseFloat(value)));
+      return 50;
+    };
     const elementNode: SvgElementNode = {
       id: mcuId,
       originalId,
       tagName: tag as SvgTagName,
       name,
+      className: node.getAttribute('class') || undefined,
+      attributes,
       parentId,
       children,
       isGroup,
       visible: true,
       locked: false,
+      bbox: estimateBounds(tag, attributes, children.map((child) => child.bbox)),
       pathLength,
       initialAppearance: {
         fill,
@@ -285,15 +419,15 @@ export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
         strokeDashoffset: isNaN(strokeDashoffset as number) ? undefined : strokeDashoffset,
       },
       initialTransform: {
-        x: 0,
-        y: 0,
-        rotation: 0,
-        scaleX: 100,
-        scaleY: 100,
-        skewX: 0,
+        x: transform.e,
+        y: transform.f,
+        rotation: Math.atan2(transform.b, transform.a) * 180 / Math.PI,
+        scaleX: Math.hypot(transform.a, transform.b) * 100,
+        scaleY: (transform.a * transform.d - transform.b * transform.c) / (Math.hypot(transform.a, transform.b) || 1) * 100,
+        skewX: Math.atan2(transform.a * transform.c + transform.b * transform.d, transform.a * transform.a + transform.b * transform.b) * 180 / Math.PI,
         skewY: 0,
-        originX: 50,
-        originY: 50,
+        originX: originValue(0),
+        originY: originValue(1),
       },
     };
 

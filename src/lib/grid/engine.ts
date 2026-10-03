@@ -1,4 +1,4 @@
-import { GridConfig, CompositionScores, ReferenceAnalysis } from "./types";
+import { GridConfig, CompositionScores, LayoutGuideZone, ReferenceAnalysis } from "./types";
 
 export const PHI = 1.61803398875;
 
@@ -178,7 +178,7 @@ export function buildGridSvg(
   config: GridConfig,
   width: number,
   height: number,
-  options?: { isExport?: boolean }
+  options?: { isExport?: boolean; layoutGuides?: LayoutGuideZone[] }
 ): string {
   const marginX = (width * config.margin) / 100;
   const marginY = (height * config.margin) / 100;
@@ -350,6 +350,16 @@ export function buildGridSvg(
   const hudText = !options?.isExport
     ? `<text x="${marginX}" y="${Math.max(marginY - 12, 20)}" fill="${primaryColor}" fill-opacity="0.8" font-size="${Math.max(12, Math.round(width / 95))}" font-family="monospace" font-weight="700" letter-spacing="1.5">${config.seed} · ${config.type.toUpperCase()} GRID · ${width}×${height}px</text>`
     : "";
+  const layoutGuides = options?.layoutGuides?.map((zone) => {
+    const color = zone.kind === "visual" ? accentColor : zone.kind === "action" ? "#ffffff" : primaryColor;
+    const x = (width * zone.x) / 100;
+    const y = (height * zone.y) / 100;
+    const zoneWidth = (width * zone.width) / 100;
+    const zoneHeight = (height * zone.height) / 100;
+    const label = escapeXml(zone.label);
+    const fontSize = Math.max(10, Math.round(width / 90));
+    return `<g class="layout-guide"><title>${label}: X ${zone.x}%, Y ${zone.y}%, W ${zone.width}%, H ${zone.height}%</title><rect x="${x}" y="${y}" width="${zoneWidth}" height="${zoneHeight}" rx="4" fill="${color}" fill-opacity="0.06" stroke="${color}" stroke-opacity="0.9" stroke-width="${Math.max(1, width / 900)}" stroke-dasharray="${Math.max(4, width / 135)} ${Math.max(3, width / 180)}"/><text x="${x + Math.max(6, width / 180)}" y="${y + fontSize + 5}" fill="${color}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="700">${label}</text></g>`;
+  }).join("\n") ?? "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block;width:100%;height:100%;aspect-ratio:${width}/${height};shape-rendering:geometricPrecision;text-rendering:geometricPrecision;">
     <defs>
@@ -360,8 +370,21 @@ export function buildGridSvg(
     </defs>
     ${bgFill}
     ${elements.join("\n")}
+    ${layoutGuides}
     ${hudText}
   </svg>`;
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/[<>&"']/g, (character) => {
+    switch (character) {
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case "&": return "&amp;";
+      case "\"": return "&quot;";
+      default: return "&apos;";
+    }
+  });
 }
 
 function totalRowRowGutters(rows: number, gutter: number): number {

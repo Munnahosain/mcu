@@ -52,6 +52,15 @@ export type GridConfig = {
   seed: string;
 };
 
+export type LayoutGuideZone = {
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: "text" | "visual" | "action";
+};
+
 export type CompositionScores = {
   overallScore: number;
   hierarchy: number;

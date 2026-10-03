@@ -16,6 +16,7 @@ import {
   Grid3X3,
   Crown,
   LogOut,
+  ShieldCheck,
   ChevronDown,
   Type,
   Scissors,
@@ -28,12 +29,36 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
-import CreditSummary, { prefetchCreditSummary, CreditBadge } from "@/components/dashboard/CreditSummary";
+import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/CreditSummary";
+import FeaturePageGate from "@/components/dashboard/FeaturePageGate";
+
+const dashboardFeatureGates = [
+  { path: "/dashboard", exact: true, keys: ["ai_tools", "metadata_generation", "prompt_generation"], feature: "AI Generator" },
+  { path: "/dashboard/analytics", keys: ["analysis"], feature: "Market analysis" },
+  { path: "/dashboard/generator", keys: ["ai_tools", "metadata_generation", "prompt_generation"], feature: "AI Generator" },
+  { path: "/dashboard/prompts", keys: ["ai_tools", "prompt_generation"], feature: "Prompt Generator" },
+  { path: "/dashboard/svg-motion", keys: ["ai_tools", "svg_motion"], feature: "SVG Motion AI" },
+  { path: "/dashboard/bg-remover", keys: ["ai_tools", "background_removal"], feature: "Background remover" },
+  { path: "/dashboard/3d-icon-studio", keys: ["three_d_generation"], feature: "3D Studio" },
+  { path: "/dashboard/grid-generator", keys: ["grid_generation"], feature: "Grid Generator" },
+  { path: "/dashboard/palette", keys: ["palette_generation"], feature: "Palette Studio" },
+  { path: "/dashboard/typebox", keys: ["typebox_generation"], feature: "Typebox" },
+  { path: "/dashboard/bento", keys: ["bento_generation"], feature: "Bento Studio" },
+  { path: "/dashboard/ascii", keys: ["ascii_generation"], feature: "ASCII Studio" },
+  { path: "/dashboard/trading", keys: ["trading_generation"], feature: "Trading Studio" },
+  { path: "/dashboard/pattern-maker", keys: ["pattern_maker", "pattern_generation"], feature: "Pattern Maker" },
+  { path: "/dashboard/events", keys: ["ai_tools", "general_ai"], feature: "AI Event Ideas" },
+];
+
+function getDashboardFeatureGate(pathname: string | null) {
+  if (!pathname) return null;
+  return dashboardFeatureGates.find(({ path, exact }) => pathname === path || (!exact && pathname.startsWith(`${path}/`))) || null;
+}
 
 const navLinks = [
-  { name: "Generator", href: "/dashboard/generator", icon: Sparkles },
+  { name: "Metadata", href: "/dashboard/generator", icon: Sparkles },
+  { name: "3D Icon Studio", href: "/dashboard/3d-icon-studio", icon: Box },
   { name: "SVG Motion", href: "/dashboard/svg-motion", icon: Film },
-  { name: "3D Studio", href: "/dashboard/3d-icon-studio", icon: Box },
   { name: "BG Remover", href: "/dashboard/bg-remover", icon: Eraser },
   { name: "Bento", href: "/dashboard/bento", icon: LayoutIcon },
   { name: "Grid", href: "/dashboard/grid-generator", icon: Grid3X3 },
@@ -59,6 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [canAccessAdmin, setCanAccessAdmin] = useState(false);
   const [activePlan, setActivePlan] = useState<{ name: string; slug: string } | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -84,7 +110,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUser(null);
       } else {
         setUser(storedUser);
-        const billingResponse = await fetch('/api/account/billing', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+        const [billingResponse, adminResponse] = await Promise.all([
+          fetch('/api/account/billing', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+          fetch('/api/admin/overview', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        ]);
+        if (adminResponse?.ok) setCanAccessAdmin(true);
         if (billingResponse?.ok) {
           const billingData = await billingResponse.json().catch(() => null) as { plan?: { name?: string; slug?: string } } | null;
           if (billingData?.plan?.name && billingData.plan.slug) setActivePlan({ name: billingData.plan.name, slug: billingData.plan.slug });
@@ -155,6 +185,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : { label: (activePlan?.name || 'PRO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${activePlan?.slug || 'pro'}` };
 
   const isSvgMotion = pathname?.startsWith('/dashboard/svg-motion');
+  const currentFeatureGate = getDashboardFeatureGate(pathname);
 
   return (
     <GeneratorStateProvider>
@@ -178,7 +209,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </Link>
 
         <div ref={mobileProfileRef} className="fixed right-3 top-3 z-[60] lg:hidden flex items-center gap-2">
-          <CreditBadge />
           <button type="button" onClick={() => setIsProfileOpen((current) => !current)} className="relative flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-background/90 p-1 shadow-lg backdrop-blur-xl" aria-label="Open account menu">
             <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#27e39a] text-xs font-extrabold text-[#071b17]">
               {userInitials}
@@ -198,7 +228,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {isProfileOpen ? <motion.div initial={{ opacity: 0, y: -6, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.96 }} className="absolute right-0 mt-2 w-64 rounded-2xl border border-foreground/10 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl">
               <div className="flex items-center gap-3 border-b border-foreground/[0.08] px-1.5 pb-3"><span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary to-[#27e39a] text-xs font-extrabold text-[#071b17]">{userInitials}{user.avatarUrl ? <img src={user.avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}</span><div className="min-w-0"><p className="truncate text-xs font-extrabold">{user.name || "mcu"}</p><p className="truncate text-[10px] text-foreground/60">{user.email}</p></div></div>
               <CreditSummary compact />
-              <div className="space-y-1"><Link href="/pricing" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><Crown className="h-3.5 w-3.5 text-primary" /> Pricing &amp; Plans</Link><Link href="/support" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><LifeBuoy className="h-3.5 w-3.5 text-primary" /> Support</Link><Link href="/dashboard/billing" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><CreditCard className="h-3.5 w-3.5 text-primary" /> Billing &amp; Usage</Link></div>
+              <div className="space-y-1"><Link href="/pricing" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><Crown className="h-3.5 w-3.5 text-primary" /> Pricing &amp; Plans</Link><Link href="/support" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><LifeBuoy className="h-3.5 w-3.5 text-primary" /> Support</Link><Link href="/dashboard/billing" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><CreditCard className="h-3.5 w-3.5 text-primary" /> Billing &amp; Usage</Link>{canAccessAdmin ? <Link href="/admin" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-foreground/80 hover:bg-primary/10"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Admin Panel</Link> : null}</div>
               <div className="mt-2 border-t border-foreground/[0.08] pt-2"><button type="button" onClick={handleSignOut} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-500 hover:bg-red-500/10"><LogOut className="h-3.5 w-3.5" /> Sign Out</button></div>
             </motion.div> : null}
           </AnimatePresence>
@@ -297,8 +327,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Right: Theme Toggle, Profile Pill (2 Short Letters), Sign Out (Snugly attached) */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <CreditBadge />
-
               {/* Theme Toggle */}
               <div className="hidden sm:flex items-center justify-center">
                 <ThemeToggle iconOnly />
@@ -396,6 +424,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             <CreditCard className="h-3.5 w-3.5 text-primary" /> Billing &amp; Usage
                           </span>
                         </Link>
+                        {canAccessAdmin ? (
+                          <Link
+                            href="/admin"
+                            onClick={() => setIsProfileOpen(false)}
+                            className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground/80 hover:bg-primary/10 hover:text-primary transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Admin Panel
+                            </span>
+                          </Link>
+                        ) : null}
                         <div className="sm:hidden px-2.5 py-1.5 flex items-center justify-between">
                           <span className="text-xs font-bold text-foreground/80">Theme</span>
                           <ThemeToggle />
@@ -503,7 +542,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               transition={{ duration: 0.18, ease: "easeOut" }}
               className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "w-full"}
             >
-              {children}
+              {currentFeatureGate ? (
+                <FeaturePageGate
+                  feature={currentFeatureGate.feature}
+                  keys={currentFeatureGate.keys}
+                >
+                  {children}
+                </FeaturePageGate>
+              ) : children}
             </motion.div>
           </div>
         </main>

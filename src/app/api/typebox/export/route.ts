@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
+import { getAuthenticatedUserId } from "@/server/auth/request-auth";
+import { getFeatureFlagDenial } from "@/server/services/feature-flag-service";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { svgContent, format = "png", scale = 1, width, height } = body;
+
+    if (Number(scale) > 1) {
+      const userId = await getAuthenticatedUserId(req);
+      if (!userId) return NextResponse.json({ error: "Sign in to use high-resolution export." }, { status: 401 });
+      const featureDenial = await getFeatureFlagDenial(userId, "export_high_res", "High-resolution export");
+      if (featureDenial) return NextResponse.json({ error: featureDenial }, { status: 403 });
+    }
 
     if (!svgContent) {
       return NextResponse.json({ error: "Missing SVG content" }, { status: 400 });

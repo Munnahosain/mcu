@@ -14,7 +14,6 @@ import {
   Undo2,
   Redo2,
   Sparkles,
-  UserCheck,
   Grid,
   Maximize2,
   Minimize2,
@@ -34,13 +33,10 @@ interface TopBarProps {
   onTogglePlay: () => void;
   onRewind: () => void;
   onOpenSvgFile: (file: File) => void;
-  onLoadDemo: () => void;
   onNewProject: () => void;
   onSaveProject: () => void;
   onLoadProjectFile: (file: File) => void;
   onOpenExportModal: () => void;
-  onToggleCharacterMode: () => void;
-  isCharacterModeOpen: boolean;
   onToggleAiAssistant: () => void;
   isAiAssistantOpen: boolean;
   onToggleShortcuts: () => void;
@@ -67,13 +63,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   onTogglePlay,
   onRewind,
   onOpenSvgFile,
-  onLoadDemo,
   onNewProject,
   onSaveProject,
   onLoadProjectFile,
   onOpenExportModal,
-  onToggleCharacterMode,
-  isCharacterModeOpen,
   onToggleAiAssistant,
   isAiAssistantOpen,
   onToggleShortcuts,
@@ -110,7 +103,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   return (
-    <header className="h-14 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-3 sm:px-4 flex items-center justify-between select-none z-30 shrink-0 backdrop-blur-xl transition-colors">
+    <header className="svg-motion-topbar h-14 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-3 sm:px-4 flex items-center justify-between select-none z-30 shrink-0 backdrop-blur-xl transition-colors">
       <input
         type="file"
         ref={svgFileInputRef}
@@ -168,16 +161,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <Upload className="h-3.5 w-3.5 text-primary" />
             <span className="hidden md:inline">Open SVG</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onLoadDemo}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30 transition-all"
-            title="Load animated mascot character demo"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span>Try Demo</span>
           </button>
 
           <button
@@ -271,21 +254,6 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right: Studio Modes, View Toggles & Export */}
       <div className="flex items-center gap-1.5 sm:gap-2">
-        {/* Character Mode Toggle */}
-        <button
-          type="button"
-          onClick={onToggleCharacterMode}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-            isCharacterModeOpen
-              ? 'bg-primary/20 text-primary border-primary shadow-sm shadow-primary/20'
-              : 'text-[var(--text-secondary)] hover:text-foreground bg-[var(--input-bg)] hover:bg-[var(--hover-bg)] border-[var(--card-border)]'
-          }`}
-          title="Toggle Character Mode & Semantic Body Rigging"
-        >
-          <UserCheck className="h-3.5 w-3.5 text-primary" />
-          <span className="hidden md:inline">Character Mode</span>
-        </button>
-
         {/* AI Assistant Toggle */}
         <button
           type="button"

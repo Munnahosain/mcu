@@ -73,9 +73,10 @@ interface TimelineProps {
   onUpdateFps: (fps: number) => void;
   onToggleLoop: () => void;
   onSelectKeyframe: (keyframeId: string | null) => void;
+  onSelectKeyframes: (keyframeIds: string[], primaryKeyframeId: string | null) => void;
   onAddKeyframeAtPlayhead: (elementId: string, property: AnimProperty) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
-  onDeleteKeyframe: (keyframeId: string) => void;
+  onDeleteKeyframes: (keyframeIds: string[]) => void;
   onDuplicateKeyframe: (keyframeId: string) => void;
   onUpdateKeyframeEasing: (keyframeId: string, easing: EasingType) => void;
   selectedElementId: string | null;
@@ -93,9 +94,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   onUpdateFps,
   onToggleLoop,
   onSelectKeyframe,
+  onSelectKeyframes,
   onAddKeyframeAtPlayhead,
   onMoveKeyframe,
-  onDeleteKeyframe,
+  onDeleteKeyframes,
   onDuplicateKeyframe,
   onUpdateKeyframeEasing,
   selectedElementId,
@@ -119,6 +121,11 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Keyframe dragging
   const [draggingKfId, setDraggingKfId] = useState<string | null>(null);
+  const selectionAnchorRef = useRef<string | null>(null);
+  const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const marqueeMovedRef = useRef(false);
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeRect, setMarqueeRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
   // Context menu for keyframe
   const [contextKf, setContextKf] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -206,6 +213,38 @@ export const Timeline: React.FC<TimelineProps> = ({
           });
         }
       }
+
+      if (isMarqueeSelecting && selectionStartRef.current && lanesContainerRef.current) {
+        const start = selectionStartRef.current;
+        const deltaX = e.clientX - start.x;
+        const deltaY = e.clientY - start.y;
+        if (Math.abs(deltaX) + Math.abs(deltaY) >= 4) {
+          marqueeMovedRef.current = true;
+          const container = lanesContainerRef.current;
+          const containerRect = container.getBoundingClientRect();
+          const left = Math.min(start.x, e.clientX);
+          const top = Math.min(start.y, e.clientY);
+          const right = Math.max(start.x, e.clientX);
+          const bottom = Math.max(start.y, e.clientY);
+
+          setMarqueeRect({
+            left: left - containerRect.left + container.scrollLeft,
+            top: top - containerRect.top + container.scrollTop,
+            width: right - left,
+            height: bottom - top,
+          });
+
+          const selectedIds = Array.from(container.querySelectorAll<HTMLElement>('[data-keyframe-id]'))
+            .filter((element) => {
+              const rect = element.getBoundingClientRect();
+              return rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
+            })
+            .map((element) => element.dataset.keyframeId!)
+            .filter(Boolean);
+
+          onSelectKeyframes(selectedIds, selectedIds.at(-1) ?? null);
+        }
+      }
     };
 
     const handleMouseUp = () => {
@@ -219,9 +258,12 @@ export const Timeline: React.FC<TimelineProps> = ({
       }
       setIsScrubbing(false);
       setDraggingKfId(null);
+      selectionStartRef.current = null;
+      setIsMarqueeSelecting(false);
+      setMarqueeRect(null);
     };
 
-    if (isScrubbing || draggingKfId) {
+    if (isScrubbing || draggingKfId || isMarqueeSelecting) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
@@ -231,7 +273,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isScrubbing, draggingKfId, clientXToTime, onSeek, onMoveKeyframe, pixelsPerSec]);
+  }, [isScrubbing, draggingKfId, isMarqueeSelecting, clientXToTime, onSeek, onMoveKeyframe, onSelectKeyframes, pixelsPerSec]);
 
   // Synchronize ruler and tracks horizontal scroll
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -274,7 +316,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, [currentTime, onRegisterPlaybackRenderer, renderPlaybackAtTime]);
 
   return (
-    <footer className="h-60 min-h-[12rem] max-h-72 border-t border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col select-none shrink-0 z-20 text-foreground transition-colors">
+    <footer className="svg-motion-timeline h-60 min-h-[12rem] max-h-72 border-t border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col select-none shrink-0 z-20 text-foreground transition-colors">
       {/* 1. TIMELINE TOP CONTROLS BAR */}
       <div className="h-10 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-3 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
         {/* Left: Transport Controls & Keyframe Nav */}
@@ -377,6 +419,18 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           <div className="h-4 w-[1px] bg-[var(--card-border)] mx-1" />
+
+          {(project.selectedKeyframeIds?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => onDeleteKeyframes(project.selectedKeyframeIds || [])}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+              title={`Delete ${project.selectedKeyframeIds?.length} selected keyframes (Del)`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="text-[10px]">{project.selectedKeyframeIds?.length}</span>
+            </button>
+          )}
 
           {/* Time & Frame Counter */}
           <div className="font-mono text-xs text-foreground flex items-center gap-1.5 bg-[var(--input-bg)] px-2.5 py-1 rounded-xl border border-[var(--card-border)]">
@@ -575,11 +629,36 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div
             ref={lanesContainerRef}
             onScroll={handleScroll}
+            onMouseDown={(event) => {
+              if (event.button !== 0 || (event.target as HTMLElement).closest('[data-keyframe-id]')) return;
+              selectionStartRef.current = { x: event.clientX, y: event.clientY };
+              marqueeMovedRef.current = false;
+              setMarqueeRect(null);
+              setIsMarqueeSelecting(true);
+              onSelectKeyframes([], null);
+            }}
             onClick={() => {
-              if (project.selectedKeyframeId) onSelectKeyframe(null);
+              if (marqueeMovedRef.current) {
+                marqueeMovedRef.current = false;
+                return;
+              }
+              if (project.selectedKeyframeId || project.selectedKeyframeIds?.length) {
+                onSelectKeyframe(null);
+              }
             }}
             className="flex-1 overflow-auto no-scrollbar relative bg-[var(--main-bg)]"
           >
+            {marqueeRect && (
+              <div
+                className="absolute z-30 pointer-events-none border border-primary bg-primary/15"
+                style={{
+                  left: `${marqueeRect.left}px`,
+                  top: `${marqueeRect.top}px`,
+                  width: `${marqueeRect.width}px`,
+                  height: `${marqueeRect.height}px`,
+                }}
+              />
+            )}
             <div style={{ width: `${timelineWidth}px` }} className="relative min-h-full py-1">
               {/* Playhead vertical red line extending through all tracks */}
               <div
@@ -613,17 +692,56 @@ export const Timeline: React.FC<TimelineProps> = ({
                           className="h-6 relative border-b border-[var(--card-border)]/15 hover:bg-[var(--hover-bg)]"
                         >
                           {track.keyframes.map((kf) => {
-                            const isSelected = project.selectedKeyframeId === kf.id;
+                            const selectedKeyframeIds = project.selectedKeyframeIds ??
+                              (project.selectedKeyframeId ? [project.selectedKeyframeId] : []);
+                            const isSelected = selectedKeyframeIds.includes(kf.id);
                             const badge = getEasingBadge(kf.easing);
                             return (
                               <div
                                 key={kf.id}
+                                data-keyframe-id={kf.id}
                                 style={{ left: `${kf.time * pixelsPerSec}px` }}
                                 onMouseDown={(e) => {
                                   e.stopPropagation();
-                                  onSelectKeyframe(kf.id);
+                                  if (e.button === 2) return;
+                                  const isMultiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+                                  if (isMultiSelect) {
+                                    const allKeyframes = project.tracks
+                                      .flatMap((item) => item.keyframes)
+                                      .sort((a, b) => a.time - b.time);
+                                    const anchorId = selectionAnchorRef.current ?? project.selectedKeyframeId;
+                                    let nextIds: string[];
+
+                                    if (e.shiftKey && anchorId) {
+                                      const anchorIndex = allKeyframes.findIndex((item) => item.id === anchorId);
+                                      const targetIndex = allKeyframes.findIndex((item) => item.id === kf.id);
+                                      if (anchorIndex >= 0 && targetIndex >= 0) {
+                                        const start = Math.min(anchorIndex, targetIndex);
+                                        const end = Math.max(anchorIndex, targetIndex);
+                                        nextIds = allKeyframes.slice(start, end + 1).map((item) => item.id);
+                                      } else {
+                                        nextIds = [kf.id];
+                                      }
+                                    } else {
+                                      const selected = project.selectedKeyframeIds ??
+                                        (project.selectedKeyframeId ? [project.selectedKeyframeId] : []);
+                                      nextIds = selected.includes(kf.id)
+                                        ? selected.filter((id) => id !== kf.id)
+                                        : [...selected, kf.id];
+                                    }
+
+                                    selectionAnchorRef.current = kf.id;
+                                    const primaryId = nextIds.includes(kf.id) ? kf.id : nextIds.at(-1) ?? null;
+                                    onSelectKeyframes(nextIds, primaryId);
+                                    setDraggingKfId(null);
+                                    return;
+                                  }
+
+                                  selectionAnchorRef.current = kf.id;
+                                  onSelectKeyframes([kf.id], kf.id);
                                   setDraggingKfId(kf.id);
                                 }}
+                                onClick={(e) => e.stopPropagation()}
                                 onContextMenu={(e) => {
                                   e.preventDefault();
                                   setContextKf({ id: kf.id, x: e.clientX, y: e.clientY });
@@ -633,7 +751,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                     ? 'bg-amber-400 border border-white shadow-md shadow-amber-400/50'
                                     : 'bg-primary hover:brightness-110 border border-emerald-300 dark:border-emerald-600 shadow-sm'
                                 }`}
-                                title={`Time: ${Math.round(kf.time * 100) / 100}s | Value: ${kf.value} | Easing: ${kf.easing}`}
+                                title={`Time: ${Math.round(kf.time * 100) / 100}s | Value: ${kf.value} | Easing: ${kf.easing} | Ctrl/Cmd-click to add, Shift-click for range`}
                               >
                                 <span className="-rotate-45 text-[7px] font-black text-[#071b17] pointer-events-none">
                                   {badge}
@@ -673,12 +791,13 @@ export const Timeline: React.FC<TimelineProps> = ({
           <button
             type="button"
             onClick={() => {
-              onDeleteKeyframe(contextKf.id);
+              const selectedIds = project.selectedKeyframeIds ?? [];
+              onDeleteKeyframes(selectedIds.includes(contextKf.id) ? selectedIds : [contextKf.id]);
               setContextKf(null);
             }}
             className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-red-500 hover:bg-red-500/10 transition-colors font-medium"
           >
-            <Trash2 className="h-3.5 w-3.5" /> Delete (Del)
+            <Trash2 className="h-3.5 w-3.5" /> Delete selected (Del)
           </button>
           <div className="border-t border-[var(--card-border)] pt-1">
             <span className="px-2 text-[9px] text-[var(--text-muted)] font-bold block mb-0.5">

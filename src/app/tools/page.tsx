@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
+  Box,
   FileEdit,
   FileSpreadsheet,
   Image as ImageIcon,
@@ -22,20 +23,28 @@ export const metadata: Metadata = {
 
 const tools = [
   {
-    icon: <Film className="h-8 w-8 text-primary" />,
-    title: "MCU SVG Motion Studio",
-    description:
-      "Browser-based vector animation suite. Upload SVGs, detect layers, rig semantic characters, and animate with timeline keyframes.",
-    isNew: true,
-    href: "/svg-motion-studio",
-  },
-  {
     icon: <ImageIcon className="h-8 w-8 text-primary" />,
     title: "AI Metadata Engine",
     description:
       "Generate SEO-optimized titles, descriptions, and exactly 49 keywords tailored for major stock agencies.",
     isNew: false,
     href: "/dashboard/generator",
+  },
+  {
+    icon: <Box className="h-8 w-8 text-primary" />,
+    title: "3D Icon Studio",
+    description:
+      "Turn SVGs into polished 3D icons with customizable materials, bevels, lighting, and export options.",
+    isNew: true,
+    href: "/dashboard/3d-icon-studio",
+  },
+  {
+    icon: <Film className="h-8 w-8 text-primary" />,
+    title: "MCU SVG Motion Studio",
+    description:
+      "Browser-based vector animation suite. Upload SVGs, detect layers, rig semantic characters, and animate with timeline keyframes.",
+    isNew: true,
+    href: "/svg-motion-studio",
   },
   {
     icon: <Sparkles className="h-8 w-8 text-primary" />,

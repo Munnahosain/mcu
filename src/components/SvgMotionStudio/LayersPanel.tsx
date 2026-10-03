@@ -11,7 +11,6 @@ import {
   FolderOpen,
   ChevronRight,
   ChevronDown,
-  Sparkles,
   Layers,
   ArrowUp,
   ArrowDown,
@@ -21,12 +20,9 @@ import {
   Circle,
   Type,
   Image as ImageIcon,
-  Check,
   Edit2,
-  MoreVertical,
 } from 'lucide-react';
-import { SvgElementNode, SvgTagName, CharacterSlot, AnimationTrack } from './types';
-import { CHARACTER_SLOT_LABELS } from './constants';
+import { SvgElementNode, SvgTagName, AnimationTrack } from './types';
 
 interface LayersPanelProps {
   elements: SvgElementNode[];
@@ -36,8 +32,6 @@ interface LayersPanelProps {
   onToggleLock: (id: string) => void;
   onRenameElement: (id: string, newName: string) => void;
   onMoveElement: (id: string, direction: 'up' | 'down') => void;
-  characterSlots: Partial<Record<CharacterSlot, string>>;
-  onAssignSlot: (slot: CharacterSlot, elementId: string | null) => void;
   tracks: AnimationTrack[];
   isSingleFlattenedPath: boolean;
 }
@@ -75,19 +69,11 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   onToggleLock,
   onRenameElement,
   onMoveElement,
-  characterSlots,
-  onAssignSlot,
   tracks,
   isSingleFlattenedPath,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    'character-root': true,
-    'character': true,
-    'head': true,
-    'body': true,
-    'face': true,
-  });
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
 
@@ -109,14 +95,6 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
     setEditingId(null);
   };
 
-  // Find assigned slot for element if any
-  const getSlotForElement = (elId: string): CharacterSlot | null => {
-    for (const [slot, id] of Object.entries(characterSlots)) {
-      if (id === elId) return slot as CharacterSlot;
-    }
-    return null;
-  };
-
   // Check if element has animated tracks
   const hasAnimation = (elId: string): boolean => {
     return tracks.some((t) => t.elementId === elId && t.keyframes && t.keyframes.length > 0);
@@ -126,7 +104,6 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
     const isSelected = selectedElementId === node.id;
     const isExpanded = expandedGroups[node.id] ?? true;
     const hasChildren = node.children && node.children.length > 0;
-    const assignedSlot = getSlotForElement(node.id);
     const animated = hasAnimation(node.id);
 
     // Search filter
@@ -191,16 +168,6 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
                 title={`${node.name} (<${node.tagName}>)`}
               >
                 {node.name}
-              </span>
-            )}
-
-            {/* Character Slot Badge */}
-            {assignedSlot && (
-              <span
-                className="ml-1 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 shrink-0"
-                title={`Rigged as ${CHARACTER_SLOT_LABELS[assignedSlot]?.label}`}
-              >
-                {CHARACTER_SLOT_LABELS[assignedSlot]?.label.split(' ')[0]}
               </span>
             )}
 
@@ -292,7 +259,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   };
 
   return (
-    <aside className="w-64 border-r border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col h-full select-none z-10 shrink-0 text-foreground transition-colors">
+    <aside className="svg-motion-layers-panel w-64 border-r border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col h-full select-none z-10 shrink-0 text-foreground transition-colors">
       {/* Header */}
       <div className="p-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between">
         <div className="flex items-center gap-1.5">
@@ -340,9 +307,8 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
                 Single Vector Object
               </p>
               <p className="text-[10px] leading-relaxed opacity-90">
-                This artwork is a single flattened path. It cannot be automatically separated into
-                semantic parts (head, hand, eye, etc.). You can still animate its position, scale,
-                rotation, or use the <strong>Draw Path</strong> reveal preset!
+                This artwork is a single path, so it moves as one object. You can still animate its
+                position, scale, rotation, or use the <strong>Draw Path</strong> reveal preset.
               </p>
             </div>
           </div>
@@ -355,7 +321,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
           <div className="p-6 text-center text-[var(--text-muted)] text-xs flex flex-col items-center gap-2">
             <Layers className="h-8 w-8 text-[var(--text-muted)] opacity-50 stroke-[1.5]" />
             <p className="font-semibold">No layers detected</p>
-            <p className="text-[10px]">Upload an SVG or click Try Demo to begin.</p>
+            <p className="text-[10px]">Upload an SVG to begin.</p>
           </div>
         ) : (
           elements.map((el) => renderNode(el, 0))

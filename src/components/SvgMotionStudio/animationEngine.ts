@@ -3,6 +3,11 @@ import { AnimationTrack, Keyframe, AnimProperty, EasingType } from './types';
 const sortedKeyframesCache = new WeakMap<AnimationTrack, { length: number; keyframes: Keyframe[] }>();
 const tracksByElementCache = new WeakMap<AnimationTrack[], Map<string, AnimationTrack[]>>();
 
+function finiteNumber(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
 function getSortedKeyframes(track: AnimationTrack): Keyframe[] {
   const cached = sortedKeyframesCache.get(track);
   if (cached && cached.length === track.keyframes.length) return cached.keyframes;
@@ -187,16 +192,29 @@ export function computeElementStylesAtTime(
     return interpolateTrackValue(track, time, fallback);
   };
 
-  const x = Number(getProp('x', initialTransform?.x ?? 0));
-  const y = Number(getProp('y', initialTransform?.y ?? 0));
-  const rotation = Number(getProp('rotation', initialTransform?.rotation ?? 0));
-  const scaleX = Number(getProp('scaleX', initialTransform?.scaleX ?? 100));
-  const scaleY = Number(getProp('scaleY', initialTransform?.scaleY ?? 100));
-  const skewX = Number(getProp('skewX', initialTransform?.skewX ?? 0));
-  const skewY = Number(getProp('skewY', initialTransform?.skewY ?? 0));
-  const opacity = Number(getProp('opacity', (initialAppearance?.opacity !== undefined ? initialAppearance.opacity * 100 : 100)));
-  const originX = Number(getProp('originX', initialTransform?.originX ?? 50));
-  const originY = Number(getProp('originY', initialTransform?.originY ?? 50));
+  const defaultX = finiteNumber(initialTransform?.x, 0);
+  const defaultY = finiteNumber(initialTransform?.y, 0);
+  const defaultRotation = finiteNumber(initialTransform?.rotation, 0);
+  const defaultScaleX = finiteNumber(initialTransform?.scaleX, 100);
+  const defaultScaleY = finiteNumber(initialTransform?.scaleY, 100);
+  const defaultSkewX = finiteNumber(initialTransform?.skewX, 0);
+  const defaultSkewY = finiteNumber(initialTransform?.skewY, 0);
+  const defaultOpacity = finiteNumber(
+    initialAppearance?.opacity === undefined ? 100 : initialAppearance.opacity * 100,
+    100
+  );
+  const defaultOriginX = finiteNumber(initialTransform?.originX, 50);
+  const defaultOriginY = finiteNumber(initialTransform?.originY, 50);
+  const x = finiteNumber(getProp('x', defaultX), defaultX);
+  const y = finiteNumber(getProp('y', defaultY), defaultY);
+  const rotation = finiteNumber(getProp('rotation', defaultRotation), defaultRotation);
+  const scaleX = finiteNumber(getProp('scaleX', defaultScaleX), defaultScaleX);
+  const scaleY = finiteNumber(getProp('scaleY', defaultScaleY), defaultScaleY);
+  const skewX = finiteNumber(getProp('skewX', defaultSkewX), defaultSkewX);
+  const skewY = finiteNumber(getProp('skewY', defaultSkewY), defaultSkewY);
+  const opacity = finiteNumber(getProp('opacity', defaultOpacity), defaultOpacity);
+  const originX = finiteNumber(getProp('originX', defaultOriginX), defaultOriginX);
+  const originY = finiteNumber(getProp('originY', defaultOriginY), defaultOriginY);
 
   const strokeDashoffsetTrack = elementTracks.find((t) => t.property === 'strokeDashoffset');
   const strokeDashoffset = strokeDashoffsetTrack

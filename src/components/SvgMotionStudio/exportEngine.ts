@@ -1,14 +1,23 @@
 import JSZip from 'jszip';
-import { ProjectState, AnimationTrack, Keyframe, SvgElementNode } from './types';
-import { flattenElementTree } from './svgParser';
+import { ProjectState, AnimationTrack } from './types';
 import { computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
+
+export interface RecordedVideo {
+  blob: Blob;
+  format: 'mp4' | 'webm';
+}
+
+let ffmpegInstance: FFmpeg | null = null;
+let ffmpegLoadPromise: Promise<FFmpeg> | null = null;
 
 /**
  * 1. Generate Standalone Animated SVG with embedded CSS Keyframes
  */
 export function generateAnimatedSvg(project: ProjectState): string {
   const { svgRaw, tracks, document: docSettings } = project;
-  const { duration, loop, viewBox } = docSettings;
+  const { duration, loop } = docSettings;
 
   if (typeof window === 'undefined') return svgRaw;
 
@@ -209,12 +218,13 @@ export async function exportPngSequenceZip(
 /**
  * 5. Record Video to WebM using HTML5 Canvas & MediaRecorder
  */
-export async function recordWebmVideo(
+export async function recordCanvasVideo(
   project: ProjectState,
   fps: number = 30,
   scale: number = 1,
-  onProgress?: (percent: number) => void
-): Promise<Blob> {
+  onProgress?: (percent: number) => void,
+  preferMp4 = false
+): Promise<RecordedVideo> {
   const { svgRaw, tracks, document: docSettings } = project;
   const duration = docSettings.duration;
   const totalFrames = Math.max(1, Math.round(duration * fps));
@@ -226,43 +236,132 @@ export async function recordWebmVideo(
   canvas.width = width;
   canvas.height = height;
 
-  const stream = canvas.captureStream(fps);
-  const chunks: Blob[] = [];
-
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : MediaRecorder.isTypeSupported('video/webm')
-    ? 'video/webm'
-    : '';
-
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-
-  recorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) {
-      chunks.push(e.data);
-    }
-  };
-
-  recorder.start();
-
-  for (let frame = 0; frame < totalFrames; frame++) {
-    const time = (frame / fps);
-    await renderSvgFrameToCanvas(svgRaw, tracks, time, canvas, width, height);
-    if (onProgress) {
-      onProgress(Math.round(((frame + 1) / totalFrames) * 100));
-    }
-    // Small yield to allow MediaRecorder to process canvas frame
-    await new Promise((r) => setTimeout(r, 1000 / fps));
+  if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+    throw new Error('Video export is not supported by this browser. Try a current version of Chrome, Edge, or Safari.');
   }
 
-  recorder.stop();
+  const stream = canvas.captureStream(0);
+  const videoTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined;
+  if (!videoTrack?.requestFrame) {
+    stream.getTracks().forEach((track) => track.stop());
+    throw new Error('Frame-accurate video capture is not supported by this browser.');
+  }
 
-  return new Promise((resolve) => {
-    recorder.onstop = () => {
-      const videoBlob = new Blob(chunks, { type: 'video/webm' });
-      resolve(videoBlob);
+  const candidateMimeTypes = preferMp4
+    ? [
+        'video/mp4;codecs=avc1.640028,mp4a.40.2',
+        'video/mp4;codecs=avc1.4d4028',
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+      ]
+    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mimeType = candidateMimeTypes.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+  const videoFormat: RecordedVideo['format'] = mimeType?.startsWith('video/mp4') ? 'mp4' : 'webm';
+  const chunks: Blob[] = [];
+  let recorder: MediaRecorder | null = null;
+
+  try {
+    recorder = new MediaRecorder(stream, {
+      ...(mimeType ? { mimeType } : {}),
+      videoBitsPerSecond: Math.min(40_000_000, Math.max(5_000_000, width * height * fps * 0.09)),
+    });
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
     };
-  });
+    const stopped = new Promise<Blob>((resolve, reject) => {
+      recorder!.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType || recorder!.mimeType || 'video/webm' });
+        if (blob.size === 0) reject(new Error('Video export produced an empty file.'));
+        else resolve(blob);
+      };
+      recorder!.onerror = () => reject(new Error('Video recording failed. Try a lower resolution or WebM.'));
+    });
+    recorder.start(100);
+
+    for (let frame = 0; frame < totalFrames; frame += 1) {
+      if (document.visibilityState !== 'visible') {
+        throw new Error('Keep the export tab visible until MP4 rendering finishes.');
+      }
+      await renderSvgFrameToCanvas(svgRaw, tracks, frame / fps, canvas, width, height);
+      videoTrack.requestFrame();
+      onProgress?.(Math.round(((frame + 1) / totalFrames) * 100));
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => window.setTimeout(resolve, Math.max(0, Math.round(1000 / fps) - 16)));
+      });
+    }
+
+    if (recorder.state === 'recording') {
+      recorder.requestData();
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      recorder.stop();
+    }
+    return { blob: await stopped, format: videoFormat };
+  } finally {
+    if (recorder?.state === 'recording') recorder.stop();
+    stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
+async function loadFfmpeg(): Promise<FFmpeg> {
+  if (!ffmpegLoadPromise) {
+    ffmpegLoadPromise = (async () => {
+      const ffmpeg = new FFmpeg();
+      const coreUrl = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${coreUrl}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${coreUrl}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+      ffmpegInstance = ffmpeg;
+      return ffmpeg;
+    })().catch((error) => {
+      ffmpegLoadPromise = null;
+      throw error;
+    });
+  }
+  return ffmpegInstance ?? ffmpegLoadPromise;
+}
+
+export async function convertVideoToMp4(
+  webm: Blob,
+  fps: number,
+  onProgress?: (percent: number) => void
+): Promise<Blob> {
+  const ffmpeg = await loadFfmpeg();
+  await ffmpeg.deleteFile('input.webm').catch(() => undefined);
+  await ffmpeg.deleteFile('output.mp4').catch(() => undefined);
+  await ffmpeg.writeFile('input.webm', await fetchFile(webm));
+  const reportProgress = ({ progress }: { progress: number }) => {
+    onProgress?.(Math.max(0, Math.min(100, Math.round(progress * 100))));
+  };
+  ffmpeg.on('progress', reportProgress);
+  try {
+    await ffmpeg.exec([
+      '-i', 'input.webm',
+      '-an',
+      '-c:v', 'libx264',
+      '-preset', 'medium',
+      '-profile:v', 'high',
+      '-r', String(fps),
+      '-crf', '18',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      'output.mp4',
+    ]);
+    const output = await ffmpeg.readFile('output.mp4');
+    if (typeof output === 'string') throw new Error('FFmpeg returned invalid MP4 data.');
+    const bytes = new Uint8Array(output);
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return new Blob([buffer], { type: 'video/mp4' });
+  } finally {
+    ffmpeg.off('progress', reportProgress);
+    await ffmpeg.deleteFile('input.webm').catch(() => undefined);
+    await ffmpeg.deleteFile('output.mp4').catch(() => undefined);
+  }
 }
 
 /**

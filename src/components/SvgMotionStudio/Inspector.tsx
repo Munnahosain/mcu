@@ -34,9 +34,8 @@ import {
   AnimProperty,
   EasingType,
   Keyframe,
-  CharacterSlot,
 } from './types';
-import { CHARACTER_SLOT_LABELS, EASING_OPTIONS } from './constants';
+import { EASING_OPTIONS } from './constants';
 import { computeElementStylesAtTime } from './animationEngine';
 import { ANIMATION_PRESETS } from './presets';
 import { findElementById } from './svgParser';
@@ -57,8 +56,6 @@ interface InspectorProps {
   onUpdateKeyframe: (keyframeId: string, updates: Partial<Keyframe>) => void;
   onDeleteKeyframe: (keyframeId: string) => void;
   onDuplicateKeyframe: (keyframeId: string) => void;
-  characterSlots: Partial<Record<CharacterSlot, string>>;
-  onAssignSlot: (slot: CharacterSlot, elementId: string | null) => void;
   onRenameElement: (elementId: string, newName: string) => void;
   autoKeyframe: boolean;
   onToggleAutoKeyframe: () => void;
@@ -78,8 +75,6 @@ export const Inspector: React.FC<InspectorProps> = ({
   onUpdateKeyframe,
   onDeleteKeyframe,
   onDuplicateKeyframe,
-  characterSlots,
-  onAssignSlot,
   onRenameElement,
   autoKeyframe,
   onToggleAutoKeyframe,
@@ -151,15 +146,10 @@ export const Inspector: React.FC<InspectorProps> = ({
     }
   }
 
-  // Find assigned slot for selected element
-  const currentAssignedSlot = selectedElementId
-    ? (Object.entries(characterSlots).find(([_, id]) => id === selectedElementId)?.[0] as CharacterSlot | undefined)
-    : undefined;
-
   // Render Document Inspector when no element is selected
   if (!selectedNode || !currentStyles) {
     return (
-      <aside className="w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
+      <aside className="svg-motion-inspector w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
         <div className="p-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-4 w-4 text-primary" />
@@ -297,7 +287,7 @@ export const Inspector: React.FC<InspectorProps> = ({
 
   // Render Element Inspector when an object is selected
   return (
-    <aside className="w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
+    <aside className="svg-motion-inspector w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
       {/* Element Header */}
       <div className="p-2.5 border-b border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -849,42 +839,7 @@ export const Inspector: React.FC<InspectorProps> = ({
         )}
 
         {/* ============================================================== */}
-        {/* 4. CHARACTER SLOT BINDING (Optional)                           */}
-        {/* ============================================================== */}
-        <div className="space-y-1.5 bg-[var(--input-bg)] p-2.5 rounded-2xl border border-[var(--card-border)]">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-primary uppercase tracking-wide">
-              Character Slot
-            </span>
-            {currentAssignedSlot && (
-              <button
-                type="button"
-                onClick={() => onAssignSlot(currentAssignedSlot, null)}
-                className="text-[9px] font-semibold text-[var(--text-muted)] hover:text-red-500 transition-colors"
-              >
-                Unbind
-              </button>
-            )}
-          </div>
-          <select
-            value={currentAssignedSlot || ''}
-            onChange={(e) => {
-              const val = e.target.value as CharacterSlot;
-              if (val) onAssignSlot(val, selectedNode.id);
-            }}
-            className="w-full bg-[var(--card-bg)] text-foreground px-2.5 py-1.5 rounded-xl border border-[var(--input-border)] text-xs outline-none focus:border-primary font-semibold"
-          >
-            <option value="">None (Generic Object)</option>
-            {Object.entries(CHARACTER_SLOT_LABELS).map(([slotKey, info]) => (
-              <option key={slotKey} value={slotKey}>
-                {info.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* ============================================================== */}
-        {/* 5. ONE-CLICK MOTION PRESETS                                     */}
+        {/* 4. ONE-CLICK MOTION PRESETS                                     */}
         {/* ============================================================== */}
         <div className="space-y-2">
           <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-1">

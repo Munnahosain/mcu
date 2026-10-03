@@ -12,6 +12,7 @@ import type { EPSDocument, ExtractedIcon, ExportFormat, ExportSettings } from "@
 import { idbGet, idbGetSync, idbSet, idbRemove, readSessionValue, removeSessionValue, writeSessionValue } from "@/lib/safeStorage";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
 import { prepareSvgFor3D } from "@/lib/prepare-svg-for-3d";
+import FeaturePageGate from "@/components/dashboard/FeaturePageGate";
 
 const defaultExportSettings: ExportSettings = {
   format: "svg", multiFormat: false, selectedFormats: ["svg"], size: "512", customWidth: 512, customHeight: 512,
@@ -197,4 +198,10 @@ function SplitterWorkspace() {
   </div>;
 }
 
-export default function SheetSplitterPage() { return <ErrorBoundary><SplitterWorkspace /></ErrorBoundary>; }
+export default function SheetSplitterPage() {
+  return (
+    <FeaturePageGate feature="Vector Sheet Splitter" keys={["vector_splitter", "splitter_export"]}>
+      <ErrorBoundary><SplitterWorkspace /></ErrorBoundary>
+    </FeaturePageGate>
+  );
+}

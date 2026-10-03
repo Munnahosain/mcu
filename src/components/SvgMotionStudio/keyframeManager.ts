@@ -84,38 +84,44 @@ export function recordPropertyKeyframe(
   easing: EasingType = 'easeInOut'
 ): AnimationTrack[] {
   const updatedTracks = [...tracks];
-  let track = updatedTracks.find((t) => t.elementId === elementId && t.property === property);
+  const trackIndex = updatedTracks.findIndex(
+    (t) => t.elementId === elementId && t.property === property
+  );
+  const track = trackIndex >= 0
+    ? updatedTracks[trackIndex]
+    : {
+        id: generateTrackId(property),
+        elementId,
+        property,
+        keyframes: [],
+      };
 
-  if (!track) {
-    track = {
-      id: generateTrackId(property),
-      elementId,
-      property,
-      keyframes: [],
-    };
-    updatedTracks.push(track);
-  }
+  const keyframes = [...track.keyframes];
 
-  const existingIndex = track.keyframes.findIndex(
+  const existingIndex = keyframes.findIndex(
     (k) => Math.abs(k.time - time) < 0.04
   );
 
   if (existingIndex >= 0) {
     // Update existing keyframe value while preserving easing
-    track.keyframes[existingIndex] = {
-      ...track.keyframes[existingIndex],
+    keyframes[existingIndex] = {
+      ...keyframes[existingIndex],
       value,
     };
   } else {
     // Add new keyframe with easing
-    track.keyframes.push({
+    keyframes.push({
       id: generateKeyframeId(),
       time,
       value,
       easing,
     });
-    track.keyframes.sort((a, b) => a.time - b.time);
+    keyframes.sort((a, b) => a.time - b.time);
   }
+
+  const updatedTrack = { ...track, keyframes };
+  if (trackIndex >= 0) updatedTracks[trackIndex] = updatedTrack;
+  else updatedTracks.push(updatedTrack);
 
   return updatedTracks;
 }

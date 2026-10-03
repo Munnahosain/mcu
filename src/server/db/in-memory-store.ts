@@ -1,3 +1,5 @@
+import { DEFAULT_CREDIT_COSTS } from '@/server/services/credit-costs';
+
 export interface InMemoryPayment {
   _id: string;
   paymentId: string;
@@ -22,6 +24,7 @@ export interface InMemoryFeatureFlag {
   key: string;
   enabled: boolean;
   plans: string[];
+  message?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -53,24 +56,7 @@ class InMemoryStore {
     minimumAmount: 0,
     maximumAmount: null as number | null,
   };
-  creditCosts: Record<string, unknown> = {
-    metadata_generation: 1,
-    prompt_generation: 1,
-    advanced_metadata: 2,
-    batch_generation: 1,
-    advanced_ai: 2,
-    heavy_ai: 5,
-    background_removal: 5,
-    three_d_generation: 1,
-    grid_generation: 1,
-    palette_generation: 1,
-    typebox_generation: 1,
-    bento_generation: 1,
-    ascii_generation: 1,
-    trading_generation: 1,
-    splitter_export: 1,
-    byo_api_mode: 'charge',
-  };
+  creditCosts: Record<string, unknown> = { ...DEFAULT_CREDIT_COSTS };
 }
 
 export const inMemoryStore = new InMemoryStore();

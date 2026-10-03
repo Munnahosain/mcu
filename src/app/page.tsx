@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Check,
   Eraser,
+  Film,
   Grid3X3,
   ImagePlus,
   Layers3,
@@ -29,10 +30,11 @@ const workflow = [
 const tools = [
   { icon: WandSparkles, label: "01 / AI metadata", title: "Turn images into publishable listings", text: "Generate titles, descriptions, categories, keywords, and prompts with provider-aware controls and batch processing.", href: "/dashboard/generator" },
   { icon: Box, label: "02 / 3D icon studio", title: "Build the hero asset", text: "Shape SVGs into Liquid Glass, Plastic, or Metal icons, tune bevels and lighting, then export PNG, GLB, OBJ, or MP4.", href: "/dashboard/3d-icon-studio" },
-  { icon: Eraser, label: "03 / Background remover", title: "Deliver transparent assets", text: "Remove image backgrounds in a bulk queue and download clean PNG results for your next listing or composition.", href: "/dashboard/bg-remover" },
-  { icon: Grid3X3, label: "04 / Grid + Bento", title: "Compose the visual system", text: "Create Fibonacci, Golden Ratio, isometric, and bento layouts with presets, widgets, and SVG export.", href: "/dashboard/grid-generator" },
-  { icon: Palette, label: "05 / Palette studio", title: "Extract a usable color language", text: "Pull colors from an image, refine the palette, and copy CSS variables or download JSON and SVG swatches.", href: "/dashboard/palette" },
-  { icon: BarChart3, label: "06 / Trading studio", title: "Make data-ready visuals", text: "Build candlestick charts with indicators, templates, favorites, realtime market data, and SVG or PNG export.", href: "/dashboard/trading" },
+  { icon: Film, label: "03 / SVG motion", title: "Animate the vector asset", text: "Upload SVGs, detect layers, and build polished animations with an interactive keyframe timeline.", href: "/svg-motion-studio" },
+  { icon: Eraser, label: "04 / Background remover", title: "Deliver transparent assets", text: "Remove image backgrounds in a bulk queue and download clean PNG results for your next listing or composition.", href: "/dashboard/bg-remover" },
+  { icon: Grid3X3, label: "05 / Grid + Bento", title: "Compose the visual system", text: "Create Fibonacci, Golden Ratio, isometric, and bento layouts with presets, widgets, and SVG export.", href: "/dashboard/grid-generator" },
+  { icon: Palette, label: "06 / Palette studio", title: "Extract a usable color language", text: "Pull colors from an image, refine the palette, and copy CSS variables or download JSON and SVG swatches.", href: "/dashboard/palette" },
+  { icon: BarChart3, label: "07 / Trading studio", title: "Make data-ready visuals", text: "Build candlestick charts with indicators, templates, favorites, realtime market data, and SVG or PNG export.", href: "/dashboard/trading" },
 ];
 
 const supportingTools = [

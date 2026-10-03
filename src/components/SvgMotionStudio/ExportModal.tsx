@@ -6,13 +6,8 @@ import {
   Download,
   FileCode,
   Film,
-  Image as ImageIcon,
   FolderArchive,
-  Sparkles,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Server,
   Layers,
 } from 'lucide-react';
 import { ProjectState } from './types';
@@ -20,7 +15,8 @@ import {
   generateAnimatedSvg,
   generateCleanSvg,
   exportPngSequenceZip,
-  recordWebmVideo,
+  recordCanvasVideo,
+  convertVideoToMp4,
   downloadFile,
 } from './exportEngine';
 
@@ -30,7 +26,7 @@ interface ExportModalProps {
   project: ProjectState;
 }
 
-type ExportFormat = 'animated-svg' | 'clean-svg' | 'json-project' | 'webm' | 'png-sequence' | 'mp4-gif';
+type ExportFormat = 'animated-svg' | 'clean-svg' | 'json-project' | 'webm' | 'mp4' | 'png-sequence';
 
 export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('animated-svg');
@@ -38,11 +34,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   const [scale, setScale] = useState<number>(1);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [progress, setProgress] = useState<{ percent: number; text: string } | null>(null);
+  const [exportError, setExportError] = useState('');
 
   if (!isOpen) return null;
 
   const handleExport = async () => {
     setIsExporting(true);
+    setExportError('');
     setProgress({ percent: 10, text: 'Preparing export pipeline...' });
 
     const baseName = (project.name || 'mcu_motion')
@@ -81,12 +79,26 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         downloadFile(jsonContent, `${baseName}.mcuproj`, 'application/json');
         setProgress({ percent: 100, text: 'Project saved!' });
       } else if (selectedFormat === 'webm') {
-        setProgress({ percent: 20, text: 'Capturing canvas animation stream...' });
-        const webmBlob = await recordWebmVideo(project, fps, scale, (pct) => {
-          setProgress({ percent: pct, text: `Rendering frames to WebM (${pct}%)...` });
+        setProgress({ percent: 5, text: 'Preparing WebM video...' });
+        const recorded = await recordCanvasVideo(project, fps, scale, (pct) => {
+          setProgress({ percent: pct, text: `Rendering WebM frame ${pct}%...` });
         });
-        downloadFile(webmBlob, `${baseName}.webm`, 'video/webm');
+        downloadFile(recorded.blob, `${baseName}.webm`, 'video/webm');
         setProgress({ percent: 100, text: 'Video exported!' });
+      } else if (selectedFormat === 'mp4') {
+        setProgress({ percent: 2, text: 'Preparing MP4 video...' });
+        const recorded = await recordCanvasVideo(project, fps, scale, (pct) => {
+          setProgress({ percent: Math.round(pct * 0.75), text: `Rendering MP4 frames (${pct}%)...` });
+        }, true);
+        let mp4Blob = recorded.blob;
+        if (recorded.format !== 'mp4') {
+          setProgress({ percent: 76, text: 'Converting WebM frames to H.264 MP4...' });
+          mp4Blob = await convertVideoToMp4(recorded.blob, fps, (pct) => {
+            setProgress({ percent: 76 + Math.round(pct * 0.23), text: `Encoding H.264 MP4 (${pct}%)...` });
+          });
+        }
+        downloadFile(mp4Blob, `${baseName}.mp4`, 'video/mp4');
+        setProgress({ percent: 100, text: 'MP4 exported!' });
       } else if (selectedFormat === 'png-sequence') {
         setProgress({ percent: 15, text: 'Rendering high-resolution PNG frames...' });
         const zipBlob = await exportPngSequenceZip(
@@ -111,7 +123,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       }, 1000);
     } catch (err) {
       console.error('Export error:', err);
-      setProgress({ percent: 0, text: 'Export error occurred. Please check console.' });
+      const message = err instanceof Error ? err.message : 'Video export failed.';
+      setExportError(message);
+      setProgress(null);
       setIsExporting(false);
     }
   };
@@ -250,27 +264,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
                 </div>
               </button>
 
-              {/* 6. MP4 & GIF Info */}
+              {/* 6. MP4 Video */}
               <button
                 type="button"
-                onClick={() => setSelectedFormat('mp4-gif')}
+                onClick={() => setSelectedFormat('mp4')}
                 className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between h-24 ${
-                  selectedFormat === 'mp4-gif'
+                  selectedFormat === 'mp4'
                     ? 'bg-primary/15 border-primary text-foreground shadow-md shadow-primary/20'
                     : 'bg-[var(--input-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-primary/40'
                 }`}
               >
-                <Server className="h-4 w-4 text-pink-500" />
+                <Film className="h-4 w-4 text-pink-500" />
                 <div>
-                  <span className="text-xs font-bold block text-foreground">MP4 &amp; GIF</span>
-                  <span className="text-[10px] text-[var(--text-muted)] leading-tight">Server rendering pipeline details</span>
+                  <span className="text-xs font-bold block text-foreground">MP4 Video</span>
+                  <span className="text-[10px] text-[var(--text-muted)] leading-tight">H.264 with browser / FFmpeg fallback</span>
                 </div>
               </button>
             </div>
           </div>
 
           {/* Conditional Controls for Video/Sequence */}
-          {(selectedFormat === 'webm' || selectedFormat === 'png-sequence') && (
+          {(selectedFormat === 'webm' || selectedFormat === 'mp4' || selectedFormat === 'png-sequence') && (
             <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-[var(--input-bg)] border border-[var(--card-border)]">
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Resolution Scale</span>
@@ -300,29 +314,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
             </div>
           )}
 
-          {/* MP4 & GIF Server Rendering Notice */}
-          {selectedFormat === 'mp4-gif' && (
-            <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 text-foreground text-xs space-y-2">
-              <div className="flex items-center gap-2 font-bold text-primary">
-                <Server className="h-4 w-4" />
-                <span>Server-Side H.264 MP4 &amp; GIF Pipeline</span>
-              </div>
-              <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                Client-side rendering cannot reliably encode proprietary H.264 MP4 and paletted GIF
-                without heavy external binaries.
-              </p>
-              <div className="bg-[var(--card-bg)] p-3 rounded-xl border border-[var(--card-border)] text-[10px] space-y-1 text-[var(--text-secondary)]">
-                <p>
-                  <strong className="text-foreground">Ready Immediately:</strong> Export as <strong>WebM</strong> (plays in all
-                  browsers, Canva, Figma) or download the <strong>PNG Sequence</strong>.
-                </p>
-                <p className="text-[var(--text-muted)]">
-                  Cloud FFmpeg pipeline is configured to transcode PNG sequences to compressed H.264
-                  MP4 and looping GIF automatically.
-                </p>
-              </div>
-            </div>
-          )}
+          {exportError && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{exportError}</p>}
 
           {/* Progress Bar */}
           {progress && (
@@ -351,34 +343,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
             Cancel
           </button>
 
-          {selectedFormat !== 'mp4-gif' ? (
-            <button
-              type="button"
-              disabled={isExporting}
-              onClick={handleExport}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-40 text-[#071b17] font-extrabold text-xs shadow-md shadow-primary/25 transition-all"
-            >
-              {isExporting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download File</span>
-                </>
-              )}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelectedFormat('webm')}
-              className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-[#071b17] font-extrabold text-xs"
-            >
-              Switch to WebM Video
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={isExporting}
+            onClick={handleExport}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-40 text-[#071b17] font-extrabold text-xs shadow-md shadow-primary/25 transition-all"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <Download className="h-3.5 w-3.5" />
+                <span>{selectedFormat === 'mp4' ? 'Download MP4' : 'Download File'}</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

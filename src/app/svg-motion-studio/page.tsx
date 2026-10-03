@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import SvgMotionStudio from '@/components/SvgMotionStudio/SvgMotionStudio';
+import FeaturePageGate from '@/components/dashboard/FeaturePageGate';
 
 export const metadata: Metadata = {
   title: 'MCU SVG Motion Studio | Professional SVG Animation & Keyframe Editor',
@@ -21,7 +22,9 @@ export const metadata: Metadata = {
 export default function SvgMotionStudioPage() {
   return (
     <main className="fixed inset-0 overflow-hidden bg-[var(--main-bg)] text-foreground" style={{ padding: 0 }}>
-      <SvgMotionStudio />
+      <FeaturePageGate feature="SVG Motion Studio" keys={["svg_motion"]}>
+        <SvgMotionStudio />
+      </FeaturePageGate>
     </main>
   );
 }

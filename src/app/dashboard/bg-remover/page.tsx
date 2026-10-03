@@ -84,6 +84,7 @@ export default function BackgroundRemoverPage() {
 
         const blob = await res.blob();
         const objectUrl = URL.createObjectURL(blob);
+        window.dispatchEvent(new CustomEvent("mcustock:credits-updated"));
 
         setImages((prev) =>
           prev.map((i) =>

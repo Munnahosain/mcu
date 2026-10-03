@@ -1,270 +1,246 @@
+import { GoogleGenAI, Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
+import { enforceRateLimit } from '@/server/auth/rate-limit';
+import { resolveUserApiKey } from '@/server/services/vision-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
+import { AnimationPlanJson, AnimationTarget, planJson, validateAnimationPlan } from '@/components/SvgMotionStudio/animationPlan';
 
 export const maxDuration = 60;
 
-interface ElementSummary {
+const MAX_BODY_BYTES = 120_000;
+const MAX_ELEMENTS = 80;
+const MAX_DEFINITIONS = 32;
+const ALLOWED_PROPERTIES = [
+  'x', 'y', 'rotation', 'scaleX', 'scaleY', 'opacity', 'skewX', 'skewY',
+  'fill', 'stroke', 'strokeWidth', 'strokeDashoffset', 'originX', 'originY', 'transform',
+];
+
+interface RequestElement {
   id: string;
+  originalId?: string;
   name: string;
   tag: string;
 }
 
-export async function POST(req: NextRequest) {
+interface AnimationRequest {
+  prompt: string;
+  context: {
+    elementCount: number;
+    elements: RequestElement[];
+    definitions?: Array<{ id: string | null; type: string; children: number; attributes?: Record<string, string>; stops?: string[]; filterPrimitives?: string[] }>;
+  };
+  duration: number;
+  fps: number;
+  loop: boolean;
+  stockMotion: boolean;
+  mode: 'generate' | 'modify';
+  existingPlan?: AnimationPlanJson;
+  avoidPlan?: AnimationPlanJson;
+}
+
+function errorResponse(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function extractJson(text: string): unknown {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   try {
-    let body: any = {};
+    return JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Gemini returned an invalid animation plan. Please regenerate.');
+    return JSON.parse(match[0]);
+  }
+}
+
+function getProviderError(error: unknown): { message: string; status: number } {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  const lower = raw.toLowerCase();
+  const status = typeof error === 'object' && error && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : 0;
+  if (status === 429 || lower.includes('rate limit') || lower.includes('quota')) {
+    return { message: 'Gemini rate limit reached. Please wait a moment and retry.', status: 429 };
+  }
+  if (status === 401 || status === 403 || lower.includes('api key') || lower.includes('unauthorized')) {
+    return { message: 'Gemini API key is invalid or does not have model access. Check the key in Settings.', status: 401 };
+  }
+  if (lower.includes('timeout') || lower.includes('aborted')) {
+    return { message: 'Gemini timed out while planning the animation. Please retry.', status: 504 };
+  }
+  console.error('SVG animation assistant provider failure:', raw.slice(0, 300));
+  return { message: 'Gemini could not create an animation plan. Please retry.', status: 502 };
+}
+
+export async function POST(req: NextRequest) {
+  let userId: string | null = null;
+  let creditReserved = false;
+  let usesOwnApiKey = false;
+  try {
+    userId = await getAuthenticatedUserId(req);
+    if (!userId) return errorResponse('Authentication required to generate an animation plan.', 401);
+    const featureDenial = await getFeatureFlagDenial(userId, 'ai_tools', 'AI generation');
+    if (featureDenial) return errorResponse(featureDenial, 403);
+    const operationDenial = await getFeatureFlagDenial(userId, 'svg_motion', 'SVG Motion AI');
+    if (operationDenial) return errorResponse(operationDenial, 403);
+    const rateLimitError = enforceRateLimit(req, userId, {
+      limit: 12,
+      windowMs: 60 * 1000,
+      keyPrefix: 'svg-motion-ai',
+    });
+    if (rateLimitError) return rateLimitError;
+
+    const contentLength = Number(req.headers.get('content-length') || 0);
+    if (contentLength > MAX_BODY_BYTES) return errorResponse('SVG analysis context is too large. Please simplify the uploaded SVG.', 413);
+
+    let body: AnimationRequest;
     try {
-      body = await req.json();
+      body = await req.json() as AnimationRequest;
     } catch {
-      try {
-        const text = await req.text();
-        body = text ? JSON.parse(text) : {};
-      } catch {
-        body = {};
-      }
+      return errorResponse('Request body must be valid JSON.', 400);
     }
 
-    const {
-      prompt = '',
-      elements = [] as ElementSummary[],
-      characterSlots = {},
-      selectedElementId = null,
-      duration = 4.0,
-      apiKey: customApiKey,
-      provider: customProvider,
-    } = body;
-
-    const trimmedPrompt = (prompt || '').trim();
-    if (!trimmedPrompt) {
-      return NextResponse.json({ error: 'Please provide an animation prompt.' }, { status: 400 });
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    if (!prompt) return errorResponse('Enter a motion prompt first.', 400);
+    if (prompt.length > 1200) return errorResponse('Prompt must be 1,200 characters or fewer.', 400);
+    if (!body.context || !Array.isArray(body.context.elements) || body.context.elements.length === 0) {
+      return errorResponse('Upload an SVG with at least one supported vector element first.', 400);
+    }
+    if (body.context.elements.length > MAX_ELEMENTS || (body.context.definitions?.length ?? 0) > MAX_DEFINITIONS) {
+      return errorResponse('This SVG has too many elements for one animation request. Try simplifying or grouping the artwork.', 413);
     }
 
-    const dur = Math.max(1, Math.min(30, Number(duration) || 4.0));
-    const effectiveApiKey = customApiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
+    const duration = Number(body.duration);
+    const fps = Number(body.fps);
+    if (!Number.isFinite(duration) || duration < 1 || duration > 30) return errorResponse('Duration must be between 1 and 30 seconds.', 400);
+    if (![12, 24, 30, 60].includes(fps)) return errorResponse('Frame rate must be 12, 24, 30, or 60 FPS.', 400);
 
-    // 1. If Gemini API key is available, use GoogleGenAI to generate intelligent keyframes
-    if (effectiveApiKey) {
-      try {
-        const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
-        const systemInstruction = `You are an expert SVG motion animator and After Effects motion designer.
-Given a list of SVG elements and a prompt describing the desired animation, generate smooth, professional keyframe tracks.
-Available properties: "scaleX", "scaleY", "rotation", "opacity", "x", "y".
-Scale is 0-200 (100 is normal). Opacity is 0-100 (100 is solid). Rotation is in degrees (-360 to +360). Position x and y are in pixels (-300 to +300).
-Supported easings: "easeInOut", "easeOut", "easeIn", "linear", "bounceOut", "backOut", "elasticOut".
-Always loop smoothly by matching the first keyframe (time: 0) with the last keyframe (time: ${dur}).
-Return ONLY valid JSON matching this schema:
-{
-  "summary": ["step 1", "step 2"],
-  "duration": ${dur},
-  "loop": true,
-  "tracks": [
-    {
-      "id": "trk_1",
-      "elementId": "ELEMENT_ID_FROM_LIST",
-      "property": "rotation",
-      "keyframes": [
-        { "id": "kf_1", "time": 0, "value": 0, "easing": "easeInOut" },
-        { "id": "kf_2", "time": 2, "value": 15, "easing": "easeInOut" },
-        { "id": "kf_3", "time": 4, "value": 0, "easing": "easeInOut" }
-      ]
+    const targets: AnimationTarget[] = body.context.elements.map((element) => ({
+      id: element.id,
+      originalId: element.originalId || undefined,
+      name: element.name,
+    }));
+
+    const storedGeminiKey = userId ? await resolveUserApiKey(userId, 'Google Gemini') : null;
+    usesOwnApiKey = Boolean(storedGeminiKey);
+    const effectiveApiKey = storedGeminiKey?.apiKey || process.env.GEMINI_API_KEY?.trim();
+    if (!effectiveApiKey) {
+      return errorResponse('Add a Google Gemini API key in Settings or configure GEMINI_API_KEY on the server.', 503);
     }
-  ]
-}`;
+    await consumeCredits(userId, 1, 'SVG motion AI plan generation', 'svg_motion', { usesOwnApiKey });
+    creditReserved = true;
 
-        const promptText = `User Prompt: "${trimmedPrompt}"
-Duration: ${dur} seconds
-Selected Element ID: ${selectedElementId || 'none'}
-Character Slots: ${JSON.stringify(characterSlots)}
-Available Elements: ${JSON.stringify(elements.slice(0, 50))}`;
+    const stockRules = body.stockMotion
+      ? 'Stock Motion mode is ON: preserve the source composition, use controlled premium commercial movement, keep loops seamless, avoid chaos, random jitter, excessive deformation, and unnecessary motion.'
+      : 'Keep motion intentional and preserve the source artwork. Avoid random or excessive movement.';
+    const modifyRules = body.mode === 'modify' && body.existingPlan
+      ? `Modify the supplied existing plan according to the new instruction. Preserve its duration and all unrelated animations unless the user explicitly asks to change them. Existing plan JSON:\n${JSON.stringify(body.existingPlan)}`
+      : 'Create an animation plan from the prompt and SVG metadata.';
+    const variationRules = body.mode === 'generate' && body.avoidPlan
+      ? `This is a regeneration. Create a meaningfully different choreography: change the animated targets, properties, timing, amplitude, or easing as appropriate to the prompt. Do not copy this previous plan pattern:\n${JSON.stringify(body.avoidPlan)}`
+      : 'Choose properties and timing that directly match the user instruction and each element shape; avoid applying one repeated generic transform to every layer.';
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: promptText,
-          config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            temperature: 0.2,
+    const systemInstruction = `You are a professional motion designer for abstract SVG stock backgrounds, decorative vectors, geometry, gradients, waves, lines, circles, patterns, and technology graphics. Never create character, human, animal, body-part, facial, walking, waving, or talking animation. Return only structured JSON matching the response schema. Do not output JavaScript or prose outside JSON.
+
+Plan rules:
+- Use only target IDs present in the supplied SVG element list.
+- Select motion properties that fit each target's tag, bounds, style, and hierarchy.
+- Keep the original composition recognizable; use subtle, premium movement by default.
+- Use x/y/rotation/scaleX/scaleY/opacity/skewX/skewY/fill/stroke/strokeWidth/strokeDashoffset/originX/originY, or a structured transform object with numeric components.
+- Keep values within sensible screen-space bounds; opacity is 0-100 and scale is 0-400.
+- Duration is ${duration} seconds, FPS is ${fps}, and loop is ${Boolean(body.loop)}. Honor these settings.
+- When looping, every animated property's first and last values must match at time 0 and duration; a full-turn rotation may end at an equivalent multiple of 360 degrees.
+- Return 2-12 useful keyframes per animated property, sorted by time, with times from 0 through duration.
+- Keep the plan compact: animate only useful elements, not every layer by default.
+- Vary animation trajectories and target assignments according to the exact prompt; do not default to the same scale-and-translate loop.
+${stockRules}`;
+
+    const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: JSON.stringify({
+        task: body.mode === 'modify' ? 'refine_animation_plan' : 'create_animation_plan',
+        userInstruction: prompt,
+        requestedSettings: { duration, fps, loop: Boolean(body.loop), stockMotion: Boolean(body.stockMotion) },
+        modification: modifyRules,
+        variation: variationRules,
+        svg: {
+          elementCount: body.context.elementCount,
+          elements: body.context.elements,
+          definitions: body.context.definitions ?? [],
+        },
+      }),
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            duration: { type: Type.NUMBER },
+            fps: { type: Type.INTEGER },
+            loop: { type: Type.BOOLEAN },
+            description: { type: Type.STRING },
+            animations: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  target: { type: Type.STRING },
+                  property: { type: Type.STRING, enum: ALLOWED_PROPERTIES },
+                  easing: { type: Type.STRING, enum: ['linear', 'easeIn', 'easeOut', 'easeInOut', 'backIn', 'backOut', 'backInOut', 'elasticOut', 'bounceOut', 'custom'] },
+                  keyframes: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        time: { type: Type.NUMBER },
+                        value: {
+                          anyOf: [
+                            { type: Type.NUMBER },
+                            { type: Type.STRING },
+                            {
+                              type: Type.OBJECT,
+                              properties: Object.fromEntries(['x', 'y', 'rotation', 'scaleX', 'scaleY', 'skewX', 'skewY', 'opacity'].map((key) => [key, { type: Type.NUMBER }])),
+                            },
+                          ],
+                        },
+                      },
+                      required: ['time', 'value'],
+                    },
+                  },
+                },
+                required: ['target', 'property', 'keyframes'],
+              },
+            },
           },
-        });
-
-        const textOutput = response.text || '';
-        const parsed = JSON.parse(textOutput);
-        if (parsed && Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
-          return NextResponse.json({
-            success: true,
-            summary: parsed.summary || ['Generated motion with Gemini AI'],
-            duration: parsed.duration || dur,
-            loop: parsed.loop ?? true,
-            tracks: parsed.tracks,
-          });
-        }
-      } catch (geminiError: any) {
-        console.warn('Gemini motion generation error, falling back to smart procedural planner:', geminiError?.message);
-      }
-    }
-
-    // 2. Procedural Motion Engine Fallback (handles all common animation requests seamlessly)
-    const p = trimmedPrompt.toLowerCase();
-    const targetId = selectedElementId || (characterSlots as any).body || elements[0]?.id || 'target';
-    const tracks: any[] = [];
-    const summary: string[] = [];
-
-    const makeKf = (time: number, value: number, easing = 'easeInOut') => ({
-      id: `kf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      time,
-      value,
-      easing,
+          required: ['duration', 'fps', 'loop', 'description', 'animations'],
+        },
+        temperature: 0.78,
+        topP: 0.92,
+        maxOutputTokens: 4096,
+      },
     });
 
-    if (p.includes('breath') || p.includes('chest') || p.includes('pulse') || p.includes('heartbeat')) {
-      summary.push('Gentle organic breathing & pulse cycle');
-      tracks.push({
-        id: `trk_${Date.now()}_scaleY`,
-        elementId: targetId,
-        property: 'scaleY',
-        keyframes: [
-          makeKf(0, 100, 'easeInOut'),
-          makeKf(dur / 2, 106, 'easeInOut'),
-          makeKf(dur, 100, 'easeInOut'),
-        ],
-      });
-      tracks.push({
-        id: `trk_${Date.now()}_scaleX`,
-        elementId: targetId,
-        property: 'scaleX',
-        keyframes: [
-          makeKf(0, 100, 'easeInOut'),
-          makeKf(dur / 2, 98, 'easeInOut'),
-          makeKf(dur, 100, 'easeInOut'),
-        ],
-      });
-    } else if (p.includes('bounce') || p.includes('jump') || p.includes('hop')) {
-      summary.push('High-energy spring bounce animation');
-      tracks.push({
-        id: `trk_${Date.now()}_y`,
-        elementId: targetId,
-        property: 'y',
-        keyframes: [
-          makeKf(0, 0, 'easeOut'),
-          makeKf(dur * 0.35, -50, 'easeIn'),
-          makeKf(dur * 0.7, 0, 'bounceOut'),
-          makeKf(dur, 0, 'easeInOut'),
-        ],
-      });
-      tracks.push({
-        id: `trk_${Date.now()}_scaleY`,
-        elementId: targetId,
-        property: 'scaleY',
-        keyframes: [
-          makeKf(0, 100, 'easeInOut'),
-          makeKf(dur * 0.35, 115, 'easeInOut'),
-          makeKf(dur * 0.7, 85, 'bounceOut'),
-          makeKf(dur, 100, 'easeInOut'),
-        ],
-      });
-    } else if (p.includes('spin') || p.includes('rotate') || p.includes('turn')) {
-      summary.push('360 degree rotation with smooth easing');
-      tracks.push({
-        id: `trk_${Date.now()}_rot`,
-        elementId: targetId,
-        property: 'rotation',
-        keyframes: [
-          makeKf(0, 0, 'easeInOut'),
-          makeKf(dur, 360, 'easeInOut'),
-        ],
-      });
-    } else if (p.includes('fade') || p.includes('opacity') || p.includes('ghost')) {
-      summary.push('Smooth opacity fade in and out');
-      tracks.push({
-        id: `trk_${Date.now()}_opac`,
-        elementId: targetId,
-        property: 'opacity',
-        keyframes: [
-          makeKf(0, 100, 'easeInOut'),
-          makeKf(dur / 2, 20, 'easeInOut'),
-          makeKf(dur, 100, 'easeInOut'),
-        ],
-      });
-    } else if (p.includes('float') || p.includes('hover') || p.includes('levitate')) {
-      summary.push('Gentle levitating float loop');
-      tracks.push({
-        id: `trk_${Date.now()}_floatY`,
-        elementId: targetId,
-        property: 'y',
-        keyframes: [
-          makeKf(0, 0, 'easeInOut'),
-          makeKf(dur / 2, -25, 'easeInOut'),
-          makeKf(dur, 0, 'easeInOut'),
-        ],
-      });
-      tracks.push({
-        id: `trk_${Date.now()}_floatRot`,
-        elementId: targetId,
-        property: 'rotation',
-        keyframes: [
-          makeKf(0, -2, 'easeInOut'),
-          makeKf(dur / 2, 2, 'easeInOut'),
-          makeKf(dur, -2, 'easeInOut'),
-        ],
-      });
-    } else if (p.includes('wave') || p.includes('swing') || p.includes('flutter')) {
-      summary.push('Oscillating swing and flutter motion');
-      tracks.push({
-        id: `trk_${Date.now()}_swing`,
-        elementId: targetId,
-        property: 'rotation',
-        keyframes: [
-          makeKf(0, 0, 'easeInOut'),
-          makeKf(dur * 0.25, 20, 'easeInOut'),
-          makeKf(dur * 0.75, -20, 'easeInOut'),
-          makeKf(dur, 0, 'easeInOut'),
-        ],
-      });
-    } else {
-      // General dynamic pop & bounce
-      summary.push(`Created custom ${dur}s motion cycle based on prompt`);
-      tracks.push({
-        id: `trk_${Date.now()}_scaleX`,
-        elementId: targetId,
-        property: 'scaleX',
-        keyframes: [
-          makeKf(0, 100, 'easeInOut'),
-          makeKf(dur * 0.4, 112, 'backOut'),
-          makeKf(dur, 100, 'easeInOut'),
-        ],
-      });
-      tracks.push({
-        id: `trk_${Date.now()}_scaleY`,
-        elementId: targetId,
-        property: 'scaleY',
-        keyframes: [
-          makeKf(0, 100, 'easeInOut'),
-          makeKf(dur * 0.4, 112, 'backOut'),
-          makeKf(dur, 100, 'easeInOut'),
-        ],
-      });
-      tracks.push({
-        id: `trk_${Date.now()}_y`,
-        elementId: targetId,
-        property: 'y',
-        keyframes: [
-          makeKf(0, 0, 'easeInOut'),
-          makeKf(dur * 0.5, -15, 'easeInOut'),
-          makeKf(dur, 0, 'easeInOut'),
-        ],
-      });
+    const rawPlan = extractJson(response.text || '');
+    const validated = validateAnimationPlan(rawPlan, targets, prompt);
+    return NextResponse.json({ success: true, plan: planJson(validated) });
+  } catch (error) {
+    if (creditReserved && userId) {
+      await refundCredits(userId, 1, 'Failed SVG motion AI plan refund', 'svg_motion', { usesOwnApiKey })
+        .catch((refundError) => console.error('[svg-motion-ai] credit refund error:', refundError));
     }
-
-    return NextResponse.json({
-      success: true,
-      summary,
-      duration: dur,
-      loop: true,
-      tracks,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Failed to process AI animation request' },
-      { status: 500 }
-    );
+    if (error instanceof InsufficientCreditsError) {
+      return errorResponse(error.message, 402);
+    }
+    if (error instanceof Error && error.message.includes('unavailable SVG element')) {
+      return errorResponse(error.message, 422);
+    }
+    if (error instanceof Error && /animation|keyframe|duration|frame rate|transform|property|color|target/i.test(error.message)) {
+      return errorResponse(error.message, 422);
+    }
+    const providerError = getProviderError(error);
+    return errorResponse(providerError.message, providerError.status);
   }
 }

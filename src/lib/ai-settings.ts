@@ -161,10 +161,21 @@ export async function syncProviderKeys(): Promise<StoredProviderKey[]> {
 
   // If remote has keys, merge them with any unique local keys
   if (remoteKeys.length > 0) {
-    const remoteIds = new Set(remoteKeys.map((k) => k.id));
-    const missingInRemote = localKeys.filter((lk) => lk.key && !remoteIds.has(lk.id));
+    const merged = remoteKeys.map((remoteKey) => {
+      const exactMatch = localKeys.find((local) => local.id === remoteKey.id && local.provider === remoteKey.provider && local.key);
+      const lastFourMatches = localKeys.filter((local) =>
+        local.key && local.provider === remoteKey.provider && local.key.slice(-4) === remoteKey.lastFour
+      );
+      const localKey = exactMatch || (lastFourMatches.length === 1 ? lastFourMatches[0] : undefined);
+      return localKey ? { ...remoteKey, key: localKey.key } : remoteKey;
+    });
+    const missingInRemote = localKeys.filter((local) =>
+      local.key && !merged.some((remote) =>
+        remote.provider === local.provider &&
+        (remote.id === local.id || remote.lastFour === local.key?.slice(-4))
+      )
+    );
 
-    const merged = [...remoteKeys];
     for (const m of missingInRemote) {
       const res = await saveRemoteProviderKey(m);
       if ('key' in res && res.key) {

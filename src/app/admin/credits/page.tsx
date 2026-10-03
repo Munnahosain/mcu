@@ -28,6 +28,14 @@ interface ICreditCosts {
   ascii_generation: number;
   trading_generation: number;
   splitter_export: number;
+  pattern_generation: number;
+  svg_motion: number;
+  motion_generation: number;
+  color_extraction: number;
+  image_palette: number;
+  pattern_maker: number;
+  vector_splitter: number;
+  general_ai: number;
   byo_api_mode: string;
 }
 
@@ -40,6 +48,14 @@ const studioCostFields: Array<{ key: keyof ICreditCosts; label: string }> = [
   { key: "ascii_generation", label: "ASCII Studio" },
   { key: "trading_generation", label: "Trading Charts" },
   { key: "splitter_export", label: "Vector Splitter Export" },
+  { key: "pattern_generation", label: "Pattern Generation" },
+  { key: "svg_motion", label: "SVG Motion AI" },
+  { key: "motion_generation", label: "Motion Generation" },
+  { key: "color_extraction", label: "Color Extraction" },
+  { key: "image_palette", label: "Image Palette Extraction" },
+  { key: "pattern_maker", label: "Pattern Maker" },
+  { key: "vector_splitter", label: "Vector Splitter" },
+  { key: "general_ai", label: "General AI" },
 ];
 
 export default function AdminCreditsPage() {
@@ -59,6 +75,14 @@ export default function AdminCreditsPage() {
     ascii_generation: 1,
     trading_generation: 1,
     splitter_export: 1,
+    pattern_generation: 1,
+    svg_motion: 1,
+    motion_generation: 1,
+    color_extraction: 1,
+    image_palette: 1,
+    pattern_maker: 1,
+    vector_splitter: 1,
+    general_ai: 1,
     byo_api_mode: "charge",
   });
   const [loading, setLoading] = useState(true);
@@ -75,13 +99,16 @@ export default function AdminCreditsPage() {
 
   useEffect(() => {
     fetch("/api/admin/credits", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || "Unable to load credit costs.");
         if (data.success && data.creditCosts) {
           setCosts((prev) => ({ ...prev, ...data.creditCosts }));
         }
       })
-      .catch(() => {})
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : "Unable to load credit costs.");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -182,13 +209,14 @@ export default function AdminCreditsPage() {
             <Sparkles className="h-5 w-5 text-primary" />
             <span>AI Operation Costs (Credits per execution)</span>
           </div>
+          <p className="text-xs text-white/50">Each metered operation costs at least 1 credit.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="block text-xs font-semibold text-white/60">
               Metadata Generation
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.metadata_generation}
                 onChange={(e) => setCosts({ ...costs, metadata_generation: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -199,7 +227,7 @@ export default function AdminCreditsPage() {
               Prompt Generation
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.prompt_generation}
                 onChange={(e) => setCosts({ ...costs, prompt_generation: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -210,7 +238,7 @@ export default function AdminCreditsPage() {
               Advanced Metadata (SEO)
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.advanced_metadata}
                 onChange={(e) => setCosts({ ...costs, advanced_metadata: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -221,7 +249,7 @@ export default function AdminCreditsPage() {
               Batch Item Rate
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.batch_generation}
                 onChange={(e) => setCosts({ ...costs, batch_generation: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -232,7 +260,7 @@ export default function AdminCreditsPage() {
               Advanced AI Operation
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.advanced_ai}
                 onChange={(e) => setCosts({ ...costs, advanced_ai: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -243,7 +271,7 @@ export default function AdminCreditsPage() {
               Heavy AI Operation
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.heavy_ai}
                 onChange={(e) => setCosts({ ...costs, heavy_ai: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -254,7 +282,7 @@ export default function AdminCreditsPage() {
               Background Removal (4K Matting)
               <input
                 type="number"
-                min="0"
+                min="1"
                 value={costs.background_removal}
                 onChange={(e) => setCosts({ ...costs, background_removal: Number(e.target.value) })}
                 className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"
@@ -273,7 +301,7 @@ export default function AdminCreditsPage() {
                   {label}
                   <input
                     type="number"
-                    min="0"
+                    min="1"
                     value={costs[key] as number}
                     onChange={(event) => setCosts({ ...costs, [key]: Number(event.target.value) })}
                     className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-sm text-white outline-none focus:border-primary"

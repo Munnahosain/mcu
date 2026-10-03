@@ -1,6 +1,15 @@
 import { ensureAccessToken } from '@/lib/auth';
 
+type CreditSnapshot = {
+  monthly: number;
+  bonus: number;
+  used: number;
+  remaining: number;
+  total: number;
+};
+
 export async function consumeFeatureCredit(feature: string, amount = 1) {
+  let balanceWasPublished = false;
   try {
     const token = await ensureAccessToken();
     const response = await fetch('/api/account/credits', {
@@ -12,45 +21,33 @@ export async function consumeFeatureCredit(feature: string, amount = 1) {
       },
       body: JSON.stringify({ feature, amount }),
     });
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({})) as {
+      success?: boolean;
+      error?: string;
+      credits?: CreditSnapshot;
+    };
     if (!response.ok || !data.success) {
       if (response.status === 402) {
         throw new Error(data.error || 'You do not have enough credits to use this feature.');
       }
-      // If server or network issue, log and do not crash creative workflow
-      console.warn('[Credits] Feature credit deduction skipped or failed:', data.error);
+      throw new Error(data.error || `Unable to reserve credits for this feature (HTTP ${response.status}).`);
     }
-  } catch (err: any) {
-    if (err?.message?.includes('enough credits')) {
-      throw err;
+    if (!data.credits) {
+      throw new Error('Credits were charged, but the server did not return the updated balance.');
     }
-    console.warn('[Credits] consumeFeatureCredit error:', err);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mcustock:credits-updated', { detail: data.credits }));
+      balanceWasPublished = true;
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('enough credits')) {
+      throw error;
+    }
+    console.error('[Credits] Feature credit deduction failed:', error);
+    throw error;
   } finally {
-    if (typeof window !== 'undefined') {
+    if (!balanceWasPublished && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mcustock:credits-updated'));
     }
-  }
-}
-
-export async function refillFeatureCredits(amount = 5000) {
-  try {
-    const token = await ensureAccessToken();
-    const response = await fetch('/api/account/credits', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ action: 'refill', amount }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('mcustock:credits-updated'));
-    }
-    return data;
-  } catch (err) {
-    console.error('[Credits] Refill failed:', err);
-    return null;
   }
 }

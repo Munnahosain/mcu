@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import { AI_DEFAULT_MODELS } from '@/lib/ai-models';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
+import { enforceRateLimit } from '@/server/auth/rate-limit';
+import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
+import { resolveUserApiKey } from '@/server/services/vision-service';
 
 export const maxDuration = 60;
 
@@ -81,12 +86,56 @@ async function requestGemini(model: string, apiKey: string, prompt: string) {
 }
 
 export async function POST(req: Request) {
+  let userId: string | null = null;
+  let creditReserved = false;
+  let usesOwnApiKey = false;
   try {
-    const { eventTitle, eventCategory, eventDate, apiKey, provider = 'Groq', model } = await req.json();
-    if (!apiKey) return NextResponse.json({ success: false, error: 'No API key provided.' }, { status: 400 });
+    userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Authentication required to generate event ideas.' }, { status: 401 });
+    }
+    const featureDenial = await getFeatureFlagDenial(userId, 'ai_tools', 'AI generation');
+    if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
+    const operationDenial = await getFeatureFlagDenial(userId, 'general_ai', 'Event idea generation');
+    if (operationDenial) return NextResponse.json({ success: false, error: operationDenial }, { status: 403 });
+    const rateLimitError = enforceRateLimit(req, userId, {
+      limit: 20,
+      windowMs: 60 * 1000,
+      keyPrefix: 'generate-event-ideas',
+    });
+    if (rateLimitError) return rateLimitError;
 
-    const selectedModel = model || AI_DEFAULT_MODELS[provider] || '';
-    const prompt = buildPrompt(eventTitle, eventCategory, eventDate);
+    const body = await req.json() as {
+      eventTitle?: string;
+      eventCategory?: string;
+      eventDate?: string;
+      apiKey?: string;
+      provider?: string;
+      model?: string;
+    };
+    const { eventTitle, eventCategory, eventDate, provider = 'Groq', model } = body;
+    if (typeof eventTitle !== 'string' || !eventTitle.trim()) {
+      return NextResponse.json({ success: false, error: 'Event title is required.' }, { status: 400 });
+    }
+    if (!['Groq', 'Google Gemini', 'OpenAI', 'OpenRouter', 'Mistral AI'].includes(provider)) {
+      return NextResponse.json({ success: false, error: `Unsupported AI provider: ${provider}.` }, { status: 400 });
+    }
+
+    const suppliedApiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const storedKey = suppliedApiKey ? null : await resolveUserApiKey(userId, provider);
+    const apiKey = suppliedApiKey || storedKey?.apiKey;
+    if (!apiKey) {
+      return NextResponse.json({
+        success: false,
+        error: `API key required for ${provider}. Please add one in the Generator tool's API Keys panel first.`,
+      }, { status: 400 });
+    }
+    usesOwnApiKey = Boolean(storedKey || suppliedApiKey);
+
+    const selectedModel = model || storedKey?.model || AI_DEFAULT_MODELS[provider] || '';
+    const prompt = buildPrompt(eventTitle.trim(), eventCategory || 'General', eventDate || 'Unspecified');
+    await consumeCredits(userId, 1, 'AI event idea generation', 'general_ai', { usesOwnApiKey });
+    creditReserved = true;
     const resultText = provider === 'Google Gemini'
       ? await requestGemini(selectedModel, apiKey, prompt)
       : await requestChatCompletion(provider, selectedModel, apiKey, prompt);
@@ -95,6 +144,13 @@ export async function POST(req: Request) {
     const clean = resultText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     return NextResponse.json({ success: true, data: JSON.parse(clean) });
   } catch (error) {
+    if (creditReserved && userId) {
+      await refundCredits(userId, 1, 'Failed AI event idea generation refund', 'general_ai', { usesOwnApiKey })
+        .catch((refundError) => console.error('[generate-event-ideas] credit refund error:', refundError));
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('AI event planning failed:', err);
     const status = error instanceof Error && 'status' in error && typeof error.status === 'number' ? error.status : 500;

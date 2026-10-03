@@ -4,17 +4,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ProjectState,
   SvgElementNode,
-  AnimationTrack,
   Keyframe,
   AnimProperty,
   EasingType,
-  CharacterSlot,
   ToastMessage,
 } from './types';
 import { DEFAULT_DURATION, DEFAULT_FPS, DEFAULT_VIEWBOX } from './constants';
-import { sanitizeAndParseSvg, findElementById, flattenElementTree } from './svgParser';
-import { DEMO_SVG_STRING } from './demoCharacter';
-import { autoDetectCharacterSlots, CHARACTER_PRESETS } from './characterMode';
+import { sanitizeAndParseSvg, findElementById } from './svgParser';
 import { ANIMATION_PRESETS } from './presets';
 import { AiAnimationPlan } from './aiAssistant';
 import { computeElementStylesAtTime } from './animationEngine';
@@ -30,7 +26,6 @@ import { LayersPanel } from './LayersPanel';
 import { CanvasViewport } from './CanvasViewport';
 import { Inspector } from './Inspector';
 import { Timeline } from './Timeline';
-import { CharacterModal } from './CharacterModal';
 import { AiAssistantModal } from './AiAssistantModal';
 import { ExportModal } from './ExportModal';
 import { ShortcutsModal } from './ShortcutsModal';
@@ -88,7 +83,6 @@ export const SvgMotionStudio: React.FC = () => {
   const [canvasBg, setCanvasBg] = useState<'checkerboard' | string>('checkerboard');
 
   // Modal dialog states
-  const [isCharacterModeOpen, setIsCharacterModeOpen] = useState(false);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
@@ -96,6 +90,18 @@ export const SvgMotionStudio: React.FC = () => {
   // Responsive sidebar collapse
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
+  const [autoKeyframe, setAutoKeyframe] = useState(false);
+
+  useEffect(() => {
+    const updateSidebarLayout = () => {
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      setIsLeftCollapsed(isMobile);
+      setIsRightCollapsed(isMobile);
+    };
+    updateSidebarLayout();
+    window.addEventListener('resize', updateSidebarLayout);
+    return () => window.removeEventListener('resize', updateSidebarLayout);
+  }, []);
 
   // Toast Notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -195,77 +201,6 @@ export const SvgMotionStudio: React.FC = () => {
     }
   };
 
-  // 1. Initial Load: Parse the demo mascot SVG and apply default multi-track animation
-  const loadDemoMascot = useCallback(() => {
-    const parsed = sanitizeAndParseSvg(DEMO_SVG_STRING);
-    if (!parsed.success) {
-      addToast('Demo Failed', parsed.error || 'Could not parse demo SVG', 'error');
-      return;
-    }
-
-    const detectedSlots = autoDetectCharacterSlots(parsed.elements);
-
-    // Build rich pre-animated demo tracks (breathing, arm wave, head sway, eye blink, emblem pulse)
-    const idleDef = CHARACTER_PRESETS.find((cp) => cp.id === 'char-idle');
-    const waveDef = CHARACTER_PRESETS.find((cp) => cp.id === 'char-wave');
-    const blinkDef = CHARACTER_PRESETS.find((cp) => cp.id === 'char-blink');
-
-    const demoTracks: AnimationTrack[] = [];
-    if (idleDef) demoTracks.push(...idleDef.generateTracks(detectedSlots, 4.0));
-    if (waveDef) demoTracks.push(...waveDef.generateTracks(detectedSlots, 4.0));
-    if (blinkDef) demoTracks.push(...blinkDef.generateTracks(detectedSlots, 4.0));
-
-    // Chest emblem glow pulse track
-    const chestNode = flattenElementTree(parsed.elements).find((e) =>
-      e.name.toLowerCase().includes('chest')
-    );
-    if (chestNode) {
-      demoTracks.push({
-        id: 'trk_chest_pulse',
-        elementId: chestNode.id,
-        property: 'opacity',
-        keyframes: [
-          { id: 'kf_cp1', time: 0, value: 75, easing: 'easeInOut' },
-          { id: 'kf_cp2', time: 2.0, value: 100, easing: 'easeInOut' },
-          { id: 'kf_cp3', time: 4.0, value: 75, easing: 'easeInOut' },
-        ],
-      });
-    }
-
-    const newProjectState: ProjectState = {
-      version: '1.0',
-      name: 'MCU Mascot Demo',
-      document: {
-        width: parsed.width,
-        height: parsed.height,
-        viewBox: parsed.viewBox,
-        backgroundColor: 'transparent',
-        fps: 30,
-        duration: 4.0,
-        loop: true,
-        name: 'MCU Mascot Demo',
-      },
-      svgRaw: parsed.cleanSvg,
-      elements: parsed.elements,
-      tracks: demoTracks,
-      characterSlots: detectedSlots,
-      isSingleFlattenedPath: parsed.isSingleFlattenedPath,
-      selectedElementId: detectedSlots.body || parsed.elements[0]?.id || null,
-      selectedKeyframeId: null,
-      currentTime: 0,
-      isPlaying: true, // auto play demo
-    };
-
-    playbackTimeRef.current = 0;
-    setProject(newProjectState);
-    pushHistory(newProjectState);
-    addToast('Demo Loaded', 'Superhero character loaded with multi-track animation', 'success');
-
-    setTimeout(() => {
-      if (fitToScreenCallbackRef.current) fitToScreenCallbackRef.current();
-    }, 150);
-  }, [pushHistory]);
-
   // Keep playback time outside React state so playback does not rerender the whole editor.
   useEffect(() => {
     if (!project.isPlaying) playbackTimeRef.current = project.currentTime;
@@ -348,7 +283,6 @@ export const SvgMotionStudio: React.FC = () => {
         return;
       }
 
-      const detectedSlots = autoDetectCharacterSlots(parsed.elements);
       const cleanName = file.name.replace(/\.[^/.]+$/, '');
 
       const newProject: ProjectState = {
@@ -367,7 +301,7 @@ export const SvgMotionStudio: React.FC = () => {
         svgRaw: parsed.cleanSvg,
         elements: parsed.elements,
         tracks: [],
-        characterSlots: detectedSlots,
+        characterSlots: {},
         isSingleFlattenedPath: parsed.isSingleFlattenedPath,
         selectedElementId: parsed.elements[0]?.id || null,
         selectedKeyframeId: null,
@@ -588,7 +522,7 @@ export const SvgMotionStudio: React.FC = () => {
   // 7. Transform Property Updates (Position, Rotation, Scale, Origin, etc.)
   const handleUpdateTransform = useCallback((
     elementId: string,
-    transform: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number; originX?: number; originY?: number }
+    transform: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number; opacity?: number; originX?: number; originY?: number }
   ) => {
     setProject((prev) => {
       let updatedTracks = [...prev.tracks];
@@ -597,36 +531,42 @@ export const SvgMotionStudio: React.FC = () => {
       const applyProp = (prop: AnimProperty, val: number | undefined) => {
         if (val === undefined) return;
 
-        let track = updatedTracks.find((t) => t.elementId === elementId && t.property === prop);
-        if (!track) {
-          track = {
+        const trackIndex = updatedTracks.findIndex(
+          (t) => t.elementId === elementId && t.property === prop
+        );
+        const track = trackIndex >= 0
+          ? updatedTracks[trackIndex]
+          : {
             id: `trk_${Date.now()}_${prop}`,
             elementId,
             property: prop,
             keyframes: [],
           };
-          updatedTracks.push(track);
-        }
+        const keyframes = [...track.keyframes];
 
         // Check if keyframe already exists near playhead
-        const existingKfIndex = track.keyframes.findIndex(
+        const existingKfIndex = keyframes.findIndex(
           (k) => Math.abs(k.time - prev.currentTime) < 0.05
         );
 
         if (existingKfIndex >= 0) {
-          track.keyframes[existingKfIndex] = {
-            ...track.keyframes[existingKfIndex],
+          keyframes[existingKfIndex] = {
+            ...keyframes[existingKfIndex],
             value: val,
           };
         } else {
-          track.keyframes.push({
+          keyframes.push({
             id: `kf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             time: prev.currentTime,
             value: val,
             easing: 'easeInOut',
           });
-          track.keyframes.sort((a, b) => a.time - b.time);
+          keyframes.sort((a, b) => a.time - b.time);
         }
+
+        const updatedTrack = { ...track, keyframes };
+        if (trackIndex >= 0) updatedTracks[trackIndex] = updatedTrack;
+        else updatedTracks.push(updatedTrack);
       };
 
       applyProp('x', transform.x);
@@ -634,6 +574,7 @@ export const SvgMotionStudio: React.FC = () => {
       applyProp('rotation', transform.rotation);
       applyProp('scaleX', transform.scaleX);
       applyProp('scaleY', transform.scaleY);
+      applyProp('opacity', transform.opacity);
       applyProp('originX', transform.originX);
       applyProp('originY', transform.originY);
 
@@ -649,28 +590,66 @@ export const SvgMotionStudio: React.FC = () => {
     handleUpdateTransform(elementId, { [property]: value });
   };
 
+  const handleRecordAllTransforms = (elementId: string) => {
+    setProject((prev) => {
+      const element = findElementById(prev.elements, elementId);
+      if (!element) return prev;
+
+      const styles = computeElementStylesAtTime(
+        prev.tracks,
+        elementId,
+        prev.currentTime,
+        element.initialTransform,
+        element.initialAppearance
+      );
+      const next = {
+        ...prev,
+        tracks: recordAllTransformKeyframes(
+          prev.tracks,
+          elementId,
+          styles,
+          prev.currentTime
+        ),
+      };
+      pushHistory(next);
+      return next;
+    });
+  };
+
+  const handleApplyEasingToTransforms = (elementId: string, easing: EasingType) => {
+    setProject((prev) => {
+      const next = {
+        ...prev,
+        tracks: applyEasingToElementTransforms(prev.tracks, elementId, easing),
+      };
+      pushHistory(next);
+      return next;
+    });
+  };
+
   // 8. Keyframe operations (Add, Delete, Move, Duplicate, Easing)
   const handleToggleKeyframe = (elementId: string, property: AnimProperty) => {
     setProject((prev) => {
       let updatedTracks = [...prev.tracks];
-      let track = updatedTracks.find((t) => t.elementId === elementId && t.property === property);
-
-      if (!track) {
-        track = {
+      const trackIndex = updatedTracks.findIndex(
+        (t) => t.elementId === elementId && t.property === property
+      );
+      const track = trackIndex >= 0
+        ? updatedTracks[trackIndex]
+        : {
           id: `trk_${Date.now()}_${property}`,
           elementId,
           property,
           keyframes: [],
         };
-        updatedTracks.push(track);
-      }
+      const keyframes = [...track.keyframes];
 
-      const existingIndex = track.keyframes.findIndex(
+      const existingIndex = keyframes.findIndex(
         (k) => Math.abs(k.time - prev.currentTime) < 0.05
       );
 
       if (existingIndex >= 0) {
-        track.keyframes.splice(existingIndex, 1);
+        keyframes.splice(existingIndex, 1);
         addToast('Keyframe removed', `Removed ${property} keyframe`, 'info');
       } else {
         const node = findElementById(prev.elements, elementId);
@@ -681,15 +660,19 @@ export const SvgMotionStudio: React.FC = () => {
             ? 50
             : 0;
 
-        track.keyframes.push({
+        keyframes.push({
           id: `kf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           time: prev.currentTime,
           value: currentVal,
           easing: 'easeInOut',
         });
-        track.keyframes.sort((a, b) => a.time - b.time);
+        keyframes.sort((a, b) => a.time - b.time);
         addToast('Keyframe added', `Added ${property} keyframe at ${prev.currentTime.toFixed(2)}s`, 'success');
       }
+
+      const updatedTrack = { ...track, keyframes };
+      if (trackIndex >= 0) updatedTracks[trackIndex] = updatedTrack;
+      else updatedTracks.push(updatedTrack);
 
       const next = { ...prev, tracks: updatedTracks };
       pushHistory(next);
@@ -709,18 +692,27 @@ export const SvgMotionStudio: React.FC = () => {
     });
   };
 
-  const handleDeleteKeyframe = (keyframeId: string) => {
+  const handleDeleteKeyframes = (keyframeIds: string[]) => {
+    if (keyframeIds.length === 0) return;
+    const ids = new Set(keyframeIds);
     setProject((prev) => {
       const updatedTracks = prev.tracks.map((track) => ({
         ...track,
-        keyframes: track.keyframes.filter((kf) => kf.id !== keyframeId),
+        keyframes: track.keyframes.filter((kf) => !ids.has(kf.id)),
       }));
-      const next = { ...prev, tracks: updatedTracks, selectedKeyframeId: null };
+      const next = {
+        ...prev,
+        tracks: updatedTracks,
+        selectedKeyframeId: null,
+        selectedKeyframeIds: [],
+      };
       pushHistory(next);
-      addToast('Keyframe Deleted', '', 'info');
+      addToast(keyframeIds.length === 1 ? 'Keyframe Deleted' : 'Keyframes Deleted', '', 'info');
       return next;
     });
   };
+
+  const handleDeleteKeyframe = (keyframeId: string) => handleDeleteKeyframes([keyframeId]);
 
   const handleDuplicateKeyframe = (keyframeId: string) => {
     setProject((prev) => {
@@ -788,74 +780,51 @@ export const SvgMotionStudio: React.FC = () => {
     addToast('Preset Applied', `Added "${preset.name}" animation keyframes`, 'success');
   };
 
-  // 10. Character Mode Presets & Slot Assignment
-  const handleAssignSlot = (slot: CharacterSlot, elementId: string | null) => {
-    setProject((prev) => {
-      const nextSlots = { ...prev.characterSlots, [slot]: elementId || undefined };
-      const next = { ...prev, characterSlots: nextSlots };
-      pushHistory(next);
-      return next;
-    });
-  };
-
-  const handleApplyCharacterPreset = (presetId: string) => {
-    const preset = CHARACTER_PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
-
-    const newTracks = preset.generateTracks(project.characterSlots, project.document.duration);
-    if (newTracks.length === 0) {
-      addToast(
-        'Slots Needed',
-        `Please bind ${preset.requiredSlots.join(', ')} slots first in Character Mode`,
-        'warning'
-      );
-      return;
-    }
-
-    setProject((prev) => {
-      const existingProps = new Set(newTracks.map((t) => `${t.elementId}_${t.property}`));
-      const filtered = prev.tracks.filter((t) => !existingProps.has(`${t.elementId}_${t.property}`));
-      const next = { ...prev, tracks: [...filtered, ...newTracks] };
-      pushHistory(next);
-      return next;
-    });
-
-    addToast('Character Motion Applied', `Added "${preset.name}" cycle`, 'success');
-  };
-
-  const handleAutoRig = () => {
-    const detected = autoDetectCharacterSlots(project.elements);
-    const count = Object.keys(detected).length;
-    setProject((prev) => {
-      const next = { ...prev, characterSlots: detected };
-      pushHistory(next);
-      return next;
-    });
-    addToast('Auto-Rig Complete', `Mapped ${count} character body slots automatically`, 'success');
-  };
-
-  // 11. AI Assistant Plan Application
+  // 10. AI Assistant Plan Application
   const handleApplyAiPlan = (plan: AiAnimationPlan) => {
     playbackTimeRef.current = 0;
     setProject((prev) => {
       const existingProps = new Set(plan.tracks.map((t) => `${t.elementId}_${t.property}`));
-      const filtered = prev.tracks.filter((t) => !existingProps.has(`${t.elementId}_${t.property}`));
+      const baseTracks = prev.aiAnimationBaseTracks ?? prev.tracks;
+      const filtered = baseTracks.filter((t) => !existingProps.has(`${t.elementId}_${t.property}`));
       const next: ProjectState = {
         ...prev,
         document: {
           ...prev.document,
           duration: plan.duration,
+          fps: plan.fps,
           loop: plan.loop,
         },
         tracks: [...filtered, ...plan.tracks],
+        aiAnimationBaseTracks: baseTracks,
+        aiAnimationBaseDocument: prev.aiAnimationBaseDocument ?? prev.document,
         currentTime: 0,
-        isPlaying: true, // auto preview generated animation
+        isPlaying: false,
       };
       pushHistory(next);
       return next;
     });
 
-    addToast('AI Motion Generated', 'Applied keyframes to timeline tracks', 'success');
+    addToast('AI Motion Applied', 'Editable keyframes were added to the timeline', 'success');
+  };
+
+  const handleResetAiAnimation = () => {
+    setProject((prev) => {
+      if (!prev.aiAnimationBaseTracks) return prev;
+      const next: ProjectState = {
+        ...prev,
+        document: prev.aiAnimationBaseDocument ?? prev.document,
+        tracks: prev.aiAnimationBaseTracks,
+        aiAnimationBaseTracks: null,
+        aiAnimationBaseDocument: null,
+        currentTime: 0,
+        isPlaying: false,
+      };
+      pushHistory(next);
+      return next;
+    });
+    playbackTimeRef.current = 0;
+    addToast('AI Animation Reset', 'Restored the timeline state from before AI animation', 'info');
   };
 
   // 12. Keyboard Shortcuts Listener
@@ -874,9 +843,12 @@ export const SvgMotionStudio: React.FC = () => {
 
       // Delete / Backspace = Delete keyframe
       if (e.code === 'Delete' || e.code === 'Backspace') {
-        if (project.selectedKeyframeId) {
+        const selectedIds = project.selectedKeyframeIds?.length
+          ? project.selectedKeyframeIds
+          : project.selectedKeyframeId ? [project.selectedKeyframeId] : [];
+        if (selectedIds.length > 0) {
           e.preventDefault();
-          handleDeleteKeyframe(project.selectedKeyframeId);
+          handleDeleteKeyframes(selectedIds);
         }
       }
 
@@ -917,7 +889,7 @@ export const SvgMotionStudio: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [project.selectedKeyframeId, handleTogglePlayback]);
+  }, [project.selectedKeyframeId, project.selectedKeyframeIds, handleTogglePlayback]);
 
   return (
     <div
@@ -936,13 +908,10 @@ export const SvgMotionStudio: React.FC = () => {
         onTogglePlay={handleTogglePlayback}
         onRewind={handleRewind}
         onOpenSvgFile={handleOpenSvgFile}
-        onLoadDemo={loadDemoMascot}
         onNewProject={handleNewProject}
         onSaveProject={handleSaveProject}
         onLoadProjectFile={handleLoadProjectFile}
         onOpenExportModal={() => setIsExportOpen(true)}
-        onToggleCharacterMode={() => setIsCharacterModeOpen(!isCharacterModeOpen)}
-        isCharacterModeOpen={isCharacterModeOpen}
         onToggleAiAssistant={() => setIsAiAssistantOpen(!isAiAssistantOpen)}
         isAiAssistantOpen={isAiAssistantOpen}
         onToggleShortcuts={() => setIsShortcutsOpen(true)}
@@ -963,7 +932,7 @@ export const SvgMotionStudio: React.FC = () => {
       />
 
       {/* 2. MIDDLE WORKSPACE (Layers | Canvas | Inspector) */}
-      <div className="flex-1 flex overflow-hidden relative min-h-0">
+      <div className="svg-motion-workspace flex-1 flex overflow-hidden relative min-h-0">
         {/* Left Layers Sidebar */}
         {!isLeftCollapsed && (
           <LayersPanel
@@ -974,8 +943,6 @@ export const SvgMotionStudio: React.FC = () => {
             onToggleLock={handleToggleLock}
             onRenameElement={handleRenameElement}
             onMoveElement={handleMoveElement}
-            characterSlots={project.characterSlots}
-            onAssignSlot={handleAssignSlot}
             tracks={project.tracks}
             isSingleFlattenedPath={project.isSingleFlattenedPath}
           />
@@ -1022,9 +989,12 @@ export const SvgMotionStudio: React.FC = () => {
             }}
             onDeleteKeyframe={handleDeleteKeyframe}
             onDuplicateKeyframe={handleDuplicateKeyframe}
-            characterSlots={project.characterSlots}
-            onAssignSlot={handleAssignSlot}
             onRenameElement={handleRenameElement}
+            autoKeyframe={autoKeyframe}
+            onToggleAutoKeyframe={() => setAutoKeyframe((enabled) => !enabled)}
+            onRecordAllTransforms={handleRecordAllTransforms}
+            onApplyEasingToTransforms={handleApplyEasingToTransforms}
+            onSeek={handleSeek}
           />
         )}
       </div>
@@ -1045,10 +1015,19 @@ export const SvgMotionStudio: React.FC = () => {
         onToggleLoop={() =>
           setProject((p) => ({ ...p, document: { ...p.document, loop: !p.document.loop } }))
         }
-        onSelectKeyframe={(id) => setProject((p) => ({ ...p, selectedKeyframeId: id }))}
+        onSelectKeyframe={(id) => setProject((p) => ({
+          ...p,
+          selectedKeyframeId: id,
+          selectedKeyframeIds: id ? [id] : [],
+        }))}
+        onSelectKeyframes={(ids, primaryId) => setProject((p) => ({
+          ...p,
+          selectedKeyframeIds: ids,
+          selectedKeyframeId: primaryId,
+        }))}
         onAddKeyframeAtPlayhead={(elId, prop) => handleToggleKeyframe(elId, prop)}
         onMoveKeyframe={handleMoveKeyframe}
-        onDeleteKeyframe={handleDeleteKeyframe}
+        onDeleteKeyframes={handleDeleteKeyframes}
         onDuplicateKeyframe={handleDuplicateKeyframe}
         onUpdateKeyframeEasing={handleUpdateKeyframeEasing}
         selectedElementId={project.selectedElementId}
@@ -1056,24 +1035,18 @@ export const SvgMotionStudio: React.FC = () => {
       />
 
       {/* Modals */}
-      <CharacterModal
-        isOpen={isCharacterModeOpen}
-        onClose={() => setIsCharacterModeOpen(false)}
-        elements={project.elements}
-        characterSlots={project.characterSlots}
-        onAssignSlot={handleAssignSlot}
-        onApplyCharacterPreset={handleApplyCharacterPreset}
-        onAutoRig={handleAutoRig}
-      />
-
       <AiAssistantModal
         isOpen={isAiAssistantOpen}
         onClose={() => setIsAiAssistantOpen(false)}
         elements={project.elements}
-        characterSlots={project.characterSlots}
+        svgRaw={project.svgRaw}
         selectedElementId={project.selectedElementId}
         currentDuration={project.document.duration}
+        currentFps={project.document.fps}
+        currentLoop={project.document.loop}
+        hasAiAnimation={Boolean(project.aiAnimationBaseTracks)}
         onApplyPlan={handleApplyAiPlan}
+        onResetAnimation={handleResetAiAnimation}
       />
 
       <ExportModal

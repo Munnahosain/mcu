@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, BrainCircuit, ChevronDown, Heart, Search, Sparkles, UserRound } from "lucide-react";
+import { BarChart3, BrainCircuit, ChevronDown, Heart, Search, UserRound } from "lucide-react";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 type Asset = { title: string; type: string; creator: string; ai: boolean; age: string; tone: string; image: string };

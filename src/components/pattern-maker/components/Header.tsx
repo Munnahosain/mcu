@@ -21,6 +21,7 @@ import {
   Palette,
   Shuffle,
   Pipette,
+  SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
 import ThemedSelect from '@/components/ui/ThemedSelect';
@@ -38,6 +39,8 @@ interface HeaderProps {
   onOpenColorways: () => void;
   onOpenImagePalette?: () => void;
   onScatterMotifs: () => void;
+  onToggleInspector: () => void;
+  isInspectorOpen: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,7 +54,10 @@ export const Header: React.FC<HeaderProps> = ({
   onRedo,
   onOpenHelp,
   onOpenColorways,
+  onOpenImagePalette,
   onScatterMotifs,
+  onToggleInspector,
+  isInspectorOpen,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -158,6 +164,16 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Action Controls: Undo/Redo, Help & Export */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <button
+          type="button"
+          onClick={onToggleInspector}
+          aria-expanded={isInspectorOpen}
+          aria-label={isInspectorOpen ? 'Close settings and layers' : 'Open settings and layers'}
+          title={isInspectorOpen ? 'Close settings and layers' : 'Open settings and layers'}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] text-[var(--text-secondary)] transition hover:text-primary sm:hidden"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </button>
         <div className="flex items-center gap-1 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-0.5">
           <button
             onClick={onUndo}

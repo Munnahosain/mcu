@@ -293,7 +293,7 @@ export async function extractPaletteFromImage(
       img.onload = () => processImage(img);
       img.onerror = () => reject(new Error('Failed to load image from URL'));
       img.src = imageSource;
-    } else if (imageSource instanceof Blob || imageSource instanceof File) {
+    } else if (imageSource instanceof Blob) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
