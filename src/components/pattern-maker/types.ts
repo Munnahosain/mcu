@@ -18,6 +18,24 @@ export type ShapeKind =
   | 'crescent'
   | 'custom-path';
 
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity';
+
 export interface DesignElement {
   id: string;
   name: string;
@@ -30,6 +48,7 @@ export interface DesignElement {
   scaleX: number; // 1 or -1 (flipped)
   scaleY: number; // 1 or -1 (flipped)
   opacity: number; // 0 to 1
+  blendMode?: BlendMode;
   fill: string;
   stroke: string;
   strokeWidth: number;

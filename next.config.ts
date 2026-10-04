@@ -14,9 +14,6 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '*.googleusercontent.com' },
     ],
   },
-  experimental: {
-    optimizeCss: true,
-  },
   serverExternalPackages: ['@resvg/resvg-js'],
 };
 

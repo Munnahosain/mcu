@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  BlendMode,
   DesignElement,
   PatternSettings,
   PhysicalUnit,
@@ -22,6 +23,7 @@ import {
   Scissors,
   CheckCircle2,
   Lock,
+  Blend,
 } from 'lucide-react';
 import { isElementCrossingEdge } from '../utils/seamlessMath';
 
@@ -53,6 +55,27 @@ const TEXTILE_PALETTE = [
   '#ffffff', // Crisp White
   '#1c1917', // Carbon Black
 ];
+
+const BLEND_MODES: Array<{ id: BlendMode; label: string; group: string; description: string }> = [
+  { id: 'normal', label: 'Normal', group: 'Standard', description: 'Default opaque layer blending' },
+  { id: 'multiply', label: 'Multiply', group: 'Darken', description: 'Multiplies colors — ideal for textile dye & shadow effects' },
+  { id: 'darken', label: 'Darken', group: 'Darken', description: 'Retains the darker of overlapping colors' },
+  { id: 'color-burn', label: 'Color Burn', group: 'Darken', description: 'Darkens base color to reflect blend color' },
+  { id: 'screen', label: 'Screen', group: 'Lighten', description: 'Inverts, multiplies, & inverts — ideal for glowing highlights' },
+  { id: 'lighten', label: 'Lighten', group: 'Lighten', description: 'Retains the lighter of overlapping colors' },
+  { id: 'color-dodge', label: 'Color Dodge', group: 'Lighten', description: 'Brightens base color to reflect blend color' },
+  { id: 'overlay', label: 'Overlay', group: 'Contrast', description: 'Combines Multiply and Screen for rich contrast' },
+  { id: 'soft-light', label: 'Soft Light', group: 'Contrast', description: 'Soft, diffused lighting and subtle contrast' },
+  { id: 'hard-light', label: 'Hard Light', group: 'Contrast', description: 'Vivid spotlight effect with punchy contrast' },
+  { id: 'difference', label: 'Difference', group: 'Inversion', description: 'Subtracts colors, creating high-contrast inverse tones' },
+  { id: 'exclusion', label: 'Exclusion', group: 'Inversion', description: 'Softer difference effect with gentler contrast' },
+  { id: 'hue', label: 'Hue', group: 'Component', description: 'Adopts motif hue while preserving backdrop luminosity' },
+  { id: 'saturation', label: 'Saturation', group: 'Component', description: 'Adopts motif saturation while keeping hue & lightness' },
+  { id: 'color', label: 'Color', group: 'Component', description: 'Tints backdrop with the motif hue and chroma' },
+  { id: 'luminosity', label: 'Luminosity', group: 'Component', description: 'Applies brightness while keeping original colors' },
+];
+
+const QUICK_BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay'];
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedElement,
@@ -288,6 +311,85 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     }
                     className="w-full accent-[#18c98a] cursor-pointer"
                   />
+                </div>
+
+                {/* CSS Blend Mode */}
+                <div className="pt-2.5 border-t border-[#252a31] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-[#77808c] flex items-center gap-1.5 font-medium">
+                      <Blend className="w-3.5 h-3.5 text-[#18c98a]" />
+                      <span>CSS Blend Mode</span>
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[10px] text-[#18c98a] bg-[#18c98a]/10 px-1.5 py-0.5 rounded border border-[#18c98a]/20 capitalize">
+                        {selectedElement.blendMode || 'normal'}
+                      </span>
+                      {selectedElement.blendMode && selectedElement.blendMode !== 'normal' && (
+                        <button
+                          type="button"
+                          onClick={() => onUpdateElement({ blendMode: 'normal' })}
+                          className="text-[9px] text-[#77808c] hover:text-white underline transition"
+                          title="Reset to Normal blend mode"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick-Access Common Modes */}
+                  <div className="grid grid-cols-4 gap-1">
+                    {QUICK_BLEND_MODES.map((mode) => {
+                      const isActive = (selectedElement.blendMode || 'normal') === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => onUpdateElement({ blendMode: mode })}
+                          className={`py-1 px-1.5 text-[10px] font-semibold rounded capitalize transition border ${
+                            isActive
+                              ? 'bg-[#18c98a] text-[#071b17] border-[#18c98a] shadow-sm font-bold'
+                              : 'bg-[#20242a] text-[#aeb5bf] border-[#30363e] hover:bg-[#282d34] hover:text-white'
+                          }`}
+                        >
+                          {mode}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Comprehensive Dropdown Selector */}
+                  <div className="relative">
+                    <select
+                      value={selectedElement.blendMode || 'normal'}
+                      onChange={(e) => onUpdateElement({ blendMode: e.target.value as BlendMode })}
+                      className="w-full bg-[#20242a] text-[#f5f7f8] text-xs px-2.5 py-1.5 rounded border border-[#30363e] focus:border-[#18c98a] focus:outline-none cursor-pointer appearance-none pr-7 font-sans"
+                    >
+                      {['Standard', 'Darken', 'Lighten', 'Contrast', 'Inversion', 'Component'].map((group) => (
+                        <optgroup key={group} label={group} className="bg-[#17191e] text-[#18c98a] font-bold">
+                          {BLEND_MODES.filter((m) => m.group === group).map((m) => (
+                            <option key={m.id} value={m.id} className="bg-[#20242a] text-white font-normal py-1">
+                              {m.label} ({m.id})
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-[#77808c] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Active Blend Mode Description */}
+                  {(() => {
+                    const activeModeMeta = BLEND_MODES.find(
+                      (m) => m.id === (selectedElement.blendMode || 'normal')
+                    );
+                    if (!activeModeMeta) return null;
+                    return (
+                      <p className="text-[10px] text-[#77808c] leading-tight px-1 italic">
+                        {activeModeMeta.description}
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

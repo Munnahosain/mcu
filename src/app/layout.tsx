@@ -10,9 +10,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "MCUSTOCK AI | Generate SEO Metadata in Seconds",
+  title: "Design & Retro Raster Studio",
   description:
-    "AI automation platform for stock image creators that automatically generates SEO metadata and CSV files for stock marketplaces.",
+    "Creative suite featuring Pattern Maker, Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
+  openGraph: {
+    title: "Design & Retro Raster Studio",
+    description:
+      "Creative suite featuring Pattern Maker, Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
+  },
   icons: {
     icon: "/MCU-LOGO-0.2V-1.png",
     apple: "/MCU-LOGO-0.2V-1.png",

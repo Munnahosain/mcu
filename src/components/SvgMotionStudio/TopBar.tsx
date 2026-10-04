@@ -39,6 +39,8 @@ interface TopBarProps {
   onOpenExportModal: () => void;
   onToggleAiAssistant: () => void;
   isAiAssistantOpen: boolean;
+  onOpenVeoVideoModal?: () => void;
+  isVeoVideoModalOpen?: boolean;
   onToggleShortcuts: () => void;
   showGrid: boolean;
   onToggleGrid: () => void;
@@ -69,6 +71,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenExportModal,
   onToggleAiAssistant,
   isAiAssistantOpen,
+  onOpenVeoVideoModal,
+  isVeoVideoModalOpen = false,
   onToggleShortcuts,
   showGrid,
   onToggleGrid,
@@ -268,6 +272,23 @@ export const TopBar: React.FC<TopBarProps> = ({
           <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
           <span className="hidden md:inline">AI Assistant</span>
         </button>
+
+        {/* AI Video (Veo 3) Button */}
+        {onOpenVeoVideoModal && (
+          <button
+            type="button"
+            onClick={onOpenVeoVideoModal}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+              isVeoVideoModalOpen
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500 shadow-sm shadow-emerald-500/20'
+                : 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30'
+            }`}
+            title="Generate video with Veo 3 (Animate Photo or Text-to-Video)"
+          >
+            <Film className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">AI Video (Veo)</span>
+          </button>
+        )}
 
         <div className="h-5 w-[1px] bg-[var(--card-border)]" />
 

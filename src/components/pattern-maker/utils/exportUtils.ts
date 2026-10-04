@@ -69,24 +69,25 @@ export function generateTileSvg(
 
   for (const el of sorted) {
     const instances = getToroidalInstances(el, size);
+    const blendStyle = el.blendMode && el.blendMode !== 'normal' ? ` style="mix-blend-mode: ${el.blendMode};"` : '';
     for (const inst of instances) {
       if (el.type === 'shape' && el.shapeKind) {
         const preset = getPresetByKind(el.shapeKind);
         const transform = `translate(${inst.x} ${inst.y}) rotate(${el.rotation}) scale(${el.scaleX} ${el.scaleY}) translate(${-el.width / 2} ${-el.height / 2}) scale(${el.width / 100} ${el.height / 100})`;
         elementsSvg += `
-          <g transform="${transform}" opacity="${el.opacity}">
+          <g transform="${transform}" opacity="${el.opacity}"${blendStyle}>
             <path d="${preset.path}" fill="${el.fill}" stroke="${el.stroke || 'none'}" stroke-width="${el.strokeWidth || 0}" />
           </g>`;
       } else if (el.type === 'path' && el.pathData) {
         const transform = `translate(${inst.x} ${inst.y}) rotate(${el.rotation}) scale(${el.scaleX} ${el.scaleY}) translate(${-el.width / 2} ${-el.height / 2})`;
         elementsSvg += `
-          <g transform="${transform}" opacity="${el.opacity}">
+          <g transform="${transform}" opacity="${el.opacity}"${blendStyle}>
             <path d="${el.pathData}" fill="${el.fill}" stroke="${el.stroke || 'none'}" stroke-width="${el.strokeWidth || 0}" stroke-linecap="round" stroke-linejoin="round" />
           </g>`;
       } else if (el.type === 'text' && el.textContent) {
         const transform = `translate(${inst.x} ${inst.y}) rotate(${el.rotation}) scale(${el.scaleX} ${el.scaleY})`;
         elementsSvg += `
-          <g transform="${transform}" opacity="${el.opacity}">
+          <g transform="${transform}" opacity="${el.opacity}"${blendStyle}>
             <text x="0" y="0" font-family="${escapeXml(el.fontFamily || 'sans-serif')}" font-size="${el.fontSize || 32}" fill="${escapeXml(el.fill)}" text-anchor="middle" dominant-baseline="central">
               ${escapeXml(el.textContent)}
             </text>
@@ -94,7 +95,7 @@ export function generateTileSvg(
       } else if (el.type === 'image' && el.imageUrl) {
         const transform = `translate(${inst.x} ${inst.y}) rotate(${el.rotation}) scale(${el.scaleX} ${el.scaleY})`;
         const embeddedImage = escapeXml(el.imageUrl);
-        elementsSvg += `<g transform="${transform}" opacity="${el.opacity}"><image xlink:href="${embeddedImage}" href="${embeddedImage}" x="${-el.width / 2}" y="${-el.height / 2}" width="${el.width}" height="${el.height}" preserveAspectRatio="xMidYMid meet" /></g>`;
+        elementsSvg += `<g transform="${transform}" opacity="${el.opacity}"${blendStyle}><image xlink:href="${embeddedImage}" href="${embeddedImage}" x="${-el.width / 2}" y="${-el.height / 2}" width="${el.width}" height="${el.height}" preserveAspectRatio="xMidYMid meet" /></g>`;
       }
     }
   }

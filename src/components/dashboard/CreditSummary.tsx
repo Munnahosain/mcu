@@ -33,6 +33,14 @@ function getExpiryLabel(expiresAt?: string | null) {
   })}`;
 }
 
+function isCreditSnapshot(value: unknown): value is CreditSummaryData["credits"] {
+  if (!value || typeof value !== "object") return false;
+  const credits = value as Partial<CreditSummaryData["credits"]>;
+  return ["monthly", "bonus", "used", "remaining", "total"].every(
+    (key) => typeof credits[key as keyof typeof credits] === "number"
+  );
+}
+
 // Module-level cache so the credit data is available immediately across dropdown opens
 let cachedCreditData: CreditSummaryData | null = null;
 let creditRequest: Promise<CreditSummaryData | null> | null = null;
@@ -127,14 +135,6 @@ export default function CreditSummary({ compact = false }: CreditSummaryProps) {
           {message}
         </div>
       </section>
-    );
-  }
-
-  function isCreditSnapshot(value: unknown): value is CreditSummaryData["credits"] {
-    if (!value || typeof value !== "object") return false;
-    const credits = value as Partial<CreditSummaryData["credits"]>;
-    return ["monthly", "bonus", "used", "remaining", "total"].every(
-      (key) => typeof credits[key as keyof typeof credits] === "number"
     );
   }
 
