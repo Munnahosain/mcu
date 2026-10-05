@@ -29,6 +29,7 @@ import { Timeline } from './Timeline';
 import { AiAssistantModal } from './AiAssistantModal';
 import { ExportModal } from './ExportModal';
 import { ShortcutsModal } from './ShortcutsModal';
+import { VeoVideoModal } from './VeoVideoModal';
 import {
   X,
   CheckCircle,
@@ -86,6 +87,7 @@ export const SvgMotionStudio: React.FC = () => {
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isVeoVideoModalOpen, setIsVeoVideoModalOpen] = useState(false);
 
   // Responsive sidebar collapse
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
@@ -914,6 +916,8 @@ export const SvgMotionStudio: React.FC = () => {
         onOpenExportModal={() => setIsExportOpen(true)}
         onToggleAiAssistant={() => setIsAiAssistantOpen(!isAiAssistantOpen)}
         isAiAssistantOpen={isAiAssistantOpen}
+        onOpenVeoVideoModal={() => setIsVeoVideoModalOpen(true)}
+        isVeoVideoModalOpen={isVeoVideoModalOpen}
         onToggleShortcuts={() => setIsShortcutsOpen(true)}
         showGrid={showGrid}
         onToggleGrid={() => setShowGrid(!showGrid)}
@@ -1058,6 +1062,12 @@ export const SvgMotionStudio: React.FC = () => {
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      <VeoVideoModal
+        isOpen={isVeoVideoModalOpen}
+        onClose={() => setIsVeoVideoModalOpen(false)}
+        project={project}
       />
 
       {/* Toast Notifications Overlay */}

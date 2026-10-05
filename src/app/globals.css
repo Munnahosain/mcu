@@ -7576,3 +7576,95 @@ html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/60 { colo
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/65,
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/70,
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
+
+@media (hover: hover) and (pointer: fine) {
+  html body [class*="hover:scale-"]:hover,
+  html body .group:hover [class*="group-hover:scale-"],
+  html body [class*="hover:rotate-"]:hover,
+  html body .group:hover [class*="group-hover:rotate-"] {
+    scale: 1 !important;
+    rotate: 0deg !important;
+  }
+
+  html body [class*="hover:translate-"]:hover,
+  html body [class*="hover:scale-"]:hover,
+  html body [class*="hover:rotate-"]:hover,
+  html body .group:hover [class*="group-hover:translate-"],
+  html body .group:hover [class*="group-hover:scale-"],
+  html body .group:hover [class*="group-hover:rotate-"],
+  html body button:hover,
+  html body a[href]:hover,
+  html body a[role="button"]:hover,
+  html body [role="button"]:hover,
+  html body .card:hover,
+  html body .liquid-card:hover,
+  html body .liquid-icon-shell:hover,
+  html body .glass-hover-lift:hover,
+  html body .glass-hover-scale:hover,
+  html body .btn-hover-lift:hover,
+  html body .glass-card-premium:hover,
+  html body .glass-btn-premium:hover,
+  html body .liquid-button-primary:hover {
+    translate: 0 0 !important;
+    transform: none !important;
+    scale: 1 !important;
+    rotate: 0deg !important;
+    animation: none !important;
+  }
+
+  html body [class*="hover:border-"]:hover,
+  html body .group:hover [class*="group-hover:border-"] {
+    border-color: var(--card-border, var(--input-border, currentColor)) !important;
+  }
+
+  html body [class*="hover:outline-"]:hover:not(:focus-visible),
+  html body .group:hover [class*="group-hover:outline-"]:not(:focus-visible) {
+    outline: none !important;
+  }
+
+  html body [class*="hover:ring-"]:hover:not(:focus-visible),
+  html body .group:hover [class*="group-hover:ring-"]:not(:focus-visible),
+  html body [class*="hover:shadow-"]:hover,
+  html body .group:hover [class*="group-hover:shadow-"],
+  html body button:hover,
+  html body a[href]:hover,
+  html body [role="button"]:hover,
+  html body .card:hover,
+  html body .liquid-card:hover,
+  html body .liquid-icon-shell:hover,
+  html body .glass-hover-lift:hover,
+  html body .glass-hover-scale:hover,
+  html body .glass-hover-glow:hover,
+  html body .btn-hover-lift:hover,
+  html body .glass-card-premium:hover,
+  html body .glass-btn-premium:hover,
+  html body .liquid-button-primary:hover,
+  html body input:hover:not(:focus-visible),
+  html body select:hover:not(:focus-visible),
+  html body textarea:hover:not(:focus-visible) {
+    box-shadow: none !important;
+  }
+
+  html body [class*="hover:brightness-"]:hover,
+  html body .group:hover [class*="group-hover:brightness-"],
+  html body .glass-card-premium:hover,
+  html body .glass-btn-premium:hover,
+  html body .liquid-button-primary:hover,
+  html body input:hover,
+  html body select:hover,
+  html body textarea:hover {
+    filter: none !important;
+  }
+
+  html body input:hover,
+  html body select:hover,
+  html body textarea:hover {
+    transform: none !important;
+    border-color: var(--input-border, var(--card-border, currentColor)) !important;
+  }
+}
+
+html body :focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+}

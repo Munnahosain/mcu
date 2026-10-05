@@ -33,6 +33,7 @@ import { createVideoContactSheet, isVectorFile, isVideoFile, prepareImageForUplo
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ThemedSelect from "@/components/ui/ThemedSelect";
+import ReferenceTemplateGenerator from "@/components/dashboard/ReferenceTemplateGenerator";
 
 type ImageFile = GeneratorImageFile;
 type ExportExtension = 'Default' | 'jpg' | 'jpeg' | 'png' | 'svg' | 'eps' | 'ai' | 'mp4';
@@ -40,6 +41,7 @@ const SETTINGS_KEY = 'mcustock_generator_settings';
 
 type GeneratorSettings = {
   activeTab: 'Metadata' | 'Prompt';
+  promptMode?: 'Normal' | 'Advanced';
   platform: string;
   titleLength: number;
   descriptionLength: number;
@@ -72,6 +74,7 @@ const PROVIDER_KEY_URLS: Record<string, string> = {
 export default function GeneratorPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [activeTab, setActiveTab] = useState<"Metadata" | "Prompt">("Metadata");
+  const [promptMode, setPromptMode] = useState<'Normal' | 'Advanced'>('Normal');
   const [platform, setPlatform] = useState("General");
   const [titleLength, setTitleLength] = useState(200);
   const [descriptionLength, setDescriptionLength] = useState(150);
@@ -138,6 +141,7 @@ export default function GeneratorPage() {
       if (saved) {
         const settings = JSON.parse(saved) as Partial<GeneratorSettings>;
         if (settings.activeTab === 'Metadata' || settings.activeTab === 'Prompt') setActiveTab(settings.activeTab);
+        if (settings.promptMode === 'Normal' || settings.promptMode === 'Advanced') setPromptMode(settings.promptMode);
         if (typeof settings.platform === 'string') setPlatform(settings.platform);
         if (typeof settings.titleLength === 'number') setTitleLength(settings.titleLength);
         if (typeof settings.descriptionLength === 'number') setDescriptionLength(settings.descriptionLength);
@@ -170,14 +174,14 @@ export default function GeneratorPage() {
   useEffect(() => {
     if (!settingsHydrated) return;
     const settings: GeneratorSettings = {
-      activeTab, platform, titleLength, descriptionLength, keywordsCount,
+      activeTab, promptMode, platform, titleLength, descriptionLength, keywordsCount,
       additionalKeywords, negativeTitleWords, negativeKeywords, autoCsvDownload,
       whiteBg, cameraParams, promptLength, usePrefix, prefixText, useSuffix,
       suffixText, useNegativePrompt, negativePromptText, batchMode,
       exportExtension,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }, [settingsHydrated, activeTab, platform, titleLength, descriptionLength, keywordsCount, additionalKeywords, negativeTitleWords, negativeKeywords, autoCsvDownload, whiteBg, cameraParams, promptLength, usePrefix, prefixText, useSuffix, suffixText, useNegativePrompt, negativePromptText, batchMode, exportExtension]);
+  }, [settingsHydrated, activeTab, promptMode, platform, titleLength, descriptionLength, keywordsCount, additionalKeywords, negativeTitleWords, negativeKeywords, autoCsvDownload, whiteBg, cameraParams, promptLength, usePrefix, prefixText, useSuffix, suffixText, useNegativePrompt, negativePromptText, batchMode, exportExtension]);
 
   const saveKey = async () => {
     const trimmed = apiKeyInput.trim();
@@ -571,6 +575,19 @@ export default function GeneratorPage() {
             className="w-full"
             ariaLabel="Generator mode toggle"
           />
+          {activeTab === 'Prompt' && (
+            <SegmentedToggle<'Normal' | 'Advanced'>
+              options={[
+                { id: 'Normal', label: 'Normal Prompt' },
+                { id: 'Advanced', label: 'Advanced Template' },
+              ]}
+              value={promptMode}
+              onChange={setPromptMode}
+              size="md"
+              className="w-full"
+              ariaLabel="Prompt workflow"
+            />
+          )}
         </div>
 
         {/* Option Panel Controls */}
@@ -686,7 +703,7 @@ export default function GeneratorPage() {
                 <input value={negativeKeywords} onChange={e => setNegativeKeywords(e.target.value)} placeholder="e.g. logo, watermark, blurry" className="w-full rounded-xl border border-[var(--card-border)] bg-background px-3 py-2 text-xs text-foreground placeholder:text-foreground/35 outline-none focus:border-primary" />
               </div>
             </div>
-          ) : (
+          ) : promptMode === 'Normal' ? (
             <div className="space-y-5 pt-4 border-t border-[var(--card-border)] text-xs text-foreground font-semibold">
               <div className="flex items-center justify-between">
                 <span>White Background</span>
@@ -750,12 +767,25 @@ export default function GeneratorPage() {
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="rounded-xl border border-primary/10 bg-primary/5 p-3 text-xs leading-relaxed text-[var(--text-secondary)]">
+              Advanced mode analyzes a reference image and builds editable, reusable prompt templates. Your normal prompt generator remains unchanged.
+            </div>
           )}
         </div>
 
       </div>
 
       {/* Main Uploader workspace */}
+      {activeTab === 'Prompt' && promptMode === 'Advanced' ? (
+        <ReferenceTemplateGenerator
+          provider={activeProvider}
+          model={activeModel}
+          apiKey={activeProviderKeyObj?.key}
+          hasStoredKey={apiKeys.some((key) => key.provider === activeProvider)}
+          storageScope={user?.id || user?.email || 'guest'}
+        />
+      ) : (
       <div className="flex min-w-0 flex-col gap-5">
 
         {/* Upload Box */}
@@ -932,6 +962,7 @@ export default function GeneratorPage() {
         )}
 
       </div>
+      )}
 
       {/* API Key Configure Modal */}
       <AnimatePresence>

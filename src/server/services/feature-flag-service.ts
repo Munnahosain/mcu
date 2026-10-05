@@ -13,59 +13,97 @@ type FeatureFlagResult = {
   message?: string;
 };
 
-export async function checkFeatureFlag(userId: string, key: string, fallbackKey?: string): Promise<FeatureFlagResult> {
-  let enabled: boolean;
-  let plans: string[];
-  let message: string;
-  let planSlug: string;
+export type FeatureFlagCheck = {
+  key: string;
+  label: string;
+  fallbackKey?: string;
+};
+
+function denialMessage(label: string, result: FeatureFlagResult) {
+  if (result.allowed) return null;
+  if (result.message) return result.message;
+  if (result.reason === 'plan') return `${label} is not available on your current plan.`;
+  return `${label} is currently disabled.`;
+}
+
+async function checkFeatureFlags(userId: string, checks: FeatureFlagCheck[]) {
+  if (checks.length === 0) return [];
+
+  const lookupKeys = [...new Set(checks.flatMap(({ key, fallbackKey }) => fallbackKey ? [key, fallbackKey] : [key]))];
+  const flagsByKey = new Map<string, { enabled: boolean; plans: string[]; message: string }>();
+  let planSlug = 'free';
+  let userExists = true;
 
   if (!hasMongoDbConfig()) {
-    const flag = inMemoryStore.featureFlags.find((item) => item.key === key)
-      || (fallbackKey ? inMemoryStore.featureFlags.find((item) => item.key === fallbackKey) : undefined);
-    if (!flag) return { allowed: true };
-
+    for (const flag of inMemoryStore.featureFlags) {
+      if (lookupKeys.includes(flag.key)) {
+        flagsByKey.set(flag.key, {
+          enabled: flag.enabled,
+          plans: flag.plans || [],
+          message: flag.message || '',
+        });
+      }
+    }
     const user = findDevUserById(userId);
-    enabled = flag.enabled;
-    plans = flag.plans;
-    message = flag.message || '';
     planSlug = String(user?.planId || 'free').toLowerCase();
   } else {
     await connectToDatabase();
-    const flag = await FeatureFlag.findOne({ key }).select('enabled plans message').lean()
-      || (fallbackKey ? await FeatureFlag.findOne({ key: fallbackKey }).select('enabled plans message').lean() : null);
-    if (!flag) return { allowed: true };
+    const [flags, user] = await Promise.all([
+      FeatureFlag.find({ key: { $in: lookupKeys } }).select('key enabled plans message').lean(),
+      User.findById(userId).select('planId').lean(),
+    ]);
+    for (const flag of flags) {
+      flagsByKey.set(flag.key, {
+        enabled: flag.enabled,
+        plans: flag.plans || [],
+        message: flag.message || '',
+      });
+    }
 
-    const user = await User.findById(userId).select('planId').lean();
-    if (!user) return { allowed: false, reason: 'plan' };
-
-    const subscription = await Subscription.findOne({
-      userId,
-      status: { $in: ['active', 'trial'] },
-    }).sort({ createdAt: -1 }).populate('planId', 'slug').lean();
-    const subscribedPlan = subscription?.planId as { slug?: string } | null;
-    const assignedPlan = user.planId
-      ? await Plan.findById(user.planId).select('slug').lean()
-      : null;
-
-    enabled = flag.enabled;
-    plans = flag.plans || [];
-    message = flag.message || '';
-    planSlug = String(subscribedPlan?.slug || assignedPlan?.slug || 'free').toLowerCase();
+    userExists = Boolean(user);
+    if (user && flagsByKey.size > 0) {
+      const [subscription, assignedPlan] = await Promise.all([
+        Subscription.findOne({
+          userId,
+          status: { $in: ['active', 'trial'] },
+        }).sort({ createdAt: -1 }).populate('planId', 'slug').lean(),
+        user.planId ? Plan.findById(user.planId).select('slug').lean() : Promise.resolve(null),
+      ]);
+      const subscribedPlan = subscription?.planId as { slug?: string } | null;
+      planSlug = String(subscribedPlan?.slug || assignedPlan?.slug || 'free').toLowerCase();
+    }
   }
 
-  if (!enabled) return { allowed: false, reason: 'disabled', message };
-  if (plans.some((plan) => plan.trim().toLowerCase() === planSlug)) {
-    return { allowed: false, reason: 'plan', message };
+  return checks.map(({ key, fallbackKey }) => {
+    const flag = flagsByKey.get(key) || (fallbackKey ? flagsByKey.get(fallbackKey) : undefined);
+    if (!flag) return { key, result: { allowed: true } satisfies FeatureFlagResult };
+    if (!userExists) return { key, result: { allowed: false, reason: 'plan' } satisfies FeatureFlagResult };
+    if (!flag.enabled) {
+      return { key, result: { allowed: false, reason: 'disabled', message: flag.message } satisfies FeatureFlagResult };
+    }
+    if (flag.plans.some((plan) => plan.trim().toLowerCase() === planSlug)) {
+      return { key, result: { allowed: false, reason: 'plan', message: flag.message } satisfies FeatureFlagResult };
+    }
+    return { key, result: { allowed: true } satisfies FeatureFlagResult };
+  });
+}
+
+export async function checkFeatureFlag(userId: string, key: string, fallbackKey?: string): Promise<FeatureFlagResult> {
+  const [{ result }] = await checkFeatureFlags(userId, [{ key, label: key, fallbackKey }]);
+  return result;
+}
+
+export async function getFirstFeatureFlagDenial(userId: string, checks: FeatureFlagCheck[]) {
+  const results = await checkFeatureFlags(userId, checks);
+  for (const { key, result } of results) {
+    const check = checks.find((item) => item.key === key);
+    const error = denialMessage(check?.label || key, result);
+    if (error) return { key, error };
   }
-  return { allowed: true };
+  return null;
 }
 
 export async function getFeatureFlagDenial(userId: string, key: string, label: string, fallbackKey?: string) {
-  const result = await checkFeatureFlag(userId, key, fallbackKey);
-  if (result.allowed) return null;
-  if (result.message) return result.message;
-  if (result.reason === 'plan') {
-    return `${label} is not available on your current plan.`;
-  }
-  return `${label} is currently disabled.`;
+  const denial = await getFirstFeatureFlagDenial(userId, [{ key, label, fallbackKey }]);
+  return denial?.error || null;
 }

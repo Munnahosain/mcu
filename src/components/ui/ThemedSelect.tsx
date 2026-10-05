@@ -100,10 +100,11 @@ export default function ThemedSelect({
 
   useEffect(() => {
     if (!open || !portalMenu) return;
-    updateMenuPosition();
+    const frame = window.requestAnimationFrame(updateMenuPosition);
     window.addEventListener("resize", updateMenuPosition);
     window.addEventListener("scroll", updateMenuPosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
@@ -150,6 +151,7 @@ export default function ThemedSelect({
         aria-expanded={open}
         aria-label={ariaLabel}
         ref={buttonRef}
+        onKeyDown={handleTriggerKeyDown}
         onClick={() => {
           if (!open && portalMenu) updateMenuPosition();
           setOpen((current) => !current);

@@ -31,6 +31,10 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
 import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/CreditSummary";
 import FeaturePageGate from "@/components/dashboard/FeaturePageGate";
+import PersistentBentoTab from "./PersistentBentoTab";
+import PersistentPatternMakerTab from "./PersistentPatternMakerTab";
+import PersistentTradingTab from "./PersistentTradingTab";
+import PersistentTypeboxTab from "./PersistentTypeboxTab";
 
 const dashboardFeatureGates = [
   { path: "/dashboard", exact: true, keys: ["ai_tools", "metadata_generation", "prompt_generation"], feature: "AI Generator" },
@@ -42,11 +46,7 @@ const dashboardFeatureGates = [
   { path: "/dashboard/3d-icon-studio", keys: ["three_d_generation"], feature: "3D Studio" },
   { path: "/dashboard/grid-generator", keys: ["grid_generation"], feature: "Grid Generator" },
   { path: "/dashboard/palette", keys: ["palette_generation"], feature: "Palette Studio" },
-  { path: "/dashboard/typebox", keys: ["typebox_generation"], feature: "Typebox" },
-  { path: "/dashboard/bento", keys: ["bento_generation"], feature: "Bento Studio" },
   { path: "/dashboard/ascii", keys: ["ascii_generation"], feature: "ASCII Studio" },
-  { path: "/dashboard/trading", keys: ["trading_generation"], feature: "Trading Studio" },
-  { path: "/dashboard/pattern-maker", keys: ["pattern_maker", "pattern_generation"], feature: "Pattern Maker" },
   { path: "/dashboard/events", keys: ["ai_tools", "general_ai"], feature: "AI Event Ideas" },
 ];
 
@@ -99,25 +99,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const token = await ensureAccessToken();
       if (cancelled) return;
 
-      let storedUser = getAuthUser();
+      const storedUser = getAuthUser();
       if (token && storedUser) prefetchCreditSummary();
       if (token && storedUser && !storedUser.avatarUrl) {
-        const refreshedUser = await refreshAuthSession();
-        if (refreshedUser) storedUser = { ...refreshedUser, signedInAt: Date.now() };
+        const userId = storedUser.id;
+        void refreshAuthSession().then((refreshedUser) => {
+          if (!cancelled && refreshedUser && getAuthUser()?.id === userId) {
+            setUser({ ...refreshedUser, signedInAt: Date.now() });
+          }
+        });
       }
       if (!token || !storedUser) {
         clearAuthUser();
         setUser(null);
       } else {
         setUser(storedUser);
+        setIsHydrated(true);
         const [billingResponse, adminResponse] = await Promise.all([
           fetch('/api/account/billing', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
           fetch('/api/admin/overview', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
         ]);
+        if (cancelled || getAuthUser()?.id !== storedUser.id) return;
         if (adminResponse?.ok) setCanAccessAdmin(true);
         if (billingResponse?.ok) {
           const billingData = await billingResponse.json().catch(() => null) as { plan?: { name?: string; slug?: string } } | null;
-          if (billingData?.plan?.name && billingData.plan.slug) setActivePlan({ name: billingData.plan.name, slug: billingData.plan.slug });
+          if (!cancelled && getAuthUser()?.id === storedUser.id && billingData?.plan?.name && billingData.plan.slug) {
+            setActivePlan({ name: billingData.plan.name, slug: billingData.plan.slug });
+          }
         }
       }
       setIsHydrated(true);
@@ -536,20 +544,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         >
           <div className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "mx-auto w-full max-w-[1920px]"}>
             <motion.div
-              key={pathname}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
               className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "w-full"}
             >
               {currentFeatureGate ? (
-                <FeaturePageGate
-                  feature={currentFeatureGate.feature}
-                  keys={currentFeatureGate.keys}
-                >
-                  {children}
-                </FeaturePageGate>
-              ) : children}
+                    <FeaturePageGate
+                      feature={currentFeatureGate.feature}
+                      keys={currentFeatureGate.keys}
+                    >
+                      {children}
+                    </FeaturePageGate>
+                  ) : (
+                    children
+                  )}
+              <PersistentBentoTab active={pathname === "/dashboard/bento"} />
+              <PersistentPatternMakerTab active={pathname === "/dashboard/pattern-maker"} />
+              <PersistentTradingTab active={pathname === "/dashboard/trading"} />
+              <PersistentTypeboxTab active={pathname === "/dashboard/typebox"} />
             </motion.div>
           </div>
         </main>

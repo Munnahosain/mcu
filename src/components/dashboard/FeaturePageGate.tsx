@@ -6,15 +6,20 @@ import FeatureDisabledNotice from "@/components/dashboard/FeatureDisabledNotice"
 
 type AccessState = {
   key: string;
+  activation: number;
   status: "allowed" | "disabled";
   error?: string;
 };
 
 export default function FeaturePageGate({
+  active = true,
+  activation = 0,
   feature,
   keys,
   children,
 }: {
+  active?: boolean;
+  activation?: number;
   feature: string;
   keys: string[];
   children: React.ReactNode;
@@ -22,11 +27,25 @@ export default function FeaturePageGate({
   const gateKey = keys.join(",");
   const [access, setAccess] = useState<AccessState | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [timedOutKey, setTimedOutKey] = useState<string | null>(null);
-  const currentAccess = access?.key === gateKey ? access : null;
-  const timedOut = timedOutKey === gateKey;
+  const [timedOutActivation, setTimedOutActivation] = useState<number | null>(null);
+  const currentAccess = active && access?.key === gateKey && access.activation === activation ? access : null;
+  const timedOut = active && timedOutActivation === activation;
 
   useEffect(() => {
+    const invalidateAccess = () => {
+      setAccess(null);
+      setRetryCount((count) => count + 1);
+    };
+    window.addEventListener("mcustock-auth-changed", invalidateAccess);
+    window.addEventListener("storage", invalidateAccess);
+    return () => {
+      window.removeEventListener("mcustock-auth-changed", invalidateAccess);
+      window.removeEventListener("storage", invalidateAccess);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
     let cancelled = false;
 
     void (async () => {
@@ -34,6 +53,7 @@ export default function FeaturePageGate({
         const token = await ensureAccessToken();
         const response = await fetch(`/api/feature-flags?key=${encodeURIComponent(gateKey)}`, {
           credentials: "include",
+          cache: "no-store",
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
         const payload = await response.json() as { success?: boolean; error?: string };
@@ -41,17 +61,19 @@ export default function FeaturePageGate({
           if (!cancelled) {
             setAccess({
               key: gateKey,
+              activation,
               status: "disabled",
               error: payload.error || `Unable to check ${feature.toLowerCase()} availability (HTTP ${response.status}).`,
             });
           }
           return;
         }
-        if (!cancelled) setAccess({ key: gateKey, status: "allowed" });
+        if (!cancelled) setAccess({ key: gateKey, activation, status: "allowed" });
       } catch (error) {
         if (!cancelled) {
           setAccess({
             key: gateKey,
+            activation,
             status: "disabled",
             error: error instanceof Error ? error.message : `Unable to check ${feature.toLowerCase()} availability.`,
           });
@@ -62,14 +84,16 @@ export default function FeaturePageGate({
     return () => {
       cancelled = true;
     };
-  }, [feature, gateKey, retryCount]);
+  }, [active, activation, feature, gateKey, retryCount]);
 
   useEffect(() => {
+    if (!active) return;
     if (currentAccess) return;
-    const timeoutId = setTimeout(() => setTimedOutKey(gateKey), 10000);
+    const timeoutId = setTimeout(() => setTimedOutActivation(activation), 10000);
     return () => clearTimeout(timeoutId);
-  }, [currentAccess, gateKey, retryCount]);
+  }, [active, activation, currentAccess, retryCount]);
 
+  if (!active) return children;
   if (currentAccess?.status === "disabled" || timedOut) {
     return (
       <FeatureDisabledNotice
@@ -83,7 +107,7 @@ export default function FeaturePageGate({
           timedOut || currentAccess?.error?.includes("Unable to check")
             ? () => {
                 setAccess(null);
-                setTimedOutKey(null);
+                setTimedOutActivation(null);
                 setRetryCount((count) => count + 1);
               }
             : undefined

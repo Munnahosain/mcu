@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/server/auth/request-auth';
-import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
+import { getFirstFeatureFlagDenial } from '@/server/services/feature-flag-service';
 
 const CHECKABLE_FLAGS = new Set([
   'analysis', 'ai_tools', 'metadata_generation', 'prompt_generation', 'general_ai',
@@ -12,10 +12,17 @@ const CHECKABLE_FLAGS = new Set([
   'pattern_maker', 'vector_splitter',
 ]);
 
+function featureFlagResponse(body: object, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  });
+}
+
 export async function GET(req: Request) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) {
-    return NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 });
+    return featureFlagResponse({ success: false, error: 'Authentication required.' }, 401);
   }
 
   const keys = new URL(req.url).searchParams.get('key')
@@ -23,16 +30,17 @@ export async function GET(req: Request) {
     .map((key) => key.trim().toLowerCase())
     .filter(Boolean) || [];
   if (keys.length === 0 || keys.some((key) => !CHECKABLE_FLAGS.has(key))) {
-    return NextResponse.json({ success: false, error: 'Unsupported feature flag.' }, { status: 400 });
+    return featureFlagResponse({ success: false, error: 'Unsupported feature flag.' }, 400);
   }
 
-  for (const key of keys) {
-    const legacyKey = key === 'background_removal' ? 'bg_remover' : undefined;
-    const error = await getFeatureFlagDenial(userId, key, key.replaceAll('_', ' '), legacyKey);
-    if (error) {
-      return NextResponse.json({ success: false, error, disabledKey: key }, { status: 403 });
-    }
+  const denial = await getFirstFeatureFlagDenial(userId, keys.map((key) => ({
+    key,
+    label: key.replaceAll('_', ' '),
+    fallbackKey: key === 'background_removal' ? 'bg_remover' : undefined,
+  })));
+  if (denial) {
+    return featureFlagResponse({ success: false, error: denial.error, disabledKey: denial.key }, 403);
   }
 
-  return NextResponse.json({ success: true, enabled: true, keys });
+  return featureFlagResponse({ success: true, enabled: true, keys });
 }

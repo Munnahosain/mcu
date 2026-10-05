@@ -650,6 +650,7 @@ export const ArtboardCanvas: React.FC<ArtboardCanvasProps> = ({
                           key={`${el.id}-inst-${idx}`}
                           transform={`translate(${inst.x}, ${inst.y}) rotate(${el.rotation}) scale(${el.scaleX}, ${el.scaleY})`}
                           opacity={inst.isPrimary ? el.opacity : el.opacity * 0.75}
+                          style={el.blendMode && el.blendMode !== 'normal' ? { mixBlendMode: el.blendMode } : undefined}
                           className="cursor-move"
                           onPointerDown={(e) =>
                             handleElementPointerDown(e, el, { dx: inst.dx, dy: inst.dy })
