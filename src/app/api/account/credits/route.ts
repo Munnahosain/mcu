@@ -108,8 +108,8 @@ export async function POST(req: Request) {
       'three_d_generation', 'grid_generation', 'palette_generation', 'typebox_generation',
       'bento_generation', 'ascii_generation', 'trading_generation', 'splitter_export',
       'metadata_generation', 'prompt_generation', 'advanced_metadata', 'batch_generation',
-      'advanced_ai', 'heavy_ai', 'background_removal', 'pattern_generation',
-      'svg_motion', 'motion_generation', 'color_extraction', 'image_palette', 'pattern_maker',
+      'advanced_ai', 'heavy_ai', 'background_removal', 'svg_motion',
+      'motion_generation', 'color_extraction',
       'vector_splitter', 'general_ai'
     ]);
     if (!allowedFeatures.has(feature)) {
@@ -130,14 +130,6 @@ export async function POST(req: Request) {
     const legacyKey = feature === 'background_removal' ? 'bg_remover' : undefined;
     const featureDenial = await getFeatureFlagDenial(user._id.toString(), feature, feature.replaceAll('_', ' '), legacyKey);
     if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
-    if (feature === 'pattern_generation' || feature === 'image_palette') {
-      const studioDenial = await getFeatureFlagDenial(user._id.toString(), 'pattern_maker', 'Pattern Maker');
-      if (studioDenial) return NextResponse.json({ success: false, error: studioDenial }, { status: 403 });
-    }
-    if (feature === 'image_palette') {
-      const extractionDenial = await getFeatureFlagDenial(user._id.toString(), 'color_extraction', 'Color extraction');
-      if (extractionDenial) return NextResponse.json({ success: false, error: extractionDenial }, { status: 403 });
-    }
     if (feature === 'splitter_export') {
       const splitterDenial = await getFeatureFlagDenial(user._id.toString(), 'vector_splitter', 'Vector splitter');
       if (splitterDenial) return NextResponse.json({ success: false, error: splitterDenial }, { status: 403 });

@@ -19,11 +19,11 @@ import {
   ShieldCheck,
   ChevronDown,
   Type,
-  Scissors,
   Calendar,
   CreditCard,
   LifeBuoy,
   Film,
+  PenTool,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
@@ -32,7 +32,6 @@ import { GeneratorStateProvider } from "./GeneratorStateContext";
 import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/CreditSummary";
 import FeaturePageGate from "@/components/dashboard/FeaturePageGate";
 import PersistentBentoTab from "./PersistentBentoTab";
-import PersistentPatternMakerTab from "./PersistentPatternMakerTab";
 import PersistentTradingTab from "./PersistentTradingTab";
 import PersistentTypeboxTab from "./PersistentTypeboxTab";
 
@@ -41,7 +40,7 @@ const dashboardFeatureGates = [
   { path: "/dashboard/analytics", keys: ["analysis"], feature: "Market analysis" },
   { path: "/dashboard/generator", keys: ["ai_tools", "metadata_generation", "prompt_generation"], feature: "AI Generator" },
   { path: "/dashboard/prompts", keys: ["ai_tools", "prompt_generation"], feature: "Prompt Generator" },
-  { path: "/dashboard/svg-motion", keys: ["ai_tools", "svg_motion"], feature: "SVG Motion AI" },
+  { path: "/dashboard/svg-motion", keys: ["ai_tools", "svg_motion"], feature: "Motion Studio AI" },
   { path: "/dashboard/bg-remover", keys: ["ai_tools", "background_removal"], feature: "Background remover" },
   { path: "/dashboard/3d-icon-studio", keys: ["three_d_generation"], feature: "3D Studio" },
   { path: "/dashboard/grid-generator", keys: ["grid_generation"], feature: "Grid Generator" },
@@ -58,14 +57,14 @@ function getDashboardFeatureGate(pathname: string | null) {
 const navLinks = [
   { name: "Metadata", href: "/dashboard/generator", icon: Sparkles },
   { name: "3D Icon Studio", href: "/dashboard/3d-icon-studio", icon: Box },
-  { name: "SVG Motion", href: "/dashboard/svg-motion", icon: Film },
+  { name: "Motion Studio", href: "/dashboard/svg-motion", icon: Film },
+  { name: "Mata Pattern Studio", href: "/dashboard/vector-editor", icon: PenTool },
   { name: "BG Remover", href: "/dashboard/bg-remover", icon: Eraser },
   { name: "Bento", href: "/dashboard/bento", icon: LayoutIcon },
   { name: "Grid", href: "/dashboard/grid-generator", icon: Grid3X3 },
   { name: "Trading", href: "/dashboard/trading", icon: Activity },
   { name: "Palette", href: "/dashboard/palette", icon: Pipette },
   { name: "Typebox", href: "/dashboard/typebox", icon: Type },
-  { name: "Pattern Maker", href: "/dashboard/pattern-maker", icon: Scissors },
   { name: "Raster Lab", href: "/dashboard/ascii", icon: Binary },
   { name: "Events", href: "/dashboard/events", icon: Calendar },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
@@ -193,12 +192,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : { label: (activePlan?.name || 'PRO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${activePlan?.slug || 'pro'}` };
 
   const isSvgMotion = pathname?.startsWith('/dashboard/svg-motion');
+  const isVectorEditor = pathname === '/dashboard/vector-editor';
   const currentFeatureGate = getDashboardFeatureGate(pathname);
 
   return (
     <GeneratorStateProvider>
       <div className={`relative w-full flex flex-col bg-[var(--main-bg)] text-foreground selection:bg-primary selection:text-white ${
-        isSvgMotion ? "h-screen overflow-hidden" : "min-h-screen"
+        isSvgMotion || isVectorEditor ? "h-dvh overflow-hidden" : "min-h-screen"
       }`}>
         <Link
           href="/"
@@ -537,17 +537,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* 2. FULL-WIDTH WORKSPACE CONTENT */}
         <main
           className={`flex-1 w-full min-w-0 bg-transparent relative z-10 flex flex-col ${
-            isSvgMotion
-              ? "px-0 pb-0 pt-1.5 sm:pt-2 overflow-hidden"
+            isSvgMotion || isVectorEditor
+                ? `min-h-0 overflow-hidden p-0 dashboard-fullscreen-studio-main ${isVectorEditor ? "dashboard-vector-editor-main" : ""}`
               : "px-3 py-2 pb-20 sm:px-6 sm:py-4 lg:pb-4"
           }`}
         >
-          <div className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "mx-auto w-full max-w-[1920px]"}>
+          <div className={
+            isSvgMotion || isVectorEditor
+              ? "flex w-full min-h-0 min-w-0 flex-1 flex-col"
+              : "mx-auto w-full max-w-[1920px]"
+          }>
             <motion.div
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className={isSvgMotion ? "w-full flex-1 flex flex-col min-h-0" : "w-full"}
+              className={
+                isSvgMotion || isVectorEditor
+                  ? "flex w-full min-h-0 min-w-0 flex-1 flex-col"
+                  : "w-full"
+              }
             >
               {currentFeatureGate ? (
                     <FeaturePageGate
@@ -560,7 +568,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     children
                   )}
               <PersistentBentoTab active={pathname === "/dashboard/bento"} />
-              <PersistentPatternMakerTab active={pathname === "/dashboard/pattern-maker"} />
               <PersistentTradingTab active={pathname === "/dashboard/trading"} />
               <PersistentTypeboxTab active={pathname === "/dashboard/typebox"} />
             </motion.div>

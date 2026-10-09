@@ -401,6 +401,8 @@ export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
       originalId,
       tagName: tag as SvgTagName,
       name,
+      textContent: tag === 'text' ? node.textContent || '' : undefined,
+      isTextEditable: tag === 'text' ? node.children.length === 0 : undefined,
       className: node.getAttribute('class') || undefined,
       attributes,
       parentId,

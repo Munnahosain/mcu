@@ -15,6 +15,19 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ['@resvg/resvg-js'],
+  async headers() {
+    return [
+      {
+        // VectorCraft web build: hashed .js/.wasm files never change, index.html must revalidate.
+        source: '/vectorcraft/:path((?!index\\.html).+)',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      {
+        source: '/vectorcraft/index.html',
+        headers: [{ key: 'Cache-Control', value: 'no-cache' }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

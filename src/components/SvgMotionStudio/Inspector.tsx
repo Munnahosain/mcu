@@ -57,6 +57,8 @@ interface InspectorProps {
   onDeleteKeyframe: (keyframeId: string) => void;
   onDuplicateKeyframe: (keyframeId: string) => void;
   onRenameElement: (elementId: string, newName: string) => void;
+  onUpdateElementFill: (elementId: string, fill: string) => void;
+  onUpdateElementText: (elementId: string, text: string) => void;
   autoKeyframe: boolean;
   onToggleAutoKeyframe: () => void;
   onRecordAllTransforms: (elementId: string) => void;
@@ -76,6 +78,8 @@ export const Inspector: React.FC<InspectorProps> = ({
   onDeleteKeyframe,
   onDuplicateKeyframe,
   onRenameElement,
+  onUpdateElementFill,
+  onUpdateElementText,
   autoKeyframe,
   onToggleAutoKeyframe,
   onRecordAllTransforms,
@@ -396,6 +400,43 @@ export const Inspector: React.FC<InspectorProps> = ({
             </div>
           </div>
         </div>
+
+        {(selectedNode.initialAppearance?.fill || selectedNode.tagName === 'text') && (
+          <div className="space-y-3 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] p-3">
+            <div className="border-b border-[var(--card-border)] pb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Layer Appearance
+            </div>
+            <label className="flex items-center justify-between gap-3 text-[11px] font-semibold text-foreground">
+              Fill color
+              <input
+                type="color"
+                value={/^#[0-9a-f]{6}$/i.test(selectedNode.initialAppearance?.fill || '')
+                  ? selectedNode.initialAppearance?.fill || '#ffffff'
+                  : '#ffffff'}
+                onChange={(event) => onUpdateElementFill(selectedNode.id, event.target.value)}
+                aria-label="Layer fill color"
+                className="h-8 w-12 cursor-pointer rounded-lg border border-[var(--card-border)] bg-transparent p-0.5"
+              />
+            </label>
+            {selectedNode.tagName === 'text' && selectedNode.isTextEditable && (
+              <label className="block space-y-1.5 text-[11px] font-semibold text-foreground">
+                Text content
+                <input
+                  type="text"
+                  value={selectedNode.textContent || ''}
+                  onChange={(event) => onUpdateElementText(selectedNode.id, event.target.value)}
+                  className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-2 text-xs font-medium text-foreground outline-none focus:border-primary"
+                  placeholder="Type your text"
+                />
+              </label>
+            )}
+            {selectedNode.tagName === 'text' && !selectedNode.isTextEditable && (
+              <p className="text-[10px] leading-relaxed text-[var(--text-muted)]">
+                This text uses nested SVG formatting and cannot be edited as a single string.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ============================================================== */}
         {/* 2. TRANSFORM CONTROLS (Scale, Rotation, Opacity, Position)      */}

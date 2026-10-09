@@ -58,19 +58,32 @@ function extractJson(text: string): unknown {
 function getProviderError(error: unknown): { message: string; status: number } {
   const raw = error instanceof Error ? error.message : String(error || '');
   const lower = raw.toLowerCase();
-  const status = typeof error === 'object' && error && 'status' in error
-    ? Number((error as { status?: unknown }).status)
-    : 0;
+  const providerStatus = typeof error === 'object' && error
+    ? ('status' in error ? error.status : 'statusCode' in error ? error.statusCode : undefined)
+    : undefined;
+  const status = Number(providerStatus) || 0;
   if (status === 429 || lower.includes('rate limit') || lower.includes('quota')) {
     return { message: 'Gemini rate limit reached. Please wait a moment and retry.', status: 429 };
   }
-  if (status === 401 || status === 403 || lower.includes('api key') || lower.includes('unauthorized')) {
+  if (status === 401 || lower.includes('api key') || lower.includes('unauthorized')) {
     return { message: 'Gemini API key is invalid or does not have model access. Check the key in Settings.', status: 401 };
+  }
+  if (status === 403 || lower.includes('permission denied') || lower.includes('permission_denied')) {
+    return { message: 'Gemini denied this request. Check that your API key and Google account have access to Gemini API.', status: 403 };
+  }
+  if (status === 404 || lower.includes('model not found') || lower.includes('not found for api version')) {
+    return { message: 'The configured Gemini model is unavailable for this API key. Check the model access and try again.', status: 502 };
   }
   if (lower.includes('timeout') || lower.includes('aborted')) {
     return { message: 'Gemini timed out while planning the animation. Please retry.', status: 504 };
   }
-  console.error('SVG animation assistant provider failure:', raw.slice(0, 300));
+  if (status === 400 || lower.includes('invalid argument') || lower.includes('invalid request')) {
+    return { message: 'Gemini rejected the animation request. Try a shorter prompt or a simpler SVG, then retry.', status: 422 };
+  }
+  if (status >= 500 || lower.includes('fetch failed') || lower.includes('econnreset')) {
+    return { message: 'Gemini is temporarily unavailable. Please wait a moment and retry.', status: 503 };
+  }
+  console.error('SVG animation assistant provider failure:', { status, message: raw.slice(0, 300) });
   return { message: 'Gemini could not create an animation plan. Please retry.', status: 502 };
 }
 

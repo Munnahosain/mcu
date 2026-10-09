@@ -8,8 +8,7 @@ const CHECKABLE_FLAGS = new Set([
   'advanced_metadata', 'batch_generation', 'advanced_ai', 'heavy_ai',
   'three_d_generation', 'grid_generation', 'palette_generation', 'typebox_generation',
   'bento_generation', 'ascii_generation', 'trading_generation', 'splitter_export',
-  'pattern_generation', 'motion_generation', 'color_extraction', 'image_palette',
-  'pattern_maker', 'vector_splitter',
+  'motion_generation', 'color_extraction', 'vector_splitter',
 ]);
 
 function featureFlagResponse(body: object, status = 200) {

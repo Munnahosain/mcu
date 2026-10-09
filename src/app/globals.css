@@ -5464,288 +5464,6 @@ html.light .liquid-theme-switch {
   outline: none;
 }
 
-/* The imported Pattern Maker uses a dark studio palette by default. Keep dark
-   mode unchanged, but map its literal utility colors to the global light theme. */
-html.light .pattern-maker-app [class~="bg-[#0b0c0e]"] { background-color: var(--background) !important; }
-html.light .pattern-maker-app [class~="bg-[#101114]"] { background-color: var(--sidebar-bg) !important; }
-html.light .pattern-maker-app [class~="bg-[#0d0e12]"] { background-color: var(--card-bg) !important; }
-html.light .pattern-maker-app [class~="bg-[#17191e]"] { background-color: var(--card-bg) !important; }
-html.light .pattern-maker-app [class~="bg-[#20242a]"] { background-color: var(--input-bg) !important; }
-html.light .pattern-maker-app [class~="bg-[#2a2f36]"] { background-color: var(--hover-bg-strong) !important; }
-html.light .pattern-maker-app [class~="border-[#252a31]"] { border-color: var(--card-border) !important; }
-html.light .pattern-maker-app [class~="border-[#30363e]"] { border-color: var(--input-border) !important; }
-html.light .pattern-maker-app [class~="text-[#f5f7f8]"] { color: var(--foreground) !important; }
-html.light .pattern-maker-app [class~="text-[#aeb5bf]"] { color: var(--text-secondary) !important; }
-html.light .pattern-maker-app [class~="text-[#77808c]"] { color: var(--text-muted) !important; }
-html.light .pattern-maker-app [class~="hover:bg-[#17191e]"]:hover { background-color: var(--hover-bg) !important; }
-html.light .pattern-maker-app [class~="hover:bg-[#20242a]"]:hover { background-color: var(--hover-bg-strong) !important; }
-html.light .pattern-maker-app [class~="hover:text-[#f5f7f8]"]:hover { color: var(--foreground) !important; }
-html.light .pattern-maker-app [class~="bg-stone-950"] { background-color: var(--background) !important; }
-
-/* Pattern Maker control skin: use the same quiet surfaces, borders, and
-   field treatment as the rest of the dashboard in both themes. */
-.pattern-maker-app button,
-.pattern-maker-app input,
-.pattern-maker-app select {
-  font-family: inherit;
-}
-
-.pattern-maker-app button {
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-}
-
-.pattern-maker-app input[type="number"],
-.pattern-maker-app input[type="text"],
-.pattern-maker-app select {
-  min-height: 32px;
-  border-radius: 10px;
-}
-
-.pattern-maker-app input[type="range"] {
-  width: 100%;
-  height: 20px;
-  margin: 0;
-  appearance: none;
-  cursor: pointer;
-  background: transparent;
-  accent-color: var(--primary);
-}
-
-.pattern-maker-app input[type="range"]::-webkit-slider-runnable-track {
-  height: 5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 18%, var(--input-border));
-}
-
-.pattern-maker-app input[type="range"]::-webkit-slider-thumb {
-  width: 16px;
-  height: 16px;
-  margin-top: -5.5px;
-  appearance: none;
-  border: 2px solid var(--background);
-  border-radius: 999px;
-  background: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 24%, transparent);
-}
-
-.pattern-maker-app input[type="range"]::-moz-range-track {
-  height: 5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 18%, var(--input-border));
-}
-
-.pattern-maker-app input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--background);
-  border-radius: 999px;
-  background: var(--primary);
-}
-
-.pattern-maker-app input[type="range"]:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary) 50%, transparent);
-  outline-offset: 3px;
-}
-
-.pattern-maker-app #artboard-workspace {
-  min-width: 0;
-}
-
-/* The dashboard shell reserves a small content gutter. The studio's ruler
-   should dock directly to the inspector instead of inheriting that gutter. */
-.pattern-maker-canvas {
-  margin-left: -2.5rem;
-  width: calc(100% + 2.5rem);
-}
-
-@media (max-width: 640px) {
-  .pattern-maker-canvas {
-    margin-left: -1rem;
-    width: calc(100% + 1rem);
-  }
-}
-
-.pattern-maker-app #artboard-workspace > .absolute.top-0.left-0 {
-  margin-left: -1px;
-}
-
-html.light .pattern-maker-app [class*="from-[#101114]"],
-html.light .pattern-maker-app [class*="via-[#101114]"],
-html.light .pattern-maker-app [class*="to-[#0b0c0e]"] {
-  --tw-gradient-from: var(--card-bg) !important;
-  --tw-gradient-via: var(--background) !important;
-  --tw-gradient-to: var(--background) !important;
-}
-
-html.light .pattern-maker-app [class*="bg-[#17191e]/"] {
-  background-color: color-mix(in srgb, var(--card-bg) 92%, transparent) !important;
-}
-
-html.light .pattern-maker-app [class*="bg-[#101114]/"] {
-  background-color: color-mix(in srgb, var(--sidebar-bg) 92%, transparent) !important;
-}
-
-html.light .pattern-maker-app [class*="text-[#071b17]"] {
-  color: var(--brand-ink) !important;
-}
-
-html.light .pattern-maker-app [class*="shadow-2xl"],
-html.light .pattern-maker-app [class*="shadow-lg"] {
-  --tw-shadow-color: rgba(15, 23, 42, 0.12) !important;
-}
-
-html.light .pattern-maker-app input,
-html.light .pattern-maker-app select {
-  color: var(--foreground) !important;
-  background-color: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-}
-
-html.light .pattern-maker-app input::placeholder {
-  color: var(--text-muted) !important;
-}
-
-html.dark .pattern-maker-app input,
-html.dark .pattern-maker-app select {
-  color-scheme: dark;
-}
-
-@media (max-width: 900px) {
-  .pattern-maker-app .pattern-maker-toolbar {
-    width: 48px;
-  }
-
-  .pattern-maker-app aside[class*="w-[clamp"] {
-    width: 270px;
-    max-width: 36vw;
-  }
-}
-
-@media (max-width: 640px) {
-  .pattern-maker-workspace {
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar {
-    order: 0;
-    width: 100%;
-    min-height: 48px;
-    height: 48px;
-    flex-direction: row;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-right: 0;
-    border-bottom: 1px solid var(--card-border);
-    padding: 4px;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar > div {
-    flex-shrink: 0;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar {
-    overscroll-behavior: contain;
-    scrollbar-width: none;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar > div {
-    width: max-content;
-    flex-direction: row;
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar > div > div.w-6 {
-    width: 1px;
-    height: 24px;
-    border-bottom: 0;
-    border-right: 1px solid var(--card-border);
-    margin: 0 3px;
-  }
-
-  .pattern-maker-app aside.pattern-maker-inspector {
-    display: none;
-    position: absolute;
-    z-index: 40;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    order: 2;
-    width: 100%;
-    max-width: none;
-    height: min(55dvh, 420px);
-    min-height: 220px;
-    max-height: calc(100% - 3.5rem);
-    flex-shrink: 0;
-    border-right: 0;
-    border: 1px solid var(--card-border);
-    border-radius: 1rem 1rem 0 0;
-    box-shadow: 0 -16px 48px rgb(0 0 0 / 35%);
-  }
-
-  .pattern-maker-workspace[data-inspector-open="true"] .pattern-maker-inspector {
-    display: flex;
-  }
-
-  .pattern-maker-app .pattern-maker-stage {
-    order: 1;
-    flex: 1 1 0;
-    width: 100%;
-    min-height: 0;
-  }
-
-  .pattern-maker-canvas {
-    width: 100%;
-    min-height: 0;
-    margin-left: 0;
-  }
-
-  .pattern-maker-header {
-    height: 3.5rem;
-    min-height: 3.5rem;
-    margin: 0;
-    border-radius: 0;
-    gap: 0.5rem;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-  }
-
-  .pattern-maker-header::-webkit-scrollbar {
-    display: none;
-  }
-
-  .pattern-maker-header h1 {
-    font-size: 1rem;
-  }
-
-  .pattern-maker-app > .pattern-maker-workspace {
-    flex: 1 1 0;
-    min-height: 0;
-  }
-
-  .pattern-maker-app .pattern-maker-toolbar button {
-    min-width: 2.5rem;
-    min-height: 2.5rem;
-  }
-
-  .pattern-maker-app .pattern-maker-export-menu {
-    max-width: calc(100vw - 1.5rem);
-  }
-
-  .pattern-maker-app > .fixed.bottom-6.right-6 {
-    right: 0.75rem;
-    bottom: calc(env(safe-area-inset-bottom) + 1rem);
-    left: 0.75rem;
-    max-width: calc(100vw - 1.5rem);
-  }
-}
-
 @media (max-width: 767px) {
   .svg-motion-topbar {
     justify-content: flex-start;
@@ -5788,9 +5506,8 @@ html.dark .pattern-maker-app select {
   }
 
   .svg-motion-timeline {
-    height: min(30dvh, 13rem);
-    min-height: 9rem;
-    max-height: 15rem;
+    min-height: 10rem;
+    max-height: 60dvh;
   }
 
   .svg-motion-timeline > div:nth-child(2) > div:first-child {
@@ -7187,6 +6904,16 @@ html.dark .dashboard-mobile-nav {
   display: none;
 }
 
+main.dashboard-fullscreen-studio-main {
+  padding: 0 !important;
+}
+
+@media (max-width: 1023px) {
+  main.dashboard-vector-editor-main {
+    padding-bottom: calc(3.875rem + max(0.75rem, env(safe-area-inset-bottom))) !important;
+  }
+}
+
 .dashboard-mobile-home-logo {
   display: none;
 }
@@ -7213,7 +6940,7 @@ html.dark .dashboard-mobile-home-logo {
   left: auto;
   right: 0.5rem;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
-  width: min(17.25rem, calc(100% - 1rem));
+  width: min(24rem, calc(100% - 1rem));
   height: 3.875rem;
   min-height: 3.875rem;
   max-height: 3.875rem;
@@ -7473,14 +7200,7 @@ html.dark select option:checked {
   color: #06251b !important;
 }
 
-@media (max-width: 640px) {
-  .pattern-maker-header .pattern-maker-export-menu {
-    position: fixed;
-    top: calc(env(safe-area-inset-top) + 4.5rem);
-    right: 0.75rem;
-    margin-top: 0;
-  }
-}
+
 
 /* Marketing navigation labels stay white across themes, while inactive dark-mode labels retain muted contrast. */
 html body .liquid-nav-shell .liquid-nav-link,

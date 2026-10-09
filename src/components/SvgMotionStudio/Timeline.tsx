@@ -31,8 +31,8 @@ import {
   EasingType,
   SvgElementNode,
 } from './types';
-import { EASING_OPTIONS } from './constants';
-import { findElementById } from './svgParser';
+import { ANIMATABLE_PROPERTIES, EASING_OPTIONS } from './constants';
+import { findElementById, flattenElementTree } from './svgParser';
 import { EASING_PRESETS, getAdjacentKeyframes } from './keyframeManager';
 
 function formatTimelineTime(seconds: number): string {
@@ -61,6 +61,16 @@ function getEasingBadge(easing: EasingType): string {
     default:
       return '—';
   }
+}
+
+function getLayerColor(tagName: SvgElementNode['tagName']): string {
+  if (tagName === 'text') return 'bg-rose-500/70 border-rose-300/50';
+  if (tagName === 'rect' || tagName === 'circle' || tagName === 'ellipse') {
+    return 'bg-blue-500/70 border-blue-300/50';
+  }
+  if (tagName === 'image') return 'bg-amber-500/70 border-amber-300/50';
+  if (tagName === 'g') return 'bg-violet-500/70 border-violet-300/50';
+  return 'bg-emerald-500/70 border-emerald-300/50';
 }
 
 interface TimelineProps {
@@ -106,6 +116,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 }) => {
   const rulerContainerRef = useRef<HTMLDivElement>(null);
   const lanesContainerRef = useRef<HTMLDivElement>(null);
+  const trackNamesRef = useRef<HTMLDivElement>(null);
   const currentTimeTextRef = useRef<HTMLSpanElement>(null);
   const currentFrameTextRef = useRef<HTMLSpanElement>(null);
   const rulerPlayheadRef = useRef<HTMLDivElement>(null);
@@ -115,12 +126,19 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Timeline zoom: pixels per second (min 60px/s, max 400px/s)
   const [pixelsPerSec, setPixelsPerSec] = useState<number>(140);
   const [snapping, setSnapping] = useState<boolean>(true);
+  const [timelineHeight, setTimelineHeight] = useState(260);
+  const resizeStartRef = useRef<{ y: number; height: number } | null>(null);
 
   // Playhead dragging
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
   // Keyframe dragging
   const [draggingKfId, setDraggingKfId] = useState<string | null>(null);
+  const dragStateRef = useRef<{
+    pointerStartTime: number;
+    selectedIds: string[];
+    initialTimes: Record<string, number>;
+  } | null>(null);
   const selectionAnchorRef = useRef<string | null>(null);
   const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
   const marqueeMovedRef = useRef(false);
@@ -132,10 +150,17 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Expanded track rows
   const [collapsedElements, setCollapsedElements] = useState<Record<string, boolean>>({});
+  const [propertyMenuElementId, setPropertyMenuElementId] = useState<string | null>(null);
 
   const { duration, fps, loop } = project.document;
   const currentTime = project.currentTime;
   const timelineWidth = Math.max(800, duration * pixelsPerSec);
+  const selectedKeyframeIds = useMemo(() => {
+    if (project.selectedKeyframeIds && project.selectedKeyframeIds.length > 0) {
+      return project.selectedKeyframeIds;
+    }
+    return project.selectedKeyframeId ? [project.selectedKeyframeId] : [];
+  }, [project.selectedKeyframeId, project.selectedKeyframeIds]);
 
   // Group tracks by elementId
   const elementTrackGroups = useMemo(() => {
@@ -148,6 +173,13 @@ export const Timeline: React.FC<TimelineProps> = ({
     });
     return map;
   }, [project.tracks]);
+  const timelineLayers = useMemo(
+    () => flattenElementTree(project.elements).map((element) => ({
+      element,
+      tracks: elementTrackGroups.get(element.id) ?? [],
+    })),
+    [project.elements, elementTrackGroups]
+  );
 
   // Keyframe navigation calculations
   const adjacent = useMemo(() => {
@@ -206,9 +238,19 @@ export const Timeline: React.FC<TimelineProps> = ({
 
       if (draggingKfId && lanesContainerRef.current) {
         const newTime = clientXToTime(e.clientX, lanesContainerRef.current);
+        const dragState = dragStateRef.current;
         if (!rafId) {
           rafId = requestAnimationFrame(() => {
-            onMoveKeyframe(draggingKfId, newTime);
+            if (dragState) {
+              const delta = newTime - dragState.pointerStartTime;
+              dragState.selectedIds.forEach((id) => {
+                const startTime = dragState.initialTimes[id] ?? 0;
+                const nextTime = Math.max(0, Math.min(duration, startTime + delta));
+                onMoveKeyframe(id, nextTime);
+              });
+            } else {
+              onMoveKeyframe(draggingKfId, newTime);
+            }
             rafId = null;
           });
         }
@@ -258,6 +300,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       }
       setIsScrubbing(false);
       setDraggingKfId(null);
+      dragStateRef.current = null;
       selectionStartRef.current = null;
       setIsMarqueeSelecting(false);
       setMarqueeRect(null);
@@ -284,6 +327,32 @@ export const Timeline: React.FC<TimelineProps> = ({
         rulerContainerRef.current.scrollLeft = lanesContainerRef.current.scrollLeft;
       }
     }
+    if (e.currentTarget === lanesContainerRef.current && trackNamesRef.current) {
+      if (trackNamesRef.current.scrollTop !== lanesContainerRef.current.scrollTop) {
+        trackNamesRef.current.scrollTop = lanesContainerRef.current.scrollTop;
+      }
+    } else if (e.currentTarget === trackNamesRef.current && lanesContainerRef.current) {
+      if (lanesContainerRef.current.scrollTop !== trackNamesRef.current.scrollTop) {
+        lanesContainerRef.current.scrollTop = trackNamesRef.current.scrollTop;
+      }
+    }
+  };
+
+  const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    resizeStartRef.current = { y: event.clientY, height: timelineHeight };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleResizeMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizeStartRef.current) return;
+    const maxHeight = Math.round(window.innerHeight * 0.6);
+    const nextHeight = resizeStartRef.current.height + resizeStartRef.current.y - event.clientY;
+    setTimelineHeight(Math.max(160, Math.min(maxHeight, nextHeight)));
+  };
+
+  const handleResizeEnd = () => {
+    resizeStartRef.current = null;
   };
 
   // Step 1 frame forward / backward
@@ -316,7 +385,21 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, [currentTime, onRegisterPlaybackRenderer, renderPlaybackAtTime]);
 
   return (
-    <footer className="svg-motion-timeline h-60 min-h-[12rem] max-h-72 border-t border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col select-none shrink-0 z-20 text-foreground transition-colors">
+    <footer
+      className="svg-motion-timeline min-h-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col select-none shrink-0 z-20 text-foreground transition-colors"
+      style={{ height: timelineHeight, flexBasis: timelineHeight }}
+    >
+      <div
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        className="group flex h-3 shrink-0 touch-none cursor-ns-resize items-center justify-center border-y border-[var(--card-border)] bg-[var(--card-bg)] hover:border-primary/50 hover:bg-primary/10"
+        title="Drag to resize the timeline"
+        aria-label="Resize timeline"
+      >
+        <span className="h-0.5 w-12 rounded-full bg-[var(--text-muted)]/50 group-hover:bg-primary" />
+      </div>
       {/* 1. TIMELINE TOP CONTROLS BAR */}
       <div className="h-10 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-3 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
         {/* Left: Transport Controls & Keyframe Nav */}
@@ -420,15 +503,15 @@ export const Timeline: React.FC<TimelineProps> = ({
 
           <div className="h-4 w-[1px] bg-[var(--card-border)] mx-1" />
 
-          {(project.selectedKeyframeIds?.length ?? 0) > 0 && (
+          {selectedKeyframeIds.length > 0 && (
             <button
               type="button"
-              onClick={() => onDeleteKeyframes(project.selectedKeyframeIds || [])}
+              onClick={() => onDeleteKeyframes(selectedKeyframeIds)}
               className="flex items-center gap-1 px-2 py-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
-              title={`Delete ${project.selectedKeyframeIds?.length} selected keyframes (Del)`}
+              title={`Delete ${selectedKeyframeIds.length} selected keyframes (Del)`}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="text-[10px]">{project.selectedKeyframeIds?.length}</span>
+              <span className="text-[10px]">{selectedKeyframeIds.length}</span>
             </button>
           )}
 
@@ -506,22 +589,22 @@ export const Timeline: React.FC<TimelineProps> = ({
       {/* 2. MAIN TRACKS & TIME RULER BODY */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left: Tracks Name Column */}
-        <div className="w-56 border-r border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col shrink-0 overflow-y-auto no-scrollbar">
+        <div className="w-64 border-r border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col shrink-0 overflow-hidden">
           {/* Ruler header space */}
           <div className="h-6 border-b border-[var(--card-border)] bg-[var(--input-bg)] px-2.5 flex items-center justify-between text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
             <span>Layers &amp; Tracks</span>
-            <span>{project.tracks.length} Tracks</span>
+            <span>{timelineLayers.length} Layers</span>
           </div>
 
           {/* Track Rows Header */}
-          <div className="flex-1 py-1">
-            {elementTrackGroups.size === 0 ? (
+          <div ref={trackNamesRef} onScroll={handleScroll} className="flex-1 overflow-y-auto no-scrollbar py-1">
+            {timelineLayers.length === 0 ? (
               <div className="p-4 text-center text-[var(--text-muted)] text-[11px] font-medium leading-relaxed">
-                No animation tracks yet. Select an element and record transform keyframes.
+                No layers yet. Add a shape or open an SVG to start animating.
               </div>
             ) : (
-              Array.from(elementTrackGroups.entries()).map(([elId, tracks]) => {
-                const elementNode = findElementById(project.elements, elId);
+              timelineLayers.map(({ element, tracks }) => {
+                const elId = element.id;
                 const isCollapsed = collapsedElements[elId] ?? false;
                 const isSelected = selectedElementId === elId;
 
@@ -530,38 +613,75 @@ export const Timeline: React.FC<TimelineProps> = ({
                     {/* Master Element Track Header */}
                     <div
                       onClick={() => onSelectElement(elId)}
-                      className={`h-7 px-2 flex items-center justify-between cursor-pointer border-l-2 transition-colors ${
+                      className={`group h-8 px-2 flex items-center justify-between cursor-pointer border-l-2 transition-colors ${
                         isSelected
                           ? 'border-primary bg-primary/10 text-primary font-bold'
                           : 'border-transparent hover:bg-[var(--hover-bg)] text-foreground'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCollapsedElements((prev) => ({ ...prev, [elId]: !isCollapsed }));
-                          }}
-                          className="text-[var(--text-muted)] hover:text-foreground"
-                        >
-                          {isCollapsed ? (
-                            <ChevronRight className="h-3 w-3" />
-                          ) : (
-                            <ChevronDown className="h-3 w-3" />
-                          )}
-                        </button>
-                        <Layers className="h-3 w-3 text-primary shrink-0" />
-                        <span className="text-[11px] truncate">{elementNode?.name || elId}</span>
+                        {tracks.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCollapsedElements((prev) => ({ ...prev, [elId]: !isCollapsed }));
+                            }}
+                            className="text-[var(--text-muted)] hover:text-foreground"
+                            aria-label={isCollapsed ? `Expand ${element.name} tracks` : `Collapse ${element.name} tracks`}
+                          >
+                            {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          </button>
+                        ) : (
+                          <span className="w-3" />
+                        )}
+                        <span className={`h-2.5 w-2.5 rounded-sm shrink-0 border ${getLayerColor(element.tagName)}`} />
+                        <span className="text-[11px] truncate">{element.name}</span>
                       </div>
 
-                      <span className="text-[9px] font-mono text-[var(--text-muted)]">
-                        {tracks.length}
-                      </span>
+                      <div className="relative flex items-center gap-1">
+                        {tracks.length > 0 && (
+                          <span className="text-[9px] font-mono text-[var(--text-muted)]">{tracks.length}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPropertyMenuElementId((current) => current === elId ? null : elId);
+                          }}
+                          className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-opacity hover:bg-primary/15 hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                          title={`Add an animated property to ${element.name}`}
+                          aria-label={`Add animated property to ${element.name}`}
+                          aria-expanded={propertyMenuElementId === elId}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        {propertyMenuElementId === elId && (
+                          <div className="absolute right-0 top-full z-40 mt-1 max-h-56 w-40 overflow-y-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-xl">
+                            {ANIMATABLE_PROPERTIES.filter(({ key }) =>
+                              ['x', 'y', 'rotation', 'scaleX', 'scaleY', 'opacity'].includes(key)
+                            ).map(({ key, label }) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onSelectElement(elId);
+                                  onAddKeyframeAtPlayhead(elId, key);
+                                  setPropertyMenuElementId(null);
+                                }}
+                                className="block w-full rounded px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-primary/10 hover:text-primary"
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Sub-property rows (e.g. rotation, scaleX, opacity) */}
-                    {!isCollapsed &&
+                    {tracks.length > 0 && !isCollapsed &&
                       tracks.map((track) => (
                         <div
                           key={track.id}
@@ -642,7 +762,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 marqueeMovedRef.current = false;
                 return;
               }
-              if (project.selectedKeyframeId || project.selectedKeyframeIds?.length) {
+              if (selectedKeyframeIds.length > 0) {
                 onSelectKeyframe(null);
               }
             }}
@@ -668,13 +788,25 @@ export const Timeline: React.FC<TimelineProps> = ({
               />
 
               {/* Tracks Lanes */}
-              {Array.from(elementTrackGroups.entries()).map(([elId, tracks]) => {
+              {timelineLayers.map(({ element, tracks }) => {
+                const elId = element.id;
                 const isCollapsed = collapsedElements[elId] ?? false;
 
                 return (
                   <div key={elId} className="flex flex-col border-b border-[var(--card-border)]/40">
-                    {/* Master Element Lane: renders summary keyframe diamonds */}
-                    <div className="h-7 relative border-b border-[var(--card-border)]/20 bg-[var(--card-bg)]/30">
+                    {/* Full-duration layer bar and summary keyframes */}
+                    <div
+                      onClick={() => onSelectElement(elId)}
+                      className={`group h-8 relative border-b border-[var(--card-border)]/20 bg-[var(--card-bg)]/30 cursor-pointer ${
+                        selectedElementId === elId ? 'bg-primary/[0.04]' : ''
+                      }`}
+                    >
+                      <div
+                        className={`absolute left-1 right-1 top-2 bottom-2 rounded-sm border ${getLayerColor(element.tagName)} ${
+                          selectedElementId === elId ? 'brightness-125' : 'opacity-80'
+                        }`}
+                        title={`${element.name} · ${formatTimelineTime(duration)}`}
+                      />
                       {tracks.flatMap((t) => t.keyframes).map((kf) => (
                         <div
                           key={kf.id}
@@ -685,15 +817,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                     </div>
 
                     {/* Sub-Property Lanes: interactive draggable diamond keyframes */}
-                    {!isCollapsed &&
+                    {tracks.length > 0 && !isCollapsed &&
                       tracks.map((track) => (
                         <div
                           key={track.id}
                           className="h-6 relative border-b border-[var(--card-border)]/15 hover:bg-[var(--hover-bg)]"
                         >
                           {track.keyframes.map((kf) => {
-                            const selectedKeyframeIds = project.selectedKeyframeIds ??
-                              (project.selectedKeyframeId ? [project.selectedKeyframeId] : []);
                             const isSelected = selectedKeyframeIds.includes(kf.id);
                             const badge = getEasingBadge(kf.easing);
                             return (
@@ -705,6 +835,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                                   e.stopPropagation();
                                   if (e.button === 2) return;
                                   const isMultiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+                                  const selectedIds = selectedKeyframeIds.length > 0 ? selectedKeyframeIds : [kf.id];
                                   if (isMultiSelect) {
                                     const allKeyframes = project.tracks
                                       .flatMap((item) => item.keyframes)
@@ -723,22 +854,40 @@ export const Timeline: React.FC<TimelineProps> = ({
                                         nextIds = [kf.id];
                                       }
                                     } else {
-                                      const selected = project.selectedKeyframeIds ??
-                                        (project.selectedKeyframeId ? [project.selectedKeyframeId] : []);
-                                      nextIds = selected.includes(kf.id)
-                                        ? selected.filter((id) => id !== kf.id)
-                                        : [...selected, kf.id];
+                                      nextIds = selectedIds.includes(kf.id)
+                                        ? selectedIds.filter((id) => id !== kf.id)
+                                        : [...selectedIds, kf.id];
                                     }
 
                                     selectionAnchorRef.current = kf.id;
                                     const primaryId = nextIds.includes(kf.id) ? kf.id : nextIds.at(-1) ?? null;
                                     onSelectKeyframes(nextIds, primaryId);
                                     setDraggingKfId(null);
+                                    dragStateRef.current = null;
                                     return;
                                   }
 
+                                  const nextSelectedIds = selectedIds.includes(kf.id)
+                                    ? selectedIds
+                                    : [kf.id];
+                                  const initialTimes = Object.fromEntries(
+                                    nextSelectedIds.map((id) => {
+                                      const keyframe = project.tracks
+                                        .flatMap((track) => track.keyframes)
+                                        .find((item) => item.id === id);
+                                      return [id, keyframe?.time ?? 0];
+                                    })
+                                  );
+
                                   selectionAnchorRef.current = kf.id;
-                                  onSelectKeyframes([kf.id], kf.id);
+                                  onSelectKeyframes(nextSelectedIds, kf.id);
+                                  if (!lanesContainerRef.current) return;
+                                  const pointerStartTime = clientXToTime(e.clientX, lanesContainerRef.current);
+                                  dragStateRef.current = {
+                                    pointerStartTime,
+                                    selectedIds: nextSelectedIds,
+                                    initialTimes,
+                                  };
                                   setDraggingKfId(kf.id);
                                 }}
                                 onClick={(e) => e.stopPropagation()}
@@ -791,7 +940,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <button
             type="button"
             onClick={() => {
-              const selectedIds = project.selectedKeyframeIds ?? [];
+              const selectedIds = selectedKeyframeIds.length > 0 ? selectedKeyframeIds : project.selectedKeyframeId ? [project.selectedKeyframeId] : [];
               onDeleteKeyframes(selectedIds.includes(contextKf.id) ? selectedIds : [contextKf.id]);
               setContextKf(null);
             }}

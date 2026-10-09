@@ -28,12 +28,9 @@ interface ICreditCosts {
   ascii_generation: number;
   trading_generation: number;
   splitter_export: number;
-  pattern_generation: number;
   svg_motion: number;
   motion_generation: number;
   color_extraction: number;
-  image_palette: number;
-  pattern_maker: number;
   vector_splitter: number;
   general_ai: number;
   byo_api_mode: string;
@@ -48,12 +45,9 @@ const studioCostFields: Array<{ key: keyof ICreditCosts; label: string }> = [
   { key: "ascii_generation", label: "ASCII Studio" },
   { key: "trading_generation", label: "Trading Charts" },
   { key: "splitter_export", label: "Vector Splitter Export" },
-  { key: "pattern_generation", label: "Pattern Generation" },
   { key: "svg_motion", label: "SVG Motion AI" },
   { key: "motion_generation", label: "Motion Generation" },
   { key: "color_extraction", label: "Color Extraction" },
-  { key: "image_palette", label: "Image Palette Extraction" },
-  { key: "pattern_maker", label: "Pattern Maker" },
   { key: "vector_splitter", label: "Vector Splitter" },
   { key: "general_ai", label: "General AI" },
 ];
@@ -75,12 +69,9 @@ export default function AdminCreditsPage() {
     ascii_generation: 1,
     trading_generation: 1,
     splitter_export: 1,
-    pattern_generation: 1,
     svg_motion: 1,
     motion_generation: 1,
     color_extraction: 1,
-    image_palette: 1,
-    pattern_maker: 1,
     vector_splitter: 1,
     general_ai: 1,
     byo_api_mode: "charge",

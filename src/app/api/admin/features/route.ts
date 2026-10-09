@@ -10,8 +10,7 @@ const SUPPORTED_FLAG_KEYS = new Set([
   'background_removal', 'bg_remover', 'export_high_res', 'advanced_metadata', 'batch_generation',
   'advanced_ai', 'heavy_ai', 'three_d_generation', 'grid_generation', 'palette_generation',
   'typebox_generation', 'bento_generation', 'ascii_generation', 'trading_generation',
-  'splitter_export', 'pattern_generation', 'motion_generation', 'color_extraction',
-  'image_palette', 'pattern_maker', 'vector_splitter',
+  'splitter_export', 'motion_generation', 'color_extraction', 'vector_splitter',
 ]);
 
 function normalizeFlag(input: Record<string, unknown>) {

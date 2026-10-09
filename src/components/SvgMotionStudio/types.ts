@@ -15,6 +15,8 @@ export type SvgTagName =
   | 'mask'
   | 'clipPath';
 
+export type SvgPrimitiveKind = 'text' | 'rect' | 'circle' | 'ellipse' | 'triangle';
+
 export type CharacterSlot =
   | 'head'
   | 'body'
@@ -81,6 +83,8 @@ export interface SvgElementNode {
   originalId: string; // from svg if present
   tagName: SvgTagName;
   name: string; // user-friendly label
+  textContent?: string;
+  isTextEditable?: boolean;
   className?: string;
   attributes?: Record<string, string>;
   parentId: string | null;
@@ -124,11 +128,24 @@ export interface DocumentSettings {
   name: string;
 }
 
+export interface RasterImageSource {
+  dataUrl: string;
+  width: number;
+  height: number;
+  name: string;
+  elementOriginalId: string;
+  x: number;
+  y: number;
+  displayWidth: number;
+  displayHeight: number;
+}
+
 export interface ProjectState {
   version: string;
   name: string;
   document: DocumentSettings;
   svgRaw: string;
+  rasterSources?: RasterImageSource[];
   elements: SvgElementNode[];
   tracks: AnimationTrack[];
   aiAnimationBaseTracks?: AnimationTrack[] | null;

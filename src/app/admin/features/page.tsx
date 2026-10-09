@@ -35,11 +35,8 @@ const supportedFlags = [
   { key: 'ascii_generation', description: 'ASCII Studio generation' },
   { key: 'trading_generation', description: 'Trading chart generation' },
   { key: 'splitter_export', description: 'Vector splitter exports' },
-  { key: 'pattern_generation', description: 'Pattern generation' },
   { key: 'motion_generation', description: 'Motion generation operations' },
   { key: 'color_extraction', description: 'Color extraction' },
-  { key: 'image_palette', description: 'Image palette generation' },
-  { key: 'pattern_maker', description: 'Pattern Maker operations' },
   { key: 'vector_splitter', description: 'Vector splitter operations' },
 ];
 

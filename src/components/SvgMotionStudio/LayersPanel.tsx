@@ -5,6 +5,7 @@ import {
   Search,
   Eye,
   EyeOff,
+  Trash2,
   Lock,
   Unlock,
   Folder,
@@ -32,6 +33,7 @@ interface LayersPanelProps {
   onToggleLock: (id: string) => void;
   onRenameElement: (id: string, newName: string) => void;
   onMoveElement: (id: string, direction: 'up' | 'down') => void;
+  onDeleteElement: (id: string) => void;
   tracks: AnimationTrack[];
   isSingleFlattenedPath: boolean;
 }
@@ -69,6 +71,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   onToggleLock,
   onRenameElement,
   onMoveElement,
+  onDeleteElement,
   tracks,
   isSingleFlattenedPath,
 }) => {
@@ -76,10 +79,19 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const groupIds: string[] = [];
+  const collectGroupIds = (nodes: SvgElementNode[]) => {
+    nodes.forEach((node) => {
+      if (node.children.length > 0) groupIds.push(node.id);
+      collectGroupIds(node.children);
+    });
+  };
+  collectGroupIds(elements);
+  const allGroupsExpanded = groupIds.every((id) => expandedGroups[id] !== false);
 
   const toggleGroup = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpandedGroups((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
   };
 
   const startEditing = (node: SvgElementNode, e: React.MouseEvent) => {
@@ -182,6 +194,18 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
 
           {/* Right actions: Layer reorder, Lock, Visibility */}
           <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteElement(node.id);
+              }}
+              className="p-1 rounded text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10"
+              title={`Delete ${node.name}`}
+              aria-label={`Delete ${node.name}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
             {/* Move Up/Down */}
             <button
               type="button"
@@ -274,11 +298,12 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setExpandedGroups({})}
+            onClick={() => setExpandedGroups(Object.fromEntries(groupIds.map((id) => [id, !allGroupsExpanded])))}
+            disabled={groupIds.length === 0}
             className="text-[10px] text-[var(--text-muted)] hover:text-foreground px-2 py-0.5 rounded-lg hover:bg-[var(--hover-bg)] transition-colors font-medium"
-            title="Collapse all groups"
+            title={allGroupsExpanded ? 'Collapse all groups' : 'Expand all groups'}
           >
-            Collapse
+            {allGroupsExpanded ? 'Collapse' : 'Expand'}
           </button>
         </div>
       </div>

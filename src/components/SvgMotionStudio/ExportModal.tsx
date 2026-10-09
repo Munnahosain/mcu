@@ -56,7 +56,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         setProgress({ percent: 100, text: 'Download ready!' });
       } else if (selectedFormat === 'clean-svg') {
         setProgress({ percent: 60, text: 'Sanitizing and cleaning vector code...' });
-        const cleanSvg = generateCleanSvg(project.svgRaw);
+        const cleanSvg = generateCleanSvg(project.svgRaw, project.elements);
         downloadFile(cleanSvg, `${baseName}_clean.svg`, 'image/svg+xml');
         setProgress({ percent: 100, text: 'Download ready!' });
       } else if (selectedFormat === 'json-project') {

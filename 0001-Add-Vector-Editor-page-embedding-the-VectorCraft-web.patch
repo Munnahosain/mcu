@@ -1,0 +1,164 @@
+From 820702e7332ffe25509f16b523c9f769e5492fb6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 10:52:32 +0600
+Subject: [PATCH] Add Vector Editor page embedding the VectorCraft web build
+
+- /dashboard/vector-editor: iframe host for public/vectorcraft (or NEXT_PUBLIC_VECTORCRAFT_URL), with a not-installed notice
+- Add Vector Editor to dashboard nav and the /tools grid
+- Cache headers for the hashed wasm/js files, no-cache for index.html
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01N4zQCvqSKqs1NWhSkTcvDf
+---
+ next.config.ts                           | 13 +++++
+ src/app/dashboard/layout.tsx             |  2 +
+ src/app/dashboard/vector-editor/page.tsx | 73 ++++++++++++++++++++++++
+ src/app/tools/page.tsx                   |  8 +++
+ 4 files changed, 96 insertions(+)
+ create mode 100644 src/app/dashboard/vector-editor/page.tsx
+
+diff --git a/next.config.ts b/next.config.ts
+index badd364..39392e0 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -15,6 +15,19 @@ const nextConfig: NextConfig = {
+     ],
+   },
+   serverExternalPackages: ['@resvg/resvg-js'],
++  async headers() {
++    return [
++      {
++        // VectorCraft web build: hashed .js/.wasm files never change, index.html must revalidate.
++        source: '/vectorcraft/:path((?!index\\.html).+)',
++        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
++      },
++      {
++        source: '/vectorcraft/index.html',
++        headers: [{ key: 'Cache-Control', value: 'no-cache' }],
++      },
++    ];
++  },
+ };
+ 
+ export default nextConfig;
+diff --git a/src/app/dashboard/layout.tsx b/src/app/dashboard/layout.tsx
+index bddaf38..7ca9b9b 100644
+--- a/src/app/dashboard/layout.tsx
++++ b/src/app/dashboard/layout.tsx
+@@ -24,6 +24,7 @@ import {
+   CreditCard,
+   LifeBuoy,
+   Film,
++  PenTool,
+ } from "lucide-react";
+ import { motion, AnimatePresence } from "framer-motion";
+ import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
+@@ -59,6 +60,7 @@ const navLinks = [
+   { name: "Metadata", href: "/dashboard/generator", icon: Sparkles },
+   { name: "3D Icon Studio", href: "/dashboard/3d-icon-studio", icon: Box },
+   { name: "SVG Motion", href: "/dashboard/svg-motion", icon: Film },
++  { name: "Vector Editor", href: "/dashboard/vector-editor", icon: PenTool },
+   { name: "BG Remover", href: "/dashboard/bg-remover", icon: Eraser },
+   { name: "Bento", href: "/dashboard/bento", icon: LayoutIcon },
+   { name: "Grid", href: "/dashboard/grid-generator", icon: Grid3X3 },
+diff --git a/src/app/dashboard/vector-editor/page.tsx b/src/app/dashboard/vector-editor/page.tsx
+new file mode 100644
+index 0000000..13a2f2f
+--- /dev/null
++++ b/src/app/dashboard/vector-editor/page.tsx
+@@ -0,0 +1,73 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { PenTool } from "lucide-react";
++
++// Where the VectorCraft web build is served from. Defaults to the copy in /public/vectorcraft.
++// Set NEXT_PUBLIC_VECTORCRAFT_URL to a CDN/S3 URL (ending in index.html) to host it elsewhere.
++const EDITOR_URL = process.env.NEXT_PUBLIC_VECTORCRAFT_URL || "/vectorcraft/index.html";
++
++type Status = "checking" | "ready" | "missing";
++
++export default function VectorEditorPage() {
++  const [status, setStatus] = useState<Status>("checking");
++
++  useEffect(() => {
++    let cancelled = false;
++    const isSameOrigin = EDITOR_URL.startsWith("/");
++
++    // Cross-origin hosts can't be probed without CORS, so trust the configured URL there.
++    if (!isSameOrigin) {
++      setStatus("ready");
++      return;
++    }
++
++    fetch(EDITOR_URL, { method: "HEAD", cache: "no-store" })
++      .then((res) => {
++        if (!cancelled) setStatus(res.ok ? "ready" : "missing");
++      })
++      .catch(() => {
++        if (!cancelled) setStatus("missing");
++      });
++
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  if (status === "missing") {
++    return (
++      <section className="rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
++        <div className="flex items-center gap-3 text-primary">
++          <PenTool className="h-5 w-5" />
++          <h1 className="text-xl font-black">Vector Editor is not installed yet</h1>
++        </div>
++        <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
++          Build the VectorCraft web app (<code>trunk build --release</code> in{" "}
++          <code>apps/vectorcraft-web</code>) and copy the contents of <code>dist/web</code> into{" "}
++          <code>public/vectorcraft</code>, or set <code>NEXT_PUBLIC_VECTORCRAFT_URL</code> to where it is hosted.
++        </p>
++      </section>
++    );
++  }
++
++  return (
++    <section className="overflow-hidden rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)]">
++      {status === "checking" ? (
++        <div className="flex h-[70vh] items-center justify-center text-sm text-[var(--text-secondary)]">
++          Loading editor&hellip;
++        </div>
++      ) : (
++        <iframe
++          src={EDITOR_URL}
++          title="Vector Editor"
++          loading="lazy"
++          className="block w-full border-0"
++          style={{ height: "calc(100dvh - 9rem)", minHeight: 520 }}
++          allow="fullscreen; clipboard-read; clipboard-write"
++          allowFullScreen
++        />
++      )}
++    </section>
++  );
++}
+diff --git a/src/app/tools/page.tsx b/src/app/tools/page.tsx
+index 48d8cc9..9e95a51 100644
+--- a/src/app/tools/page.tsx
++++ b/src/app/tools/page.tsx
+@@ -46,6 +46,14 @@ const tools = [
+     isNew: true,
+     href: "/svg-motion-studio",
+   },
++  {
++    icon: <PenTool className="h-8 w-8 text-primary" />,
++    title: "Vector Editor",
++    description:
++      "Full vector illustration editor in your browser. Draw, edit paths, and export clean SVG and PDF artwork.",
++    isNew: true,
++    href: "/dashboard/vector-editor",
++  },
+   {
+     icon: <Sparkles className="h-8 w-8 text-primary" />,
+     title: "Reverse Prompt Generator",
+-- 
+2.43.0
+

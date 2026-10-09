@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
-import { ProjectState, AnimationTrack } from './types';
+import { ProjectState, AnimationTrack, SvgElementNode } from './types';
 import { computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
+import { findElementById } from './svgParser';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
@@ -25,6 +26,13 @@ export function generateAnimatedSvg(project: ProjectState): string {
   const doc = parser.parseFromString(svgRaw, 'image/svg+xml');
   const svg = doc.querySelector('svg');
   if (!svg) return svgRaw;
+
+  const allNodes = svg.querySelectorAll('[data-mcu-id]');
+  allNodes.forEach((node) => {
+    const elementId = node.getAttribute('data-mcu-id');
+    const elementState = elementId ? findElementById(project.elements, elementId) : undefined;
+    if (elementState && !elementState.visible) node.setAttribute('display', 'none');
+  });
 
   // Group tracks by elementId
   const tracksByElement = new Map<string, AnimationTrack[]>();
@@ -57,7 +65,14 @@ export function generateAnimatedSvg(project: ProjectState): string {
 
     sortedTimes.forEach((t) => {
       const pct = Math.round((t / duration) * 1000) / 10;
-      const styles = computeElementStylesAtTime(elemTracks, elementId, t);
+      const elementState = findElementById(project.elements, elementId);
+      const styles = computeElementStylesAtTime(
+        elemTracks,
+        elementId,
+        t,
+        elementState?.initialTransform,
+        elementState?.initialAppearance
+      );
 
       const transform = `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) scale(${styles.scaleX / 100}, ${styles.scaleY / 100}) skewX(${styles.skewX}deg) skewY(${styles.skewY}deg)`;
       const opacity = Math.max(0, Math.min(1, styles.opacity / 100));
@@ -101,7 +116,7 @@ export function generateAnimatedSvg(project: ProjectState): string {
 /**
  * 2. Generate Clean Static SVG (cleans up internal data attributes)
  */
-export function generateCleanSvg(svgRaw: string): string {
+export function generateCleanSvg(svgRaw: string, elements: SvgElementNode[] = []): string {
   if (typeof window === 'undefined') return svgRaw;
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgRaw, 'image/svg+xml');
@@ -111,7 +126,12 @@ export function generateCleanSvg(svgRaw: string): string {
   // Clean data-mcu-id attributes
   const allNodes = svg.querySelectorAll('*');
   allNodes.forEach((node) => {
-    node.removeAttribute('data-mcu-id');
+    const elementId = node.getAttribute('data-mcu-id');
+    if (elementId) {
+      const elementState = findElementById(elements, elementId);
+      if (elementState && !elementState.visible) node.setAttribute('display', 'none');
+      node.removeAttribute('data-mcu-id');
+    }
   });
 
   const serializer = new XMLSerializer();
@@ -127,7 +147,8 @@ export async function renderSvgFrameToCanvas(
   time: number,
   canvas: HTMLCanvasElement,
   width: number,
-  height: number
+  height: number,
+  elements: SvgElementNode[] = []
 ): Promise<void> {
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgString, 'image/svg+xml');
@@ -139,7 +160,18 @@ export async function renderSvgFrameToCanvas(
   allNodes.forEach((node) => {
     const elId = node.getAttribute('data-mcu-id');
     if (elId) {
-      const styles = computeElementStylesAtTime(tracks, elId, time);
+      const elementState = findElementById(elements, elId);
+      if (elementState && !elementState.visible) {
+        node.setAttribute('display', 'none');
+      }
+      const elementTracks = tracks.filter((track) => track.elementId === elId);
+      const styles = computeElementStylesAtTime(
+        elementTracks,
+        elId,
+        time,
+        elementState?.initialTransform,
+        elementState?.initialAppearance
+      );
       applyComputedStylesToElement(node as SVGElement, styles);
     }
   });
@@ -179,7 +211,7 @@ export async function exportPngSequenceZip(
   scale: number = 1,
   onProgress?: (percent: number, currentFrame: number, totalFrames: number) => void
 ): Promise<Blob> {
-  const { svgRaw, tracks, document: docSettings } = project;
+  const { svgRaw, tracks, document: docSettings, elements } = project;
   const duration = docSettings.duration;
   const totalFrames = Math.max(1, Math.round(duration * fps));
 
@@ -195,7 +227,7 @@ export async function exportPngSequenceZip(
 
   for (let frame = 0; frame < totalFrames; frame++) {
     const time = (frame / fps);
-    await renderSvgFrameToCanvas(svgRaw, tracks, time, canvas, width, height);
+    await renderSvgFrameToCanvas(svgRaw, tracks, time, canvas, width, height, elements);
 
     const frameBlob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob((b) => resolve(b), 'image/png');
@@ -225,7 +257,7 @@ export async function recordCanvasVideo(
   onProgress?: (percent: number) => void,
   preferMp4 = false
 ): Promise<RecordedVideo> {
-  const { svgRaw, tracks, document: docSettings } = project;
+  const { svgRaw, tracks, document: docSettings, elements } = project;
   const duration = docSettings.duration;
   const totalFrames = Math.max(1, Math.round(duration * fps));
 
@@ -286,7 +318,7 @@ export async function recordCanvasVideo(
       if (document.visibilityState !== 'visible') {
         throw new Error('Keep the export tab visible until MP4 rendering finishes.');
       }
-      await renderSvgFrameToCanvas(svgRaw, tracks, frame / fps, canvas, width, height);
+      await renderSvgFrameToCanvas(svgRaw, tracks, frame / fps, canvas, width, height, elements);
       videoTrack.requestFrame();
       onProgress?.(Math.round(((frame + 1) / totalFrames) * 100));
       await new Promise<void>((resolve) => {

@@ -12,11 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Design & Retro Raster Studio",
   description:
-    "Creative suite featuring Pattern Maker, Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
+    "Creative suite featuring Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
   openGraph: {
     title: "Design & Retro Raster Studio",
     description:
-      "Creative suite featuring Pattern Maker, Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
+      "Creative suite featuring Halftone, Dither, ASCII Studio, 3D Icon Studio, and design utilities.",
   },
   icons: {
     icon: "/MCU-LOGO-0.2V-1.png",

@@ -484,7 +484,7 @@ export default function EventCalendarPage() {
         </div>
 
         {/* BOTTOM: Month Selector Nav Pill */}
-        <div className="event-month-selector mt-8 mb-10 overflow-x-auto w-full max-w-full flex justify-center no-scrollbar px-4">
+        <div className="event-month-selector mt-8 mb-10 overflow-x-auto w-full max-w-full flex justify-start min-[960px]:justify-center no-scrollbar px-4">
             <SegmentedToggle<number>
                 options={months.map((month, idx) => ({ id: idx, label: month }))}
                 value={currentMonth}

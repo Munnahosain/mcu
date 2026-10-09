@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Play,
@@ -21,8 +21,13 @@ import {
   Maximize,
   Minimize,
   Film,
+  Type,
+  Square,
+  Circle,
+  Triangle,
+  Scissors,
 } from 'lucide-react';
-import { ProjectState } from './types';
+import { ProjectState, SvgPrimitiveKind } from './types';
 
 interface TopBarProps {
   project: ProjectState;
@@ -33,6 +38,10 @@ interface TopBarProps {
   onTogglePlay: () => void;
   onRewind: () => void;
   onOpenSvgFile: (file: File) => void;
+  onToggleRegionCut: () => void;
+  isRegionCutMode: boolean;
+  canCutImageRegion: boolean;
+  onAddElement: (kind: SvgPrimitiveKind) => void;
   onNewProject: () => void;
   onSaveProject: () => void;
   onLoadProjectFile: (file: File) => void;
@@ -65,6 +74,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   onTogglePlay,
   onRewind,
   onOpenSvgFile,
+  onToggleRegionCut,
+  isRegionCutMode,
+  canCutImageRegion,
+  onAddElement,
   onNewProject,
   onSaveProject,
   onLoadProjectFile,
@@ -88,7 +101,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleFullscreen,
 }) => {
   const svgFileInputRef = useRef<HTMLInputElement>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
   const projFileInputRef = useRef<HTMLInputElement>(null);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
 
   const handleSvgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,6 +132,13 @@ export const TopBar: React.FC<TopBarProps> = ({
       />
       <input
         type="file"
+        ref={imageFileInputRef}
+        onChange={handleSvgChange}
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+      />
+      <input
+        type="file"
         ref={projFileInputRef}
         onChange={handleProjChange}
         accept=".mcuproj,.json"
@@ -135,12 +157,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           </Link>
           <div className="leading-tight hidden sm:block">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-foreground tracking-wide">SVG Motion</span>
+              <span className="text-xs font-bold text-foreground tracking-wide">Motion Studio</span>
               <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30">
                 PRO
               </span>
             </div>
-            <span className="text-[10px] text-[var(--text-secondary)] font-medium">Vector Animator</span>
+            <span className="text-[10px] text-[var(--text-secondary)] font-medium">Layer Animator</span>
           </div>
         </div>
 
@@ -166,6 +188,76 @@ export const TopBar: React.FC<TopBarProps> = ({
             <Upload className="h-3.5 w-3.5 text-primary" />
             <span className="hidden md:inline">Open SVG</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => imageFileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-foreground hover:text-primary bg-[var(--input-bg)] hover:bg-primary/10 border border-[var(--card-border)] hover:border-primary/40 transition-all shadow-sm"
+            title="Open PNG, JPEG, or WebP image"
+          >
+            <Upload className="h-3.5 w-3.5 text-primary" />
+            <span className="hidden md:inline">Add Image</span>
+          </button>
+
+          {canCutImageRegion && (
+            <button
+              type="button"
+              onClick={onToggleRegionCut}
+              aria-pressed={isRegionCutMode}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                isRegionCutMode
+                  ? 'border-primary bg-primary text-[#071b17]'
+                  : 'border-[var(--card-border)] bg-[var(--input-bg)] text-foreground hover:border-primary/40 hover:text-primary'
+              }`}
+              title={isRegionCutMode ? 'Exit cut region mode' : 'Drag over the image to create an animation layer'}
+            >
+              <Scissors className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">{isRegionCutMode ? 'Cancel Cut' : 'Cut Region'}</span>
+            </button>
+          )}
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsAddMenuOpen((open) => !open)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-foreground hover:text-primary bg-[var(--input-bg)] hover:bg-primary/10 border border-[var(--card-border)] hover:border-primary/40 transition-all shadow-sm"
+              title="Add a text or shape layer"
+              aria-expanded={isAddMenuOpen}
+              aria-haspopup="menu"
+            >
+              <Plus className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden sm:inline">Add</span>
+            </button>
+            {isAddMenuOpen && (
+              <div
+                role="menu"
+                aria-label="Add layer"
+                className="absolute left-0 top-full mt-2 z-50 w-44 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-1.5 shadow-2xl"
+              >
+                {([
+                  ['text', 'Text', Type],
+                  ['rect', 'Rectangle', Square],
+                  ['circle', 'Circle', Circle],
+                  ['ellipse', 'Ellipse', Circle],
+                  ['triangle', 'Triangle', Triangle],
+                ] as const).map(([kind, label, Icon]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onAddElement(kind);
+                      setIsAddMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             type="button"

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Move, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Move, RotateCw, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
 import { ProjectState, SvgElementNode, BoundingBox } from './types';
 import { computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
 import { findElementById, flattenElementTree } from './svgParser';
@@ -18,6 +18,9 @@ interface CanvasViewportProps {
     elementId: string,
     transform: { x?: number; y?: number; rotation?: number; scaleX?: number; scaleY?: number; originX?: number; originY?: number }
   ) => void;
+  onOpenSvgFile: (file: File) => void;
+  isRegionCutMode: boolean;
+  onCreateImageRegion: (region: BoundingBox) => void;
   onFitToScreenTrigger?: (callback: () => void) => void;
   isLeftCollapsed: boolean;
   onToggleLeftSidebar: () => void;
@@ -51,6 +54,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   showSafeArea,
   canvasBg,
   onUpdateTransform,
+  onOpenSvgFile,
+  isRegionCutMode,
+  onCreateImageRegion,
   onFitToScreenTrigger,
   isLeftCollapsed,
   onToggleLeftSidebar,
@@ -80,6 +86,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [dragMode, setDragMode] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number; initialVal?: any }>({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
+  const [regionSelection, setRegionSelection] = useState<BoundingBox | null>(null);
+  const regionSelectionRef = useRef<BoundingBox | null>(null);
+  const regionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const { viewBox } = project.document;
   const { currentTime } = project;
@@ -267,6 +278,19 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
+    if (isRegionCutMode && e.button === 0) {
+      e.preventDefault();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = Math.max(0, Math.min(vbW, (e.clientX - rect.left - pan.x) / zoom));
+      const y = Math.max(0, Math.min(vbH, (e.clientY - rect.top - pan.y) / zoom));
+      regionStartRef.current = { x, y };
+      const selection = { x, y, width: 0, height: 0 };
+      regionSelectionRef.current = selection;
+      setRegionSelection(selection);
+      return;
+    }
+
     // Direct click on SVG element
     const target = e.target as Element;
     const clickedElement = target.closest('[data-mcu-id]');
@@ -299,6 +323,21 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y,
       });
+      return;
+    }
+
+    if (regionStartRef.current) {
+      const start = regionStartRef.current;
+      const x = Math.max(0, Math.min(vbW, (e.clientX - rect.left - pan.x) / zoom));
+      const y = Math.max(0, Math.min(vbH, (e.clientY - rect.top - pan.y) / zoom));
+      const selection = {
+        x: Math.min(start.x, x),
+        y: Math.min(start.y, y),
+        width: Math.abs(x - start.x),
+        height: Math.abs(y - start.y),
+      };
+      regionSelectionRef.current = selection;
+      setRegionSelection(selection);
       return;
     }
 
@@ -339,7 +378,22 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const handleMouseUp = () => {
     setIsPanning(false);
     setDragMode(null);
+    const selection = regionSelectionRef.current;
+    regionStartRef.current = null;
+    regionSelectionRef.current = null;
+    setRegionSelection(null);
+    if (selection && selection.width >= 2 && selection.height >= 2) {
+      onCreateImageRegion(selection);
+    }
   };
+
+  useEffect(() => {
+    if (!isRegionCutMode) {
+      regionStartRef.current = null;
+      regionSelectionRef.current = null;
+      setRegionSelection(null);
+    }
+  }, [isRegionCutMode]);
 
   // Arrow keys nudging for precision placement
   useEffect(() => {
@@ -398,7 +452,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
       className="relative flex-1 min-w-0 h-full w-full bg-[var(--main-bg)] text-foreground overflow-hidden select-none cursor-default transition-colors"
-      style={{ touchAction: 'none' }}
+      style={{ touchAction: 'none', cursor: isRegionCutMode ? 'crosshair' : undefined }}
     >
       <button
         type="button"
@@ -568,8 +622,80 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           {/* SVG Content Mount */}
           <SvgMarkup svgRaw={project.svgRaw} wrapperRef={svgWrapperRef} />
 
+          {isRegionCutMode && (
+            <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-lg border border-primary/40 bg-[var(--card-bg)]/95 px-3 py-2 text-[11px] font-semibold text-primary shadow-lg">
+              Drag over the image to create a separate animation layer
+            </div>
+          )}
+          {regionSelection && (
+            <div
+              className="pointer-events-none absolute z-30 border-2 border-primary bg-primary/20 shadow-[0_0_0_1px_rgba(255,255,255,0.6)]"
+              style={{
+                left: regionSelection.x,
+                top: regionSelection.y,
+                width: regionSelection.width,
+                height: regionSelection.height,
+              }}
+            />
+          )}
+
+          {project.elements.length === 0 && (
+            <div
+              className={`absolute inset-0 z-10 flex items-center justify-center p-6 ${
+                isFileDragActive ? 'bg-primary/10' : 'bg-[var(--main-bg)]/35'
+              }`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsFileDragActive(true);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setIsFileDragActive(false);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsFileDragActive(false);
+                const file = event.dataTransfer.files[0];
+                if (file) onOpenSvgFile(file);
+              }}
+            >
+              <div className="max-w-sm rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)]/95 p-7 text-center shadow-2xl backdrop-blur">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Upload className="h-5 w-5" />
+                </div>
+                <h2 className="text-base font-semibold text-foreground">Start a Motion Studio project</h2>
+                <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                  Import a layered SVG, or upload a PNG/JPEG/WebP and cut regions into independently animated layers.
+                </p>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    if (file) onOpenSvgFile(file);
+                    event.currentTarget.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => uploadInputRef.current?.click()}
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/20 transition hover:brightness-110"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload SVG or image
+                </button>
+                <p className="mt-3 text-[10px] text-[var(--text-muted)]">
+                  Image cutouts become separate layers; the remaining image keeps transparent cutout areas.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Selection Bounding Box & Handles */}
-          {selectedElementId && selectionBox && (
+          {selectedElementId && selectionBox && !isRegionCutMode && (
             <div
               ref={selectionOverlayRef}
               className="absolute pointer-events-none border-2 border-primary shadow-sm"

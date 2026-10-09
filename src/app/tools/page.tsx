@@ -47,6 +47,14 @@ const tools = [
     href: "/svg-motion-studio",
   },
   {
+    icon: <PenTool className="h-8 w-8 text-primary" />,
+    title: "Mata Pattern Studio",
+    description:
+      "Draw vector artwork and build seamless repeating patterns directly in your browser.",
+    isNew: true,
+    href: "/dashboard/vector-editor",
+  },
+  {
     icon: <Sparkles className="h-8 w-8 text-primary" />,
     title: "Reverse Prompt Generator",
     description:

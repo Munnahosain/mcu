@@ -5,7 +5,7 @@ import SvgMotionStudio from '@/components/SvgMotionStudio/SvgMotionStudio';
 
 export default function DashboardSvgMotionPage() {
   return (
-    <div className="w-full flex-1 flex flex-col min-h-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] overflow-hidden transition-colors">
+    <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--card-bg)] transition-colors">
       <SvgMotionStudio />
     </div>
   );
