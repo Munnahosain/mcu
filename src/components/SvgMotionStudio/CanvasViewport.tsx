@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Move, RotateCw, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
-import { ProjectState, SvgElementNode, BoundingBox } from './types';
-import { computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
-import { findElementById, flattenElementTree } from './svgParser';
+import { Maximize2, ChevronLeft, ChevronRight, Clapperboard, FileImage, Camera } from 'lucide-react';
+import { ProjectState, BoundingBox } from './types';
+import { computeParentedStylesAtTime, computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
+import { flattenElementTree } from './svgParser';
+import { MotionTool } from './WorkspaceChrome';
 
 interface CanvasViewportProps {
   project: ProjectState;
@@ -27,15 +28,41 @@ interface CanvasViewportProps {
   isRightCollapsed: boolean;
   onToggleRightSidebar: () => void;
   onRegisterPlaybackRenderer: (renderer: ((time: number) => void) | null) => void;
+  activeTool: MotionTool;
+  snapping: boolean;
+  renderScale: number;
+  onAddProjectItem: (itemId: string, time: number) => void;
+  onCreateComposition: () => void;
+  onOpenArtworkPicker: () => void;
+  onPointerInfo: (x: number, y: number, color: string) => void;
+  quality: 'Auto' | 'Full' | 'Half' | 'Third' | 'Quarter';
+  onQualityChange: (quality: 'Full' | 'Half' | 'Third' | 'Quarter') => void;
+  onToggleGrid: () => void;
+  onToggleSafeArea: () => void;
+  onToggleCheckerboard: () => void;
+  onSeek: (time: number) => void;
 }
 
 const SvgMarkup = React.memo(function SvgMarkup({
   svgRaw,
   wrapperRef,
+  renderScale,
 }: {
   svgRaw: string;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
+  renderScale: number;
 }) {
+  useLayoutEffect(() => {
+    const svg = wrapperRef.current?.querySelector('svg');
+    if (!svg) return;
+    const scale = Number.isFinite(renderScale) ? Math.min(1, Math.max(0.25, renderScale)) : 1;
+    svg.style.width = `${scale * 100}%`;
+    svg.style.height = `${scale * 100}%`;
+    svg.style.transform = `scale(${1 / scale})`;
+    svg.style.transformOrigin = 'top left';
+    svg.style.imageRendering = scale < 1 ? 'pixelated' : 'auto';
+  }, [renderScale, svgRaw, wrapperRef]);
+
   return (
     <div
       ref={wrapperRef}
@@ -63,12 +90,24 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   isRightCollapsed,
   onToggleRightSidebar,
   onRegisterPlaybackRenderer,
+  activeTool,
+  snapping,
+  renderScale,
+  onAddProjectItem,
+  onCreateComposition,
+  onOpenArtworkPicker,
+  onPointerInfo,
+  quality,
+  onQualityChange,
+  onToggleGrid,
+  onToggleSafeArea,
+  onToggleCheckerboard,
+  onSeek,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const selectionOverlayRef = useRef<HTMLDivElement>(null);
   const svgNodesRef = useRef<SVGElement[]>([]);
-  const animatedNodesRef = useRef<SVGElement[]>([]);
 
   // Viewport navigation state (Pan & Zoom)
   const [zoom, setZoom] = useState<number>(1);
@@ -78,6 +117,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   // Mouse cursor position on canvas (for rulers)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isTimeEditing, setIsTimeEditing] = useState(false);
+  const [timeDraft, setTimeDraft] = useState(String(project.currentTime));
 
   // Selected element bounding box on screen
   const [selectionBox, setSelectionBox] = useState<BoundingBox | null>(null);
@@ -90,8 +131,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [regionSelection, setRegionSelection] = useState<BoundingBox | null>(null);
   const regionSelectionRef = useRef<BoundingBox | null>(null);
   const regionStartRef = useRef<{ x: number; y: number } | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-
   const { viewBox } = project.document;
   const { currentTime } = project;
   const elementById = useMemo(
@@ -102,21 +141,47 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     () => new Set(project.tracks.map((track) => track.elementId)),
     [project.tracks]
   );
+  const soloElementIds = useMemo(
+    () => new Set(flattenElementTree(project.elements).filter((element) => element.solo).map((element) => element.id)),
+    [project.elements]
+  );
+  const isSoloVisible = useCallback((elementId: string) => {
+    if (soloElementIds.size === 0) return true;
+    if (soloElementIds.has(elementId)) return true;
+    return Array.from(soloElementIds).some((soloId) => {
+      let current = elementById.get(soloId);
+      while (current?.parentId) {
+        if (current.parentId === elementId) return true;
+        current = elementById.get(current.parentId);
+      }
+      return false;
+    });
+  }, [elementById, soloElementIds]);
 
   useLayoutEffect(() => {
     const svgEl = svgWrapperRef.current?.querySelector('svg');
     svgNodesRef.current = svgEl
       ? Array.from(svgEl.querySelectorAll<SVGElement>('[data-mcu-id]'))
       : [];
-    animatedNodesRef.current = svgNodesRef.current.filter((node) =>
-      animatedElementIds.has(node.getAttribute('data-mcu-id') || '')
-    );
     svgNodesRef.current.forEach((node) => {
       const elementId = node.getAttribute('data-mcu-id');
       const elementNode = elementId ? elementById.get(elementId) : undefined;
-      node.style.display = elementNode?.visible === false ? 'none' : '';
+      const inPoint = Number.isFinite(elementNode?.inPoint)
+        ? Math.max(0, Math.min(project.document.duration, elementNode?.inPoint ?? 0))
+        : 0;
+      const outPoint = Number.isFinite(elementNode?.outPoint)
+        ? Math.max(inPoint, Math.min(project.document.duration, elementNode?.outPoint ?? project.document.duration))
+        : project.document.duration;
+      const shouldDisplay = elementNode?.visible !== false
+        && isSoloVisible(elementNode?.id ?? '')
+        && project.currentTime >= inPoint
+        && project.currentTime < outPoint;
+      node.style.display = shouldDisplay ? '' : 'none';
+      node.style.mixBlendMode = elementNode?.blendMode && elementNode.blendMode !== 'normal'
+        ? elementNode.blendMode === 'add' ? 'plus-lighter' : elementNode.blendMode
+        : '';
     });
-  }, [project, animatedElementIds, elementById]);
+  }, [project, animatedElementIds, elementById, isSoloVisible]);
   const vbW = viewBox?.width || 800;
   const vbH = viewBox?.height || 600;
 
@@ -160,42 +225,42 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   }, [handleFitToScreen]);
 
   const renderAnimationAtTime = useCallback((time: number) => {
-    animatedNodesRef.current.forEach((node) => {
+    const animatedStyles = computeParentedStylesAtTime(project.tracks, project.elements, time);
+    svgNodesRef.current.forEach((node) => {
       const elementId = node.getAttribute('data-mcu-id');
       if (!elementId) return;
 
       const elementNode = elementById.get(elementId);
       if (!elementNode) return;
 
-      const display = elementNode.visible ? '' : 'none';
+      const inPoint = Number.isFinite(elementNode.inPoint)
+        ? Math.max(0, Math.min(project.document.duration, elementNode.inPoint ?? 0))
+        : 0;
+      const outPoint = Number.isFinite(elementNode.outPoint)
+        ? Math.max(inPoint, Math.min(project.document.duration, elementNode.outPoint ?? project.document.duration))
+        : project.document.duration;
+      const display = elementNode.visible && isSoloVisible(elementId) && time >= inPoint && time < outPoint ? '' : 'none';
       if (node.style.display !== display) node.style.display = display;
-      if (!elementNode.visible) return;
+      if (display === 'none') return;
 
-      const styles = computeElementStylesAtTime(
-        project.tracks,
-        elementId,
-        time,
-        elementNode.initialTransform,
-        elementNode.initialAppearance
-      );
+      const styles = animatedStyles.get(elementId);
+      if (!styles) return;
       applyComputedStylesToElement(node, styles);
     });
 
     if (selectedElementId && selectionOverlayRef.current) {
-      const selectedNode = elementById.get(selectedElementId);
-      const styles = computeElementStylesAtTime(
-        project.tracks,
-        selectedElementId,
-        time,
-        selectedNode?.initialTransform,
-        selectedNode?.initialAppearance
-      );
-      selectionOverlayRef.current.style.transform =
-        `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) ` +
-        `scale(${styles.scaleX / 100}, ${styles.scaleY / 100})`;
-      selectionOverlayRef.current.style.transformOrigin = `${styles.originX}% ${styles.originY}%`;
+      const styles = animatedStyles.get(selectedElementId);
+      if (styles?.transformMatrix) {
+        selectionOverlayRef.current.style.transform = `matrix(${styles.transformMatrix.join(',')})`;
+        selectionOverlayRef.current.style.transformOrigin = '0 0';
+      } else if (styles) {
+        selectionOverlayRef.current.style.transform =
+          `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) ` +
+          `scale(${styles.scaleX / 100}, ${styles.scaleY / 100})`;
+        selectionOverlayRef.current.style.transformOrigin = `${styles.originX}% ${styles.originY}%`;
+      }
     }
-  }, [elementById, project.tracks, selectedElementId]);
+  }, [elementById, project.elements, project.tracks, project.document.duration, selectedElementId, isSoloVisible]);
 
   useLayoutEffect(() => {
     renderAnimationAtTime(currentTime);
@@ -271,10 +336,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   // Canvas Mouse Down: pan or select
   const handleMouseDown = (e: React.MouseEvent) => {
     // Middle click or Space+LeftClick initiates Pan
-    if (e.button === 1 || (e.button === 0 && isSpacePressed)) {
+    if (e.button === 1 || (e.button === 0 && (isSpacePressed || activeTool === 'hand'))) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      return;
+    }
+
+    if (activeTool === 'zoom' && e.button === 0) {
+      setZoom((currentZoom) => Math.min(5, currentZoom * 1.2));
       return;
     }
 
@@ -298,6 +368,27 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const elId = clickedElement.getAttribute('data-mcu-id');
       if (elId) {
         onSelectElement(elId);
+        if (elId === selectedElementId && ['move', 'rotate', 'scale', 'anchor'].includes(activeTool)) {
+          const styles = computeElementStylesAtTime(
+            project.tracks,
+            elId,
+            currentTime,
+            elementById.get(elId)?.initialTransform,
+            elementById.get(elId)?.initialAppearance
+          );
+          setDragMode(activeTool === 'anchor' ? 'origin' : activeTool);
+          setDragStart({
+            x: e.clientX,
+            y: e.clientY,
+            initialVal: {
+              x: styles.x,
+              y: styles.y,
+              rotation: styles.rotation,
+              scaleX: styles.scaleX,
+              scaleY: styles.scaleY,
+            },
+          });
+        }
         return;
       }
     }
@@ -317,6 +408,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (showRulers) {
       setMousePos((prev) => (prev.x === curX && prev.y === curY ? prev : { x: curX, y: curY }));
     }
+    const target = e.target instanceof Element ? e.target.closest<SVGElement>('[data-mcu-id]') : null;
+    const fill = target ? window.getComputedStyle(target).fill : '—';
+    onPointerInfo(curX, curY, fill);
 
     if (isPanning) {
       setPan({
@@ -349,9 +443,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (dragMode === 'move') {
         const initX = dragStart.initialVal?.x || 0;
         const initY = dragStart.initialVal?.y || 0;
+        const nextX = initX + deltaX;
+        const nextY = initY + deltaY;
         onUpdateTransform(selectedElementId, {
-          x: Math.round(initX + deltaX),
-          y: Math.round(initY + deltaY),
+          x: Math.round(snapping ? Math.round(nextX / 10) * 10 : nextX),
+          y: Math.round(snapping ? Math.round(nextY / 10) * 10 : nextY),
         });
       } else if (dragMode === 'rotate') {
         // Calculate angle relative to selection box center
@@ -370,6 +466,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           const originYPct = Math.max(0, Math.min(100, Math.round(((curY - selectionBox.y) / selectionBox.height) * 100)));
           onUpdateTransform(selectedElementId, { originX: originXPct, originY: originYPct });
         }
+      } else if (dragMode === 'scale' && selectionBox) {
+        const initialScaleX = dragStart.initialVal?.scaleX ?? 100;
+        const initialScaleY = dragStart.initialVal?.scaleY ?? 100;
+        const deltaScaleX = (deltaX / Math.max(1, selectionBox.width)) * 100;
+        const deltaScaleY = (deltaY / Math.max(1, selectionBox.height)) * 100;
+        onUpdateTransform(selectedElementId, {
+          scaleX: Math.max(1, Math.min(500, initialScaleX + deltaScaleX)),
+          scaleY: Math.max(1, Math.min(500, initialScaleY + deltaScaleY)),
+        });
       }
     }
   };
@@ -386,14 +491,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onCreateImageRegion(selection);
     }
   };
-
-  useEffect(() => {
-    if (!isRegionCutMode) {
-      regionStartRef.current = null;
-      regionSelectionRef.current = null;
-      setRegionSelection(null);
-    }
-  }, [isRegionCutMode]);
 
   // Arrow keys nudging for precision placement
   useEffect(() => {
@@ -447,12 +544,36 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   return (
     <div
       ref={containerRef}
+      onDragOver={(event) => {
+        if (
+          Array.from(event.dataTransfer.types).includes('application/x-mcu-motion-layer')
+          || Array.from(event.dataTransfer.types).includes('application/x-mcu-project-item')
+        ) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        }
+      }}
+      onDrop={(event) => {
+        const projectItemId = event.dataTransfer.getData('application/x-mcu-project-item');
+        if (projectItemId) {
+          event.preventDefault();
+          onAddProjectItem(projectItemId, currentTime);
+          return;
+        }
+        const layerId = event.dataTransfer.getData('application/x-mcu-motion-layer');
+        if (!layerId) return;
+        event.preventDefault();
+        onSelectElement(layerId);
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
       className="relative flex-1 min-w-0 h-full w-full bg-[var(--main-bg)] text-foreground overflow-hidden select-none cursor-default transition-colors"
-      style={{ touchAction: 'none', cursor: isRegionCutMode ? 'crosshair' : undefined }}
+      style={{
+        touchAction: 'none',
+        cursor: isRegionCutMode ? 'crosshair' : activeTool === 'hand' ? (isPanning ? 'grabbing' : 'grab') : activeTool === 'zoom' ? 'zoom-in' : undefined,
+      }}
     >
       <button
         type="button"
@@ -620,7 +741,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           </div>
 
           {/* SVG Content Mount */}
-          <SvgMarkup svgRaw={project.svgRaw} wrapperRef={svgWrapperRef} />
+          <SvgMarkup svgRaw={project.svgRaw} wrapperRef={svgWrapperRef} renderScale={renderScale} />
 
           {isRegionCutMode && (
             <div className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-lg border border-primary/40 bg-[var(--card-bg)]/95 px-3 py-2 text-[11px] font-semibold text-primary shadow-lg">
@@ -639,7 +760,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             />
           )}
 
-          {project.elements.length === 0 && (
+          {!project.compositions?.length && (
             <div
               className={`absolute inset-0 z-10 flex items-center justify-center p-6 ${
                 isFileDragActive ? 'bg-primary/10' : 'bg-[var(--main-bg)]/35'
@@ -660,36 +781,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
                 if (file) onOpenSvgFile(file);
               }}
             >
-              <div className="max-w-sm rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)]/95 p-7 text-center shadow-2xl backdrop-blur">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Upload className="h-5 w-5" />
-                </div>
-                <h2 className="text-base font-semibold text-foreground">Start a Motion Studio project</h2>
-                <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
-                  Import a layered SVG, or upload a PNG/JPEG/WebP and cut regions into independently animated layers.
-                </p>
-                <input
-                  ref={uploadInputRef}
-                  type="file"
-                  accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0];
-                    if (file) onOpenSvgFile(file);
-                    event.currentTarget.value = '';
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => uploadInputRef.current?.click()}
-                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/20 transition hover:brightness-110"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Upload SVG or image
+              <div className="grid grid-cols-2 gap-6">
+                <button type="button" onClick={onCreateComposition} aria-label="Create a new composition"
+                  className="flex h-[230px] w-[214px] flex-col items-center justify-center gap-6 border border-[#121212] bg-[#1a1a1a] text-[#bcbcbc] transition-colors hover:border-[var(--st-accent)] hover:bg-[#292929] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                  <Clapperboard className="h-14 w-14 stroke-[1]" />
+                  <span className="text-[14px]">New Composition</span>
                 </button>
-                <p className="mt-3 text-[10px] text-[var(--text-muted)]">
-                  Image cutouts become separate layers; the remaining image keeps transparent cutout areas.
-                </p>
+                <button type="button" onClick={onOpenArtworkPicker} aria-label="Create a composition from artwork"
+                  className="flex h-[230px] w-[214px] flex-col items-center justify-center gap-6 border border-[#121212] bg-[#1a1a1a] text-[#bcbcbc] transition-colors hover:border-[var(--st-accent)] hover:bg-[#292929] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                  <FileImage className="h-14 w-14 stroke-[1]" />
+                  <span className="max-w-40 text-center text-[14px]">New Composition<br />From Artwork</span>
+                </button>
               </div>
             </div>
           )}
@@ -762,9 +864,19 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
                 return (
                   <div
                     key={handle}
+                    onMouseDown={(event) => {
+                      if (activeTool !== 'scale' || !selectedStyles) return;
+                      event.stopPropagation();
+                      setDragMode('scale');
+                      setDragStart({
+                        x: event.clientX,
+                        y: event.clientY,
+                        initialVal: { scaleX: selectedStyles.scaleX, scaleY: selectedStyles.scaleY },
+                      });
+                    }}
                     className={`absolute w-2.5 h-2.5 bg-white border border-primary shadow-sm pointer-events-auto ${
                       isTop ? '-top-1.5' : '-bottom-1.5'
-                    } ${isLeft ? '-left-1.5' : '-right-1.5'}`}
+                    } ${isLeft ? '-left-1.5' : '-right-1.5'} ${activeTool === 'scale' ? 'cursor-nwse-resize' : ''}`}
                   />
                 );
               })}
@@ -773,49 +885,37 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         </div>
       </div>
 
-      {/* Floating Bottom-Right Zoom & View Controls */}
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5 bg-[var(--card-bg)]/90 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-[var(--card-border)] shadow-xl text-xs select-none text-foreground">
-        <button
-          type="button"
-          onClick={() => setZoom((z) => Math.max(0.15, z - 0.15))}
-          className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-foreground hover:bg-[var(--hover-bg)] transition-colors"
-          title="Zoom Out (-)"
-        >
-          <ZoomOut className="h-3.5 w-3.5" />
-        </button>
-
-        <span
-          onClick={handleFitToScreen}
-          className="px-2 font-mono font-bold text-foreground cursor-pointer hover:text-primary transition-colors"
-          title="Click to reset zoom"
-        >
-          {Math.round(zoom * 100)}%
-        </span>
-
-        <button
-          type="button"
-          onClick={() => setZoom((z) => Math.min(5.0, z + 0.15))}
-          className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-foreground hover:bg-[var(--hover-bg)] transition-colors"
-          title="Zoom In (+)"
-        >
-          <ZoomIn className="h-3.5 w-3.5" />
-        </button>
-
-        <div className="h-3.5 w-[1px] bg-[var(--card-border)] mx-0.5" />
-
-        <button
-          type="button"
-          onClick={handleFitToScreen}
-          className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-foreground hover:bg-[var(--hover-bg)] transition-colors"
-          title="Fit Canvas to Viewport"
-        >
-          <Maximize2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* Floating Bottom-Left Mouse Coordinates */}
-      <div className="absolute bottom-4 left-8 z-20 font-mono text-[10px] text-[var(--text-muted)] bg-[var(--card-bg)]/80 backdrop-blur-md px-2.5 py-1 rounded-xl border border-[var(--card-border)] pointer-events-none select-none font-semibold shadow-sm">
-        X: {mousePos.x}px &nbsp;|&nbsp; Y: {mousePos.y}px
+      <div className="group absolute inset-x-0 bottom-0 z-40 flex h-7 items-center gap-2 border-t border-[#121212] bg-[#232323]/95 px-2 text-[10px] text-[#aaa] opacity-45 transition-opacity hover:opacity-100 focus-within:opacity-100">
+        <label className="flex items-center gap-1">
+          Magnification
+          <select aria-label="Viewer magnification" value={['25', '50', '100', '200'].find((value) => Math.abs(zoom * 100 - Number(value)) < 3) ?? 'fit'}
+            onChange={(event) => event.target.value === 'fit' ? handleFitToScreen() : setZoom(Number(event.target.value) / 100)}
+            className="motion-studio-select h-5 border border-[#121212] bg-[#1d1d1d] px-1 text-[9px] text-white">
+            <option value="fit">Fit</option><option value="25">25%</option><option value="50">50%</option><option value="100">100%</option><option value="200">200%</option>
+          </select>
+        </label>
+        <button type="button" onClick={onToggleGrid} aria-pressed={showGrid} title="Toggle grid" className={showGrid ? 'text-[var(--st-accent)]' : 'text-[#888]'}>Grid</button>
+        <button type="button" onClick={onToggleSafeArea} aria-pressed={showSafeArea} title="Toggle safe margins" className={showSafeArea ? 'text-[var(--st-accent)]' : 'text-[#888]'}>Safe</button>
+        <button type="button" onClick={onToggleCheckerboard} aria-pressed={canvasBg === 'checkerboard'} title="Toggle transparency checkerboard" className={canvasBg === 'checkerboard' ? 'text-[var(--st-accent)]' : 'text-[#888]'}>Transparency</button>
+        <button type="button" disabled title="Snapshot is unavailable for this viewer" aria-label="Snapshot unavailable" className="flex items-center opacity-40"><Camera className="h-3.5 w-3.5" /></button>
+        {isTimeEditing ? (
+          <input autoFocus aria-label="Current time in seconds" type="number" min="0" max={project.document.duration} step={1 / Math.max(1, project.document.fps)} value={timeDraft}
+            onChange={(event) => setTimeDraft(event.target.value)}
+            onBlur={() => { const time = Number(timeDraft); if (Number.isFinite(time)) onSeek(Math.max(0, Math.min(project.document.duration, time))); setIsTimeEditing(false); }}
+            onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setIsTimeEditing(false); }}
+            className="w-16 border border-[#121212] bg-[#1d1d1d] px-1 font-mono text-[9px] text-white" />
+        ) : (
+          <button type="button" onClick={() => { setTimeDraft(String(project.currentTime)); setIsTimeEditing(true); }} aria-label="Edit current time"
+            className="font-mono text-[#ddd]">{`${Math.floor(project.currentTime / 60)}:${String(Math.floor(project.currentTime % 60)).padStart(2, '0')}`}</button>
+        )}
+        <label className="flex items-center gap-1">
+          Resolution
+          <select value={quality === 'Auto' ? 'Full' : quality} onChange={(event) => onQualityChange(event.target.value as 'Full' | 'Half' | 'Third' | 'Quarter')} aria-label="Viewer resolution"
+            className="motion-studio-select h-5 border border-[#121212] bg-[#1d1d1d] px-1 text-[9px] text-white">
+            {(['Full', 'Half', 'Third', 'Quarter'] as const).map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={handleFitToScreen} title="Fit composition to viewer" aria-label="Fit composition" className="ml-auto text-[#aaa] hover:text-white"><Maximize2 className="h-3.5 w-3.5" /></button>
       </div>
     </div>
   );

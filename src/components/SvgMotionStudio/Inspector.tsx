@@ -46,6 +46,7 @@ import {
 } from './keyframeManager';
 
 interface InspectorProps {
+  style?: React.CSSProperties;
   project: ProjectState;
   selectedElementId: string | null;
   selectedKeyframeId: string | null;
@@ -66,7 +67,115 @@ interface InspectorProps {
   onSeek: (time: number) => void;
 }
 
+interface ScrubbableNumberProps {
+  label: string;
+  value: number;
+  unit?: string;
+  step?: number;
+  min?: number;
+  max?: number;
+  className?: string;
+  onChange: (value: number) => void;
+}
+
+const ScrubbableNumber: React.FC<ScrubbableNumberProps> = ({
+  label,
+  value,
+  unit = '',
+  step = 1,
+  min,
+  max,
+  className = '',
+  onChange,
+}) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dragRef = useRef<{ x: number; value: number } | null>(null);
+  const cancelEditRef = useRef(false);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  const clamp = (next: number) => Math.max(min ?? -Infinity, Math.min(max ?? Infinity, next));
+  const commit = () => {
+    const parsed = Number(draft);
+    if (Number.isFinite(parsed)) onChange(clamp(parsed));
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="number"
+        value={draft}
+        min={min}
+        max={max}
+        step={step}
+        aria-label={label}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (cancelEditRef.current) {
+            cancelEditRef.current = false;
+            return;
+          }
+          commit();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') commit();
+          if (event.key === 'Escape') {
+            cancelEditRef.current = true;
+            event.currentTarget.blur();
+          }
+        }}
+        className={`min-w-0 bg-transparent text-right font-mono text-xs font-bold text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
+      />
+    );
+  }
+
+  return (
+    <span
+      role="spinbutton"
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      tabIndex={0}
+      onDoubleClick={() => {
+        setDraft(String(value));
+        setEditing(true);
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = { x: event.clientX, value };
+      }}
+      onPointerMove={(event) => {
+        if (!dragRef.current || !(event.buttons & 1)) return;
+        const multiplier = event.shiftKey ? 10 : event.altKey ? 0.1 : 1;
+        const increments = (event.clientX - dragRef.current.x) * multiplier;
+        onChange(clamp(dragRef.current.value + increments * step));
+      }}
+      onPointerUp={() => { dragRef.current = null; }}
+      onPointerCancel={() => { dragRef.current = null; }}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+        event.preventDefault();
+        const multiplier = event.shiftKey ? 10 : event.altKey ? 0.1 : 1;
+        onChange(clamp(value + (event.key === 'ArrowUp' ? 1 : -1) * step * multiplier));
+      }}
+      className={`cursor-ew-resize select-none text-right font-mono text-xs font-bold text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
+      title={`${label}: drag to scrub, Shift ×10, Alt ×0.1, double-click to type`}
+    >
+      {Math.round(value * 100) / 100}{unit}
+    </span>
+  );
+};
+
 export const Inspector: React.FC<InspectorProps> = ({
+  style,
   project,
   selectedElementId,
   selectedKeyframeId,
@@ -125,6 +234,10 @@ export const Inspector: React.FC<InspectorProps> = ({
     if (!selectedElementId) return false;
     return hasKeyframeAtTime(project.tracks, selectedElementId, prop, project.currentTime);
   };
+  const hasAnimatedTrack = (prop: AnimProperty): boolean =>
+    Boolean(selectedElementId && project.tracks.some(
+      (track) => track.elementId === selectedElementId && track.property === prop && track.keyframes.length > 0
+    ));
 
   // Check if any transform has keyframe at playhead
   const hasAnyTransformKeyframe = useMemo(() => {
@@ -153,7 +266,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   // Render Document Inspector when no element is selected
   if (!selectedNode || !currentStyles) {
     return (
-      <aside className="svg-motion-inspector w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
+      <aside style={style} className="svg-motion-inspector w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
         <div className="p-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-4 w-4 text-primary" />
@@ -291,7 +404,7 @@ export const Inspector: React.FC<InspectorProps> = ({
 
   // Render Element Inspector when an object is selected
   return (
-    <aside className="svg-motion-inspector w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
+    <aside style={style} className="svg-motion-inspector w-80 border-l border-[var(--card-border)] bg-[var(--card-bg)] text-foreground flex flex-col h-full min-h-0 select-none z-10 shrink-0 transition-colors">
       {/* Element Header */}
       <div className="p-2.5 border-b border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -401,11 +514,12 @@ export const Inspector: React.FC<InspectorProps> = ({
           </div>
         </div>
 
-        {(selectedNode.initialAppearance?.fill || selectedNode.tagName === 'text') && (
-          <div className="space-y-3 rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] p-3">
-            <div className="border-b border-[var(--card-border)] pb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-              Layer Appearance
-            </div>
+        {(selectedNode.initialAppearance?.fill || selectedNode.initialAppearance?.stroke || selectedNode.tagName === 'text') && (
+          <details open className="rounded-2xl border border-[var(--card-border)] bg-[var(--input-bg)] p-3">
+            <summary className="mb-2 cursor-pointer list-none border-b border-[var(--card-border)] pb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              Appearance / Fill / Stroke
+            </summary>
+            <div className="space-y-3">
             <label className="flex items-center justify-between gap-3 text-[11px] font-semibold text-foreground">
               Fill color
               <input
@@ -435,21 +549,21 @@ export const Inspector: React.FC<InspectorProps> = ({
                 This text uses nested SVG formatting and cannot be edited as a single string.
               </p>
             )}
-          </div>
+            </div>
+          </details>
         )}
 
         {/* ============================================================== */}
         {/* 2. TRANSFORM CONTROLS (Scale, Rotation, Opacity, Position)      */}
         {/* ============================================================== */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-1">
-            <span className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-              Transform Controls
-            </span>
-            <span className="text-[9px] font-mono text-[var(--text-muted)]">
+        <details open className="rounded-xl border border-[var(--card-border)] p-2.5">
+          <summary className="mb-2 cursor-pointer list-none border-b border-[var(--card-border)] pb-1 text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            Layer Transform
+          </summary>
+          <div className="space-y-3">
+            <div className="mb-2 text-right text-[9px] font-mono text-[var(--text-muted)]">
               {autoKeyframe ? 'Auto-Key Active' : 'Manual'}
-            </span>
-          </div>
+            </div>
 
           {/* --- A. SCALE (Uniform & Independent SX/SY) --- */}
           <div className="space-y-1.5 bg-[var(--input-bg)] p-2.5 rounded-2xl border border-[var(--card-border)]">
@@ -482,13 +596,14 @@ export const Inspector: React.FC<InspectorProps> = ({
                     onToggleKeyframe(selectedNode.id, 'scaleY');
                   }}
                   className={`p-1 rounded text-xs font-black transition-colors ${
-                    hasKeyframe('scaleX') || hasKeyframe('scaleY')
+                    hasAnimatedTrack('scaleX') || hasAnimatedTrack('scaleY')
                       ? 'text-primary fill-primary shadow-[0_0_8px_rgba(22,199,132,0.4)]'
                       : 'text-[var(--text-muted)] hover:text-primary'
                   }`}
-                  title="Toggle Scale Keyframes (◆)"
+                  title="Toggle Scale keyframes at the playhead"
+                  aria-label="Toggle Scale keyframes at the playhead"
                 >
-                  ◆
+                  <Clock className={`h-3.5 w-3.5 ${hasKeyframe('scaleX') || hasKeyframe('scaleY') ? 'fill-primary' : ''}`} />
                 </button>
               </div>
             </div>
@@ -516,17 +631,18 @@ export const Inspector: React.FC<InspectorProps> = ({
             <div className="flex items-center gap-1.5 pt-1">
               <div className="flex-1 flex items-center justify-between bg-[var(--card-bg)] px-2 py-1 rounded-xl border border-[var(--card-border)]">
                 <span className="text-[10px] font-mono text-[var(--text-muted)]">SX</span>
-                <input
-                  type="number"
+                <ScrubbableNumber
+                  label="Scale X"
                   value={Math.round(currentStyles.scaleX)}
-                  onChange={(e) => {
-                    const val = Number(e.target.value) || 100;
-                    onUpdateTransformProperty(selectedNode.id, 'scaleX', val);
-                    if (scaleLocked) onUpdateTransformProperty(selectedNode.id, 'scaleY', val);
+                  min={0}
+                  max={500}
+                  unit="%"
+                  className="w-12"
+                  onChange={(value) => {
+                    onUpdateTransformProperty(selectedNode.id, 'scaleX', value);
+                    if (scaleLocked) onUpdateTransformProperty(selectedNode.id, 'scaleY', value);
                   }}
-                  className="bg-transparent text-foreground font-mono text-xs w-12 outline-none text-right font-bold"
                 />
-                <span className="text-[9px] text-[var(--text-muted)]">%</span>
               </div>
 
               <button
@@ -544,20 +660,20 @@ export const Inspector: React.FC<InspectorProps> = ({
 
               <div className="flex-1 flex items-center justify-between bg-[var(--card-bg)] px-2 py-1 rounded-xl border border-[var(--card-border)]">
                 <span className="text-[10px] font-mono text-[var(--text-muted)]">SY</span>
-                <input
-                  type="number"
+                <ScrubbableNumber
+                  label="Scale Y"
                   value={Math.round(currentStyles.scaleY)}
-                  onChange={(e) => {
-                    const val = Number(e.target.value) || 100;
-                    onUpdateTransformProperty(selectedNode.id, 'scaleY', val);
-                    if (scaleLocked) onUpdateTransformProperty(selectedNode.id, 'scaleX', val);
+                  min={0}
+                  max={500}
+                  unit="%"
+                  className="w-12"
+                  onChange={(value) => {
+                    onUpdateTransformProperty(selectedNode.id, 'scaleY', value);
+                    if (scaleLocked) onUpdateTransformProperty(selectedNode.id, 'scaleX', value);
                   }}
-                  className="bg-transparent text-foreground font-mono text-xs w-12 outline-none text-right font-bold"
                 />
-                <span className="text-[9px] text-[var(--text-muted)]">%</span>
               </div>
             </div>
-          </div>
 
           {/* --- B. ROTATION --- */}
           <div className="space-y-1.5 bg-[var(--input-bg)] p-2.5 rounded-2xl border border-[var(--card-border)]">
@@ -582,13 +698,14 @@ export const Inspector: React.FC<InspectorProps> = ({
                   type="button"
                   onClick={() => onToggleKeyframe(selectedNode.id, 'rotation')}
                   className={`p-1 rounded text-xs font-black transition-colors ${
-                    hasKeyframe('rotation')
+                    hasAnimatedTrack('rotation')
                       ? 'text-primary fill-primary shadow-[0_0_8px_rgba(22,199,132,0.4)]'
                       : 'text-[var(--text-muted)] hover:text-primary'
                   }`}
-                  title="Toggle Rotation Keyframe (◆)"
+                  title="Toggle Rotation keyframe at the playhead"
+                  aria-label="Toggle Rotation keyframe at the playhead"
                 >
-                  ◆
+                  <Clock className={`h-3.5 w-3.5 ${hasKeyframe('rotation') ? 'fill-primary' : ''}`} />
                 </button>
               </div>
             </div>
@@ -605,15 +722,15 @@ export const Inspector: React.FC<InspectorProps> = ({
                 className="w-full accent-primary cursor-pointer h-1.5 rounded"
               />
               <div className="flex items-center bg-[var(--card-bg)] px-2 py-0.5 rounded-xl border border-[var(--card-border)]">
-                <input
-                  type="number"
+                <ScrubbableNumber
+                  label="Rotation"
                   value={Math.round(currentStyles.rotation)}
-                  onChange={(e) =>
-                    onUpdateTransformProperty(selectedNode.id, 'rotation', Number(e.target.value) || 0)
-                  }
-                  className="bg-transparent text-foreground font-mono text-xs w-10 outline-none text-right font-bold"
+                  min={-360}
+                  max={360}
+                  unit="°"
+                  className="w-10"
+                  onChange={(value) => onUpdateTransformProperty(selectedNode.id, 'rotation', value)}
                 />
-                <span className="text-[10px] text-[var(--text-muted)]">°</span>
               </div>
             </div>
           </div>
@@ -641,13 +758,14 @@ export const Inspector: React.FC<InspectorProps> = ({
                   type="button"
                   onClick={() => onToggleKeyframe(selectedNode.id, 'opacity')}
                   className={`p-1 rounded text-xs font-black transition-colors ${
-                    hasKeyframe('opacity')
+                    hasAnimatedTrack('opacity')
                       ? 'text-primary fill-primary shadow-[0_0_8px_rgba(22,199,132,0.4)]'
                       : 'text-[var(--text-muted)] hover:text-primary'
                   }`}
-                  title="Toggle Opacity Keyframe (◆)"
+                  title="Toggle Opacity keyframe at the playhead"
+                  aria-label="Toggle Opacity keyframe at the playhead"
                 >
-                  ◆
+                  <Clock className={`h-3.5 w-3.5 ${hasKeyframe('opacity') ? 'fill-primary' : ''}`} />
                 </button>
               </div>
             </div>
@@ -664,17 +782,15 @@ export const Inspector: React.FC<InspectorProps> = ({
                 className="w-full accent-primary cursor-pointer h-1.5 rounded"
               />
               <div className="flex items-center bg-[var(--card-bg)] px-2 py-0.5 rounded-xl border border-[var(--card-border)]">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
+                <ScrubbableNumber
+                  label="Opacity"
                   value={Math.round(currentStyles.opacity)}
-                  onChange={(e) =>
-                    onUpdateTransformProperty(selectedNode.id, 'opacity', Number(e.target.value) || 0)
-                  }
-                  className="bg-transparent text-foreground font-mono text-xs w-8 outline-none text-right font-bold"
+                  min={0}
+                  max={100}
+                  unit="%"
+                  className="w-8"
+                  onChange={(value) => onUpdateTransformProperty(selectedNode.id, 'opacity', value)}
                 />
-                <span className="text-[10px] text-[var(--text-muted)]">%</span>
               </div>
             </div>
           </div>
@@ -684,48 +800,46 @@ export const Inspector: React.FC<InspectorProps> = ({
             <div className="flex items-center justify-between bg-[var(--input-bg)] px-2.5 py-1.5 rounded-xl border border-[var(--card-border)]">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-mono text-[var(--text-muted)]">X</span>
-                <input
-                  type="number"
+                <ScrubbableNumber
+                  label="Position X"
                   value={Math.round(currentStyles.x)}
-                  onChange={(e) =>
-                    onUpdateTransformProperty(selectedNode.id, 'x', Number(e.target.value) || 0)
-                  }
-                  className="bg-transparent text-foreground font-mono text-xs w-16 outline-none text-right font-bold"
+                  className="w-16"
+                  onChange={(value) => onUpdateTransformProperty(selectedNode.id, 'x', value)}
                 />
               </div>
               <button
                 type="button"
                 onClick={() => onToggleKeyframe(selectedNode.id, 'x')}
                 className={`p-0.5 rounded transition-colors text-xs font-black ${
-                  hasKeyframe('x') ? 'text-primary fill-primary' : 'text-[var(--text-muted)] hover:text-primary'
+                  hasAnimatedTrack('x') ? 'text-primary' : 'text-[var(--text-muted)] hover:text-primary'
                 }`}
-                title="Toggle Position X Keyframe (◆)"
+                title="Toggle Position X keyframe at the playhead"
+                aria-label="Toggle Position X keyframe at the playhead"
               >
-                ◆
+                <Clock className={`h-3.5 w-3.5 ${hasKeyframe('x') ? 'fill-primary' : ''}`} />
               </button>
             </div>
 
             <div className="flex items-center justify-between bg-[var(--input-bg)] px-2.5 py-1.5 rounded-xl border border-[var(--card-border)]">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-mono text-[var(--text-muted)]">Y</span>
-                <input
-                  type="number"
+                <ScrubbableNumber
+                  label="Position Y"
                   value={Math.round(currentStyles.y)}
-                  onChange={(e) =>
-                    onUpdateTransformProperty(selectedNode.id, 'y', Number(e.target.value) || 0)
-                  }
-                  className="bg-transparent text-foreground font-mono text-xs w-16 outline-none text-right font-bold"
+                  className="w-16"
+                  onChange={(value) => onUpdateTransformProperty(selectedNode.id, 'y', value)}
                 />
               </div>
               <button
                 type="button"
                 onClick={() => onToggleKeyframe(selectedNode.id, 'y')}
                 className={`p-0.5 rounded transition-colors text-xs font-black ${
-                  hasKeyframe('y') ? 'text-primary fill-primary' : 'text-[var(--text-muted)] hover:text-primary'
+                  hasAnimatedTrack('y') ? 'text-primary' : 'text-[var(--text-muted)] hover:text-primary'
                 }`}
-                title="Toggle Position Y Keyframe (◆)"
+                title="Toggle Position Y keyframe at the playhead"
+                aria-label="Toggle Position Y keyframe at the playhead"
               >
-                ◆
+                <Clock className={`h-3.5 w-3.5 ${hasKeyframe('y') ? 'fill-primary' : ''}`} />
               </button>
             </div>
           </div>
@@ -778,7 +892,9 @@ export const Inspector: React.FC<InspectorProps> = ({
               </p>
             </div>
           </div>
-        </div>
+          </div>
+          </div>
+        </details>
 
         {/* ============================================================== */}
         {/* 3. ACTIVE KEYFRAME DETAIL INSPECTOR (When keyframe is selected) */}
@@ -843,6 +959,38 @@ export const Inspector: React.FC<InspectorProps> = ({
 
             {/* Easing Presets Pills for Selected Keyframe */}
             <div className="space-y-1.5 pt-1">
+              <label className="flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Interpolation
+                <select
+                  value={activeKeyframe.kf.interpolation ?? (activeKeyframe.kf.easing === 'linear' ? 'linear' : 'bezier')}
+                  onChange={(event) => {
+                    const interpolation = event.target.value as NonNullable<Keyframe['interpolation']>;
+                    const keyframeId = activeKeyframe!.kf.id;
+                    if (interpolation === 'linear') {
+                      onUpdateKeyframe(keyframeId, { interpolation, easing: 'linear' });
+                    } else if (interpolation === 'hold') {
+                      onUpdateKeyframe(keyframeId, { interpolation });
+                    } else {
+                      const easing = activeKeyframe!.kf.easing === 'linear'
+                        ? 'cubicBezier'
+                        : activeKeyframe!.kf.easing;
+                      onUpdateKeyframe(keyframeId, {
+                        interpolation,
+                        easing,
+                        ...(easing === 'cubicBezier' && !activeKeyframe!.kf.bezier
+                          ? { bezier: [0.25, 0.1, 0.25, 1] }
+                          : {}),
+                      });
+                    }
+                  }}
+                  aria-label="Keyframe interpolation"
+                  className="h-7 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 text-[10px] font-medium normal-case tracking-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <option value="linear">Linear</option>
+                  <option value="bezier">Bezier</option>
+                  <option value="hold">Hold</option>
+                </select>
+              </label>
               <div className="flex items-center justify-between">
                 <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
                   Ease Preset
@@ -859,7 +1007,10 @@ export const Inspector: React.FC<InspectorProps> = ({
                     <button
                       key={preset.id}
                       type="button"
-                      onClick={() => onUpdateKeyframe(activeKeyframe!.kf.id, { easing: preset.id })}
+                      onClick={() => onUpdateKeyframe(activeKeyframe!.kf.id, {
+                        easing: preset.id,
+                        interpolation: preset.id === 'linear' ? 'linear' : 'bezier',
+                      })}
                       className={`flex items-center justify-center gap-1 px-1.5 py-1 rounded-lg text-[10px] font-semibold border transition-all truncate ${
                         isCur
                           ? 'bg-primary text-[#071b17] border-primary font-bold shadow-sm'

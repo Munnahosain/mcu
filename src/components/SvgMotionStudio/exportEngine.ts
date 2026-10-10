@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { ProjectState, AnimationTrack, SvgElementNode } from './types';
-import { computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
+import { computeParentedStylesAtTime, applyComputedStylesToElement } from './animationEngine';
 import { findElementById } from './svgParser';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
@@ -12,6 +12,26 @@ export interface RecordedVideo {
 
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoadPromise: Promise<FFmpeg> | null = null;
+
+function flattenLayers(elements: SvgElementNode[]): SvgElementNode[] {
+  return elements.flatMap((element) => [element, ...flattenLayers(element.children)]);
+}
+
+function isSoloVisible(
+  element: SvgElementNode,
+  soloIds: Set<string>,
+  elementById: Map<string, SvgElementNode>
+): boolean {
+  if (soloIds.size === 0 || soloIds.has(element.id)) return true;
+  for (const soloId of soloIds) {
+    let current = elementById.get(soloId);
+    while (current?.parentId) {
+      if (current.parentId === element.id) return true;
+      current = elementById.get(current.parentId);
+    }
+  }
+  return false;
+}
 
 /**
  * 1. Generate Standalone Animated SVG with embedded CSS Keyframes
@@ -27,11 +47,16 @@ export function generateAnimatedSvg(project: ProjectState): string {
   const svg = doc.querySelector('svg');
   if (!svg) return svgRaw;
 
+  const flattened = flattenLayers(project.elements);
+  const elementById = new Map(flattened.map((element) => [element.id, element]));
+  const soloIds = new Set(flattened.filter((element) => element.solo).map((element) => element.id));
   const allNodes = svg.querySelectorAll('[data-mcu-id]');
   allNodes.forEach((node) => {
     const elementId = node.getAttribute('data-mcu-id');
     const elementState = elementId ? findElementById(project.elements, elementId) : undefined;
-    if (elementState && !elementState.visible) node.setAttribute('display', 'none');
+    if (elementState && (!elementState.visible || !isSoloVisible(elementState, soloIds, elementById))) {
+      node.setAttribute('display', 'none');
+    }
   });
 
   // Group tracks by elementId
@@ -48,14 +73,22 @@ export function generateAnimatedSvg(project: ProjectState): string {
     svg { overflow: visible; }
   `;
 
-  tracksByElement.forEach((elemTracks, elementId) => {
+  flattened.forEach((elementState) => {
+    const elementId = elementState.id;
+    const elemTracks = tracksByElement.get(elementId) ?? [];
     const el = svg.querySelector(`[data-mcu-id="${elementId}"]`);
     if (!el) return;
+    const inPoint = elementState?.inPoint ?? 0;
+    const outPoint = elementState?.outPoint ?? duration;
+    const inRangeTracks = elemTracks.map((track) => ({
+      ...track,
+      keyframes: track.keyframes.filter((keyframe) => keyframe.time >= inPoint && keyframe.time <= outPoint),
+    }));
 
     // Collect all unique timestamps
-    const timestamps = new Set<number>([0, duration]);
-    elemTracks.forEach((tr) => {
-      tr.keyframes.forEach((kf) => timestamps.add(Math.max(0, Math.min(duration, kf.time))));
+    const timestamps = new Set<number>([0, duration, inPoint, outPoint]);
+    inRangeTracks.forEach((tr) => {
+      tr.keyframes.forEach((kf) => timestamps.add(Math.max(inPoint, Math.min(outPoint, kf.time))));
     });
 
     const sortedTimes = Array.from(timestamps).sort((a, b) => a - b);
@@ -65,22 +98,24 @@ export function generateAnimatedSvg(project: ProjectState): string {
 
     sortedTimes.forEach((t) => {
       const pct = Math.round((t / duration) * 1000) / 10;
-      const elementState = findElementById(project.elements, elementId);
-      const styles = computeElementStylesAtTime(
-        elemTracks,
-        elementId,
-        t,
-        elementState?.initialTransform,
-        elementState?.initialAppearance
-      );
+      const isInRange = t >= inPoint && t < outPoint;
+      const styles = computeParentedStylesAtTime(
+        tracks,
+        project.elements,
+        Math.min(Math.max(t, inPoint), outPoint)
+      ).get(elementId);
+      if (!styles) return;
 
-      const transform = `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) scale(${styles.scaleX / 100}, ${styles.scaleY / 100}) skewX(${styles.skewX}deg) skewY(${styles.skewY}deg)`;
+      const transform = styles.transformMatrix
+        ? `matrix(${styles.transformMatrix.join(',')})`
+        : `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) scale(${styles.scaleX / 100}, ${styles.scaleY / 100}) skewX(${styles.skewX}deg) skewY(${styles.skewY}deg)`;
       const opacity = Math.max(0, Math.min(1, styles.opacity / 100));
 
       keyframesCss += `  ${pct}% {\n`;
       keyframesCss += `    transform: ${transform};\n`;
-      keyframesCss += `    transform-origin: ${styles.originX}% ${styles.originY}%;\n`;
-      keyframesCss += `    opacity: ${opacity};\n`;
+      keyframesCss += `    transform-origin: ${styles.transformMatrix ? '0 0' : `${styles.originX}% ${styles.originY}%`};\n`;
+      keyframesCss += `    opacity: ${isInRange ? opacity : 0};\n`;
+      keyframesCss += `    visibility: ${isInRange ? 'visible' : 'hidden'};\n`;
       if (styles.strokeDashoffset !== undefined) {
         keyframesCss += `    stroke-dashoffset: ${styles.strokeDashoffset};\n`;
       }
@@ -116,20 +151,28 @@ export function generateAnimatedSvg(project: ProjectState): string {
 /**
  * 2. Generate Clean Static SVG (cleans up internal data attributes)
  */
-export function generateCleanSvg(svgRaw: string, elements: SvgElementNode[] = []): string {
+export function generateCleanSvg(svgRaw: string, elements: SvgElementNode[] = [], time = 0): string {
   if (typeof window === 'undefined') return svgRaw;
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgRaw, 'image/svg+xml');
   const svg = doc.querySelector('svg');
   if (!svg) return svgRaw;
 
+  const flattened = flattenLayers(elements);
+  const elementById = new Map(flattened.map((element) => [element.id, element]));
+  const soloIds = new Set(flattened.filter((element) => element.solo).map((element) => element.id));
   // Clean data-mcu-id attributes
   const allNodes = svg.querySelectorAll('*');
   allNodes.forEach((node) => {
     const elementId = node.getAttribute('data-mcu-id');
     if (elementId) {
       const elementState = findElementById(elements, elementId);
-      if (elementState && !elementState.visible) node.setAttribute('display', 'none');
+      const inPoint = elementState?.inPoint ?? 0;
+      const outPoint = elementState?.outPoint ?? Number.POSITIVE_INFINITY;
+      if (
+        elementState
+        && (!elementState.visible || time < inPoint || time >= outPoint || !isSoloVisible(elementState, soloIds, elementById))
+      ) node.setAttribute('display', 'none');
       node.removeAttribute('data-mcu-id');
     }
   });
@@ -155,25 +198,34 @@ export async function renderSvgFrameToCanvas(
   const svg = doc.querySelector('svg');
   if (!svg) return;
 
+  const flattened = flattenLayers(elements);
+  const elementById = new Map(flattened.map((element) => [element.id, element]));
+  const soloIds = new Set(flattened.filter((element) => element.solo).map((element) => element.id));
+  const safeTime = Number.isFinite(time) ? Math.max(0, time) : 0;
+  const animatedStyles = computeParentedStylesAtTime(tracks, elements, safeTime);
   // Apply computed styles for all elements
   const allNodes = svg.querySelectorAll('[data-mcu-id]');
   allNodes.forEach((node) => {
     const elId = node.getAttribute('data-mcu-id');
     if (elId) {
       const elementState = findElementById(elements, elId);
-      if (elementState && !elementState.visible) {
+      const inPoint = elementState?.inPoint ?? 0;
+      const outPoint = elementState?.outPoint ?? Number.POSITIVE_INFINITY;
+      const visible = Boolean(
+        elementState
+        && elementState.visible
+        && safeTime >= inPoint
+        && safeTime < outPoint
+        && isSoloVisible(elementState, soloIds, elementById)
+      );
+      if (!visible) {
         node.setAttribute('display', 'none');
       }
-      const elementTracks = tracks.filter((track) => track.elementId === elId);
-      const styles = computeElementStylesAtTime(
-        elementTracks,
-        elId,
-        time,
-        elementState?.initialTransform,
-        elementState?.initialAppearance
-      );
+      const styles = animatedStyles.get(elId);
+      if (!styles) return;
       applyComputedStylesToElement(node as SVGElement, styles);
     }
+
   });
 
   const serializer = new XMLSerializer();

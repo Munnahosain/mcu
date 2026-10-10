@@ -54,13 +54,32 @@ export type EasingType =
   | 'backInOut'
   | 'elasticOut'
   | 'bounceOut'
-  | 'custom';
+  | 'custom'
+  | 'cubicBezier';
+
+export type KeyframeInterpolation = 'linear' | 'bezier' | 'hold';
+
+export interface BezierHandles {
+  out: { x: number; y: number };
+  in: { x: number; y: number };
+}
 
 export interface Keyframe {
   id: string;
   time: number; // in seconds
   value: number | string;
   easing: EasingType;
+  interpolation?: KeyframeInterpolation;
+  bezier?: [number, number, number, number];
+  bezierHandles?: BezierHandles;
+}
+
+export interface KeyframeClipboardEntry {
+  property: AnimProperty;
+  offset: number;
+  value: number | string;
+  easing: EasingType;
+  interpolation?: KeyframeInterpolation;
   bezier?: [number, number, number, number];
 }
 
@@ -88,10 +107,18 @@ export interface SvgElementNode {
   className?: string;
   attributes?: Record<string, string>;
   parentId: string | null;
+  animParentId?: string | null;
   children: SvgElementNode[];
   isGroup: boolean;
   visible: boolean;
   locked: boolean;
+  inPoint?: number;
+  outPoint?: number;
+  colorLabel?: number;
+  solo?: boolean;
+  shy?: boolean;
+  motionBlur?: boolean;
+  blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'add';
   semanticSlot?: CharacterSlot;
   bbox?: BoundingBox;
   initialTransform?: {
@@ -140,6 +167,42 @@ export interface RasterImageSource {
   displayHeight: number;
 }
 
+export interface ProjectMarker {
+  id: string;
+  time: number;
+  label: string;
+}
+
+export interface WorkArea {
+  start: number;
+  end: number;
+}
+
+export interface CompositionInfo {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  duration: number;
+  fps: number;
+}
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  type: 'composition' | 'folder' | 'svg' | 'image';
+  kind?: 'composition' | 'folder' | 'svg' | 'image';
+  parentId?: string | null;
+  size?: number;
+  width?: number;
+  height?: number;
+  dataUrl?: string;
+  svgText?: string;
+  layerId?: string;
+  layerIds?: string[];
+  createdAt?: string;
+}
+
 export interface ProjectState {
   version: string;
   name: string;
@@ -153,12 +216,17 @@ export interface ProjectState {
   characterSlots: Partial<Record<CharacterSlot, string>>; // slot -> elementId
   isSingleFlattenedPath: boolean;
   selectedElementId: string | null;
+  selectedElementIds?: string[];
   selectedKeyframeId: string | null;
   selectedKeyframeIds?: string[];
   currentTime: number; // 0 to duration
   isPlaying: boolean;
   autoKeyframe?: boolean;
   defaultEasing?: EasingType;
+  markers?: ProjectMarker[];
+  workArea?: WorkArea;
+  compositions?: CompositionInfo[];
+  projectItems?: ProjectItem[];
 }
 
 export interface AnimationPreset {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Search,
   Eye,
@@ -26,9 +26,12 @@ import {
 import { SvgElementNode, SvgTagName, AnimationTrack } from './types';
 
 interface LayersPanelProps {
+  style?: React.CSSProperties;
   elements: SvgElementNode[];
   selectedElementId: string | null;
+  selectedElementIds?: string[];
   onSelectElement: (id: string | null) => void;
+  onSelectElements?: (ids: string[], primaryId: string | null) => void;
   onToggleVisibility: (id: string) => void;
   onToggleLock: (id: string) => void;
   onRenameElement: (id: string, newName: string) => void;
@@ -64,9 +67,12 @@ function getElementIcon(tagName: SvgTagName, isGroup: boolean, isExpanded?: bool
 }
 
 export const LayersPanel: React.FC<LayersPanelProps> = ({
+  style,
   elements,
   selectedElementId,
+  selectedElementIds,
   onSelectElement,
+  onSelectElements,
   onToggleVisibility,
   onToggleLock,
   onRenameElement,
@@ -79,6 +85,37 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const selectionAnchorRef = useRef<string | null>(null);
+  const orderedIds: string[] = [];
+  const collectIds = (nodes: SvgElementNode[]) => nodes.forEach((node) => {
+    orderedIds.push(node.id);
+    collectIds(node.children);
+  });
+  collectIds(elements);
+  const setSelection = (ids: string[], primaryId: string | null) => {
+    if (onSelectElements) onSelectElements(ids, primaryId);
+    else onSelectElement(primaryId);
+  };
+  const selectLayer = (id: string, event: React.MouseEvent) => {
+    const currentIds = selectedElementIds?.length ? selectedElementIds : selectedElementId ? [selectedElementId] : [];
+    if (event.shiftKey && selectionAnchorRef.current) {
+      const anchorIndex = orderedIds.indexOf(selectionAnchorRef.current);
+      const targetIndex = orderedIds.indexOf(id);
+      if (anchorIndex >= 0 && targetIndex >= 0) {
+        const start = Math.min(anchorIndex, targetIndex);
+        const end = Math.max(anchorIndex, targetIndex);
+        const ids = orderedIds.slice(start, end + 1);
+        setSelection(ids, id);
+      } else onSelectElement(id);
+    } else if (event.ctrlKey || event.metaKey) {
+      const ids = currentIds.includes(id) ? currentIds.filter((item) => item !== id) : [...currentIds, id];
+      setSelection(ids, ids.includes(id) ? id : ids.at(-1) ?? null);
+    } else {
+      selectionAnchorRef.current = id;
+      setSelection([id], id);
+    }
+    selectionAnchorRef.current = id;
+  };
   const groupIds: string[] = [];
   const collectGroupIds = (nodes: SvgElementNode[]) => {
     nodes.forEach((node) => {
@@ -113,7 +150,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   };
 
   const renderNode = (node: SvgElementNode, depth: number = 0) => {
-    const isSelected = selectedElementId === node.id;
+    const isSelected = (selectedElementIds ?? [selectedElementId]).includes(node.id);
     const isExpanded = expandedGroups[node.id] ?? true;
     const hasChildren = node.children && node.children.length > 0;
     const animated = hasAnimation(node.id);
@@ -130,7 +167,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
     return (
       <div key={node.id} className="flex flex-col select-none">
         <div
-          onClick={() => onSelectElement(node.id)}
+          onClick={(event) => selectLayer(node.id, event)}
           className={`group flex items-center justify-between py-1.5 px-2 cursor-pointer transition-all border-l-2 text-xs ${
             isSelected
               ? 'bg-primary/15 text-primary border-primary font-bold'
@@ -283,7 +320,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   };
 
   return (
-    <aside className="svg-motion-layers-panel w-64 border-r border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col h-full select-none z-10 shrink-0 text-foreground transition-colors">
+    <aside style={style} className="svg-motion-layers-panel w-64 border-r border-[var(--card-border)] bg-[var(--card-bg)] flex flex-col h-full select-none z-10 shrink-0 text-foreground transition-colors">
       {/* Header */}
       <div className="p-3 border-b border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-between">
         <div className="flex items-center gap-1.5">

@@ -567,7 +567,7 @@ export default function RetroRasterStudioPage() {
   };
 
   return (
-    <div className="retro-raster-studio flex flex-col h-auto lg:h-[calc(100vh-8rem)] w-full min-w-0 bg-[#07080b] text-[#f1f5f9] overflow-x-hidden lg:overflow-hidden rounded-[24px] border border-[#1e222a] shadow-2xl">
+    <div className="retro-raster-studio flex flex-col h-auto min-h-0 lg:h-full w-full min-w-0 bg-[#07080b] text-[#f1f5f9] overflow-x-hidden lg:overflow-hidden">
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (

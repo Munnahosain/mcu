@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { SvgElementNode, SvgTagName, BoundingBox } from './types';
+import { DEFAULT_DURATION } from './constants';
 
 export interface ParseResult {
   success: boolean;
@@ -406,10 +407,17 @@ export function sanitizeAndParseSvg(rawSvg: string): ParseResult {
       className: node.getAttribute('class') || undefined,
       attributes,
       parentId,
+      animParentId: null,
       children,
       isGroup,
       visible: true,
       locked: false,
+      inPoint: 0,
+      outPoint: DEFAULT_DURATION,
+      colorLabel: 0,
+      solo: false,
+      shy: false,
+      blendMode: 'normal',
       bbox: estimateBounds(tag, attributes, children.map((child) => child.bbox)),
       pathLength,
       initialAppearance: {

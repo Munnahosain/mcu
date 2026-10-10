@@ -1,4 +1,4 @@
-import { AnimationTrack, Keyframe, AnimProperty, EasingType } from './types';
+import { AnimationTrack, Keyframe, AnimProperty, EasingType, SvgElementNode } from './types';
 
 const sortedKeyframesCache = new WeakMap<AnimationTrack, { length: number; keyframes: Keyframe[] }>();
 const tracksByElementCache = new WeakMap<AnimationTrack[], Map<string, AnimationTrack[]>>();
@@ -83,6 +83,7 @@ export function evaluateEasing(type: EasingType, t: number, bezier?: [number, nu
       }
     }
     case 'custom':
+    case 'cubicBezier':
       if (bezier && bezier.length === 4) {
         return solveCubicBezier(bezier[0], bezier[1], bezier[2], bezier[3], clampT);
       }
@@ -102,7 +103,8 @@ function solveCubicBezier(x1: number, y1: number, x2: number, y2: number, x: num
     t -= (currentX - x) / dx;
     t = Math.max(0, Math.min(1, t));
   }
-  return 3 * (1 - t) * (1 - t) * t * y1 + 3 * (1 - t) * t * t * y2 + t * t * t;
+  const value = 3 * (1 - t) * (1 - t) * t * y1 + 3 * (1 - t) * t * t * y2 + t * t * t;
+  return Number.isFinite(value) ? value : x;
 }
 
 export function interpolateTrackValue(track: AnimationTrack, time: number, defaultValue: number | string): number | string {
@@ -125,12 +127,14 @@ export function interpolateTrackValue(track: AnimationTrack, time: number, defau
     const kfA = sorted[i];
     const kfB = sorted[i + 1];
 
-    if (time >= kfA.time && time <= kfB.time) {
+    if (time >= kfA.time && time < kfB.time) {
       const duration = kfB.time - kfA.time;
       if (duration <= 0.0001) return kfB.value;
+      if (kfA.interpolation === 'hold') return kfA.value;
 
       const progress = (time - kfA.time) / duration;
-      const eased = evaluateEasing(kfA.easing, progress, kfA.bezier);
+      const easing = kfA.interpolation === 'linear' ? 'linear' : kfA.easing;
+      const eased = evaluateEasing(easing, progress, kfA.bezier);
 
       if (typeof kfA.value === 'number' && typeof kfB.value === 'number') {
         return kfA.value + (kfB.value - kfA.value) * eased;
@@ -159,6 +163,129 @@ export interface ComputedElementStyles {
   strokeWidth?: number;
   fill?: string;
   stroke?: string;
+  transformMatrix?: [number, number, number, number, number, number];
+}
+
+type Matrix = [number, number, number, number, number, number];
+
+function multiplyMatrices(left: Matrix, right: Matrix): Matrix {
+  return [
+    left[0] * right[0] + left[2] * right[1],
+    left[1] * right[0] + left[3] * right[1],
+    left[0] * right[2] + left[2] * right[3],
+    left[1] * right[2] + left[3] * right[3],
+    left[0] * right[4] + left[2] * right[5] + left[4],
+    left[1] * right[4] + left[3] * right[5] + left[5],
+  ];
+}
+
+function translation(x: number, y: number): Matrix {
+  return [1, 0, 0, 1, x, y];
+}
+
+function invertMatrix(matrix: Matrix): Matrix {
+  const determinant = matrix[0] * matrix[3] - matrix[1] * matrix[2];
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) return [1, 0, 0, 1, 0, 0];
+  const inverse = 1 / determinant;
+  const a = matrix[3] * inverse;
+  const b = -matrix[1] * inverse;
+  const c = -matrix[2] * inverse;
+  const d = matrix[0] * inverse;
+  return [a, b, c, d, -(a * matrix[4] + c * matrix[5]), -(b * matrix[4] + d * matrix[5])];
+}
+
+function matrixForStyles(styles: ComputedElementStyles, element: SvgElementNode): Matrix {
+  const bounds = element.bbox ?? { x: 0, y: 0, width: 0, height: 0 };
+  const originX = bounds.x + bounds.width * styles.originX / 100;
+  const originY = bounds.y + bounds.height * styles.originY / 100;
+  const radians = styles.rotation * Math.PI / 180;
+  const skewX = Math.tan(styles.skewX * Math.PI / 180);
+  const skewY = Math.tan(styles.skewY * Math.PI / 180);
+  const rotate: Matrix = [Math.cos(radians), Math.sin(radians), -Math.sin(radians), Math.cos(radians), 0, 0];
+  const scale: Matrix = [styles.scaleX / 100, 0, 0, styles.scaleY / 100, 0, 0];
+  const skew: Matrix = [1, skewY, skewX, 1, 0, 0];
+  let matrix = multiplyMatrices(translation(styles.x, styles.y), rotate);
+  matrix = multiplyMatrices(matrix, scale);
+  matrix = multiplyMatrices(matrix, skew);
+  return multiplyMatrices(
+    multiplyMatrices(translation(originX, originY), matrix),
+    translation(-originX, -originY)
+  );
+}
+
+export function computeParentedStylesAtTime(
+  tracks: AnimationTrack[],
+  elements: SvgElementNode[],
+  time: number
+): Map<string, ComputedElementStyles> {
+  const elementsById = new Map<string, SvgElementNode>();
+  const collect = (nodes: SvgElementNode[]) => nodes.forEach((node) => {
+    elementsById.set(node.id, node);
+    collect(node.children);
+  });
+  collect(elements);
+
+  const localStylesById = new Map<string, ComputedElementStyles>();
+  elementsById.forEach((element, id) => {
+    const localTracks = tracks
+      .filter((track) => track.elementId === id)
+      .map((track) => ({
+        ...track,
+        keyframes: track.keyframes.filter((keyframe) =>
+          keyframe.time >= (element.inPoint ?? 0) && keyframe.time <= (element.outPoint ?? Number.POSITIVE_INFINITY)
+        ),
+      }));
+    localStylesById.set(id, computeElementStylesAtTime(
+      localTracks,
+      id,
+      time,
+      element.initialTransform,
+      element.initialAppearance
+    ));
+  });
+
+  const matrices = new Map<string, Matrix>();
+  const visiting = new Set<string>();
+  const getWorldMatrix = (id: string): Matrix => {
+    const cached = matrices.get(id);
+    if (cached) return cached;
+    const element = elementsById.get(id);
+    if (!element || visiting.has(id)) return [1, 0, 0, 1, 0, 0];
+    visiting.add(id);
+    const localStyles = localStylesById.get(id)!;
+    const local = matrixForStyles(localStyles, element);
+    const inheritedId = element.animParentId && elementsById.has(element.animParentId)
+      ? element.animParentId
+      : element.parentId && elementsById.has(element.parentId) ? element.parentId : null;
+    const parent = inheritedId ? getWorldMatrix(inheritedId) : [1, 0, 0, 1, 0, 0] as Matrix;
+    const world = multiplyMatrices(parent, local);
+    visiting.delete(id);
+    matrices.set(id, world);
+    return world;
+  };
+
+  const result = new Map<string, ComputedElementStyles>();
+  elementsById.forEach((element, id) => {
+    const styles = localStylesById.get(id)!;
+    const world = getWorldMatrix(id);
+    const structuralParent = element.parentId ? elementsById.get(element.parentId) : undefined;
+    const structuralWorld = structuralParent ? getWorldMatrix(structuralParent.id) : [1, 0, 0, 1, 0, 0] as Matrix;
+    const bounds = element.bbox ?? { x: 0, y: 0 };
+    const localWorld = multiplyMatrices(invertMatrix(structuralWorld), world);
+    const local = multiplyMatrices(multiplyMatrices(translation(-bounds.x, -bounds.y), localWorld), translation(bounds.x, bounds.y));
+    result.set(id, { ...styles, transformMatrix: local, originX: 0, originY: 0 });
+  });
+  return result;
+}
+
+export function computeParentedElementStylesAtTime(
+  tracks: AnimationTrack[],
+  elements: SvgElementNode[],
+  elementId: string,
+  time: number
+): ComputedElementStyles {
+  const styles = computeParentedStylesAtTime(tracks, elements, time).get(elementId);
+  return styles ?? computeElementStylesAtTime(tracks, elementId, time);
 }
 
 export function computeElementStylesAtTime(
@@ -252,10 +379,12 @@ export function computeElementStylesAtTime(
 
 export function applyComputedStylesToElement(domElement: SVGElement, styles: ComputedElementStyles) {
   // Transform string
-  const transform = `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) scale(${styles.scaleX / 100}, ${styles.scaleY / 100}) skewX(${styles.skewX}deg) skewY(${styles.skewY}deg)`;
+  const transform = styles.transformMatrix
+    ? `matrix(${styles.transformMatrix.join(',')})`
+    : `translate(${styles.x}px, ${styles.y}px) rotate(${styles.rotation}deg) scale(${styles.scaleX / 100}, ${styles.scaleY / 100}) skewX(${styles.skewX}deg) skewY(${styles.skewY}deg)`;
 
   domElement.style.transform = transform;
-  domElement.style.transformOrigin = `${styles.originX}% ${styles.originY}%`;
+  domElement.style.transformOrigin = styles.transformMatrix ? '0 0' : `${styles.originX}% ${styles.originY}%`;
   domElement.style.transformBox = 'fill-box';
   domElement.style.opacity = `${Math.max(0, Math.min(1, styles.opacity / 100))}`;
 

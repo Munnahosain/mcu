@@ -451,30 +451,47 @@ function parseColorFromPath(path: SVGPathLike, gradientMap: Map<string, string>,
 /**
  * Ultra-Realistic Physically-Based Materials with Rich Color Saturation
  */
+function addRim(mat: THREE.MeshPhysicalMaterial, color: THREE.Color, power = 2.2, strength = 1.6) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.rimColor = { value: color };
+    shader.uniforms.rimPower = { value: power };
+    shader.uniforms.rimStrength = { value: strength };
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>",
+        "#include <common>\nuniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimStrength;")
+      .replace("#include <opaque_fragment>",
+        `float rim = pow(1.0 - saturate(abs(dot(normalize(vNormal), normalize(vViewPosition)))), rimPower);
+         outgoingLight += rimColor * rim * rimStrength;
+         #include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => "glassRim";
+}
+
 function makeMaterial(controls: StudioControls, pathHexColor?: string) {
   const hex = controls.colorMode === "svg" && pathHexColor ? pathHexColor : controls.color;
   const baseColor = new THREE.Color(hex).multiplyScalar(controls.brightness / 100);
   const roughness = controls.roughness / 100;
 
-    if (controls.material === "glass") {
-    return new THREE.MeshPhysicalMaterial({
-      color: baseColor,
-      transmission: 0.55,
-      transparent: true,
-      opacity: 0.95,
-      roughness: Math.max(0.02, roughness * 0.2),
-      ior: 1.45,
-      thickness: Math.max(1.2, controls.depth * 0.25),
-      specularIntensity: 1.0,
-      specularColor: new THREE.Color(0xffffff),
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+  if (controls.material === "glass") {
+    const body = baseColor.clone().lerp(new THREE.Color(0xffffff), 0.55);
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: body,
+      transmission: 0.9,
+      roughness: 0.15 + roughness * 0.3,
+      thickness: Math.max(2, controls.depth * 0.4),
+      ior: 1.5,
       attenuationColor: baseColor,
-      attenuationDistance: 3.5,
-      metalness: 0.02,
-      reflectivity: 0.9,
+      attenuationDistance: 2.5,
+      clearcoat: 1,
+      clearcoatRoughness: 0.08,
+      specularIntensity: 1,
+      envMapIntensity: 1.4,
+      metalness: 0,
       side: THREE.DoubleSide,
     });
+    addRim(mat, baseColor.clone().lerp(new THREE.Color(0x27e39a), 0.4), 2.2, 1.6);
+    mat.needsUpdate = true;
+    return mat;
   }
 
   if (controls.material === "plastic") {
@@ -588,7 +605,7 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
   data.paths.forEach((path, pathIndex) => {
     const pathColor = parseColorFromPath(path, gradientMap, controls.color);
     const faceMaterial = makeMaterial(controls, pathColor);
-    const material = asset.preparedFor3D
+    const material = asset.preparedFor3D && controls.material !== "glass"
       ? [
           faceMaterial,
           new THREE.MeshPhysicalMaterial({
@@ -635,7 +652,7 @@ async function createIconGroup(asset: IconAsset, controls: StudioControls, isExp
       group.add(mesh);
       shapeCount += 1;
 
-      if (asset.preparedFor3D) {
+      if (asset.preparedFor3D && controls.material !== "glass") {
         const insetDepth = Math.max(1, extrusionDepth * 0.48);
         const insetGeometry = new THREE.ExtrudeGeometry(shape, {
           depth: insetDepth,

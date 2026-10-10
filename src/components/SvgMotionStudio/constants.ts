@@ -45,6 +45,7 @@ export const EASING_OPTIONS: { label: string; value: EasingType; curveName: stri
   { label: 'Back In Out', value: 'backInOut', curveName: 'Overshoot on both ends' },
   { label: 'Elastic Out', value: 'elasticOut', curveName: 'Rubber band oscillation' },
   { label: 'Bounce Out', value: 'bounceOut', curveName: 'Bounces like a dropped ball' },
+  { label: 'Cubic Bezier', value: 'cubicBezier', curveName: 'Custom cubic bezier interpolation' },
 ];
 
 export const KEYBOARD_SHORTCUTS = [
@@ -54,12 +55,18 @@ export const KEYBOARD_SHORTCUTS = [
   { key: 'Ctrl/Cmd + Shift + Z', description: 'Redo' },
   { key: 'Ctrl/Cmd + S', description: 'Save project (.mcuproj)' },
   { key: 'Ctrl/Cmd + D', description: 'Duplicate selected keyframe or layer' },
+  { key: 'Ctrl/Cmd + C', description: 'Copy selected keyframes' },
+  { key: 'Ctrl/Cmd + V', description: 'Paste keyframes at playhead on selected layer' },
   { key: 'Arrow keys', description: 'Nudge selected object (1px)' },
   { key: 'Shift + Arrow keys', description: 'Nudge selected object faster (10px)' },
   { key: 'Home / 0', description: 'Rewind to start of timeline' },
   { key: 'K', description: 'Add keyframe at current playhead' },
+  { key: 'M', description: 'Add marker at current playhead' },
+  { key: 'J / K', description: 'Jump to previous / next keyframe' },
+  { key: '[ / ]', description: 'Set work area start / end at playhead' },
 ];
 
 export const DEFAULT_VIEWBOX = { x: 0, y: 0, width: 800, height: 600 };
 export const DEFAULT_FPS = 30;
 export const DEFAULT_DURATION = 4.0;
+export const LAYER_COLORS = ['green', 'blue', 'purple', 'orange', 'pink', 'cyan'] as const;

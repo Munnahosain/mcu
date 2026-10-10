@@ -6497,6 +6497,32 @@ html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/65,
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/70,
 html.light body .admin-shell[data-admin-theme="adaptive"] .text-white\/75 { color: rgba(23, 32, 30, 0.82) !important; }
 
+html.light select.motion-studio-select,
+html.light select.motion-studio-select option,
+html.dark select.motion-studio-select,
+html.dark select.motion-studio-select option {
+  color: var(--foreground) !important;
+  background-color: var(--input-bg) !important;
+  -webkit-text-fill-color: var(--foreground) !important;
+}
+
+.svg-motion-studio {
+  --st-bg: #1d1d1d;
+  --st-panel: #232323;
+  --st-accent: var(--primary);
+  --st-text: #d5d5d5;
+  --main-bg: var(--st-bg);
+  --card-bg: var(--st-panel);
+  --card-border: #121212;
+  --input-bg: #1d1d1d;
+  --input-border: #121212;
+  --foreground: var(--st-text);
+  --text-secondary: #a8a8a8;
+  --text-muted: #888888;
+  color: var(--st-text);
+  background: var(--st-bg);
+}
+
 input[type="number"] {
   appearance: textfield !important;
   -moz-appearance: textfield !important;

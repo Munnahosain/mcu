@@ -193,12 +193,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isSvgMotion = pathname?.startsWith('/dashboard/svg-motion');
   const isVectorEditor = pathname === '/dashboard/vector-editor';
+  const isRasterLab = pathname === '/dashboard/ascii';
   const currentFeatureGate = getDashboardFeatureGate(pathname);
 
   return (
     <GeneratorStateProvider>
       <div className={`relative w-full flex flex-col bg-[var(--main-bg)] text-foreground selection:bg-primary selection:text-white ${
-        isSvgMotion || isVectorEditor ? "h-dvh overflow-hidden" : "min-h-screen"
+        isSvgMotion || isVectorEditor
+          ? "h-dvh overflow-hidden"
+          : isRasterLab
+            ? "min-h-screen lg:h-dvh lg:overflow-hidden"
+            : "min-h-screen"
       }`}>
         <Link
           href="/"
@@ -537,13 +542,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* 2. FULL-WIDTH WORKSPACE CONTENT */}
         <main
           className={`flex-1 w-full min-w-0 bg-transparent relative z-10 flex flex-col ${
-            isSvgMotion || isVectorEditor
-                ? `min-h-0 overflow-hidden p-0 dashboard-fullscreen-studio-main ${isVectorEditor ? "dashboard-vector-editor-main" : ""}`
+            isSvgMotion || isVectorEditor || isRasterLab
+                ? `min-h-0 overflow-hidden !p-0 ${isRasterLab ? "!pb-20 lg:!pb-0" : ""} ${isVectorEditor ? "dashboard-vector-editor-main" : ""}`
               : "px-3 py-2 pb-20 sm:px-6 sm:py-4 lg:pb-4"
           }`}
         >
           <div className={
-            isSvgMotion || isVectorEditor
+            isSvgMotion || isVectorEditor || isRasterLab
               ? "flex w-full min-h-0 min-w-0 flex-1 flex-col"
               : "mx-auto w-full max-w-[1920px]"
           }>
@@ -552,7 +557,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
               className={
-                isSvgMotion || isVectorEditor
+                isSvgMotion || isVectorEditor || isRasterLab
                   ? "flex w-full min-h-0 min-w-0 flex-1 flex-col"
                   : "w-full"
               }

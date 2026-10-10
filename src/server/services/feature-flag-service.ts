@@ -61,7 +61,11 @@ async function checkFeatureFlags(userId: string, checks: FeatureFlagCheck[]) {
     }
 
     userExists = Boolean(user);
-    if (user && flagsByKey.size > 0) {
+    const requiresPlanLookup = checks.some(({ key, fallbackKey }) => {
+      const flag = flagsByKey.get(key) || (fallbackKey ? flagsByKey.get(fallbackKey) : undefined);
+      return flag?.enabled === true && flag.plans.some((plan) => plan.trim());
+    });
+    if (user && requiresPlanLookup) {
       const [subscription, assignedPlan] = await Promise.all([
         Subscription.findOne({
           userId,

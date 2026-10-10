@@ -24,24 +24,31 @@ interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: ProjectState;
+  onJobStatus?: (status: 'Rendering' | 'Done' | 'Failed', format: string, error?: string) => void;
+  onJobProgress?: (progress: number, format: string) => void;
 }
 
 type ExportFormat = 'animated-svg' | 'clean-svg' | 'json-project' | 'webm' | 'mp4' | 'png-sequence';
 
-export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project }) => {
+export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project, onJobStatus, onJobProgress }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('animated-svg');
   const [fps, setFps] = useState<number>(project.document.fps || 30);
   const [scale, setScale] = useState<number>(1);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [progress, setProgress] = useState<{ percent: number; text: string } | null>(null);
   const [exportError, setExportError] = useState('');
+  const updateProgress = (next: { percent: number; text: string }) => {
+    setProgress(next);
+    onJobProgress?.(next.percent, selectedFormat);
+  };
 
   if (!isOpen) return null;
 
   const handleExport = async () => {
     setIsExporting(true);
     setExportError('');
-    setProgress({ percent: 10, text: 'Preparing export pipeline...' });
+    updateProgress({ percent: 10, text: 'Preparing export pipeline...' });
+    onJobStatus?.('Rendering', selectedFormat);
 
     const baseName = (project.name || 'mcu_motion')
       .trim()
@@ -50,17 +57,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
     try {
       if (selectedFormat === 'animated-svg') {
-        setProgress({ percent: 60, text: 'Compiling CSS @keyframes and packaging SVG...' });
+        updateProgress({ percent: 60, text: 'Compiling CSS @keyframes and packaging SVG...' });
         const animatedSvg = generateAnimatedSvg(project);
         downloadFile(animatedSvg, `${baseName}_animated.svg`, 'image/svg+xml');
-        setProgress({ percent: 100, text: 'Download ready!' });
+        updateProgress({ percent: 100, text: 'Download ready!' });
       } else if (selectedFormat === 'clean-svg') {
-        setProgress({ percent: 60, text: 'Sanitizing and cleaning vector code...' });
-        const cleanSvg = generateCleanSvg(project.svgRaw, project.elements);
+        updateProgress({ percent: 60, text: 'Sanitizing and cleaning vector code...' });
+        const cleanSvg = generateCleanSvg(project.svgRaw, project.elements, project.currentTime);
         downloadFile(cleanSvg, `${baseName}_clean.svg`, 'image/svg+xml');
-        setProgress({ percent: 100, text: 'Download ready!' });
+        updateProgress({ percent: 100, text: 'Download ready!' });
       } else if (selectedFormat === 'json-project') {
-        setProgress({ percent: 70, text: 'Serializing project state...' });
+        updateProgress({ percent: 70, text: 'Serializing project state...' });
         const jsonContent = JSON.stringify(
           {
             version: '1.0',
@@ -77,45 +84,46 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
           2
         );
         downloadFile(jsonContent, `${baseName}.mcuproj`, 'application/json');
-        setProgress({ percent: 100, text: 'Project saved!' });
+        updateProgress({ percent: 100, text: 'Project saved!' });
       } else if (selectedFormat === 'webm') {
-        setProgress({ percent: 5, text: 'Preparing WebM video...' });
+        updateProgress({ percent: 5, text: 'Preparing WebM video...' });
         const recorded = await recordCanvasVideo(project, fps, scale, (pct) => {
-          setProgress({ percent: pct, text: `Rendering WebM frame ${pct}%...` });
+          updateProgress({ percent: pct, text: `Rendering WebM frame ${pct}%...` });
         });
         downloadFile(recorded.blob, `${baseName}.webm`, 'video/webm');
-        setProgress({ percent: 100, text: 'Video exported!' });
+        updateProgress({ percent: 100, text: 'Video exported!' });
       } else if (selectedFormat === 'mp4') {
-        setProgress({ percent: 2, text: 'Preparing MP4 video...' });
+        updateProgress({ percent: 2, text: 'Preparing MP4 video...' });
         const recorded = await recordCanvasVideo(project, fps, scale, (pct) => {
-          setProgress({ percent: Math.round(pct * 0.75), text: `Rendering MP4 frames (${pct}%)...` });
+          updateProgress({ percent: Math.round(pct * 0.75), text: `Rendering MP4 frames (${pct}%)...` });
         }, true);
         let mp4Blob = recorded.blob;
         if (recorded.format !== 'mp4') {
-          setProgress({ percent: 76, text: 'Converting WebM frames to H.264 MP4...' });
+          updateProgress({ percent: 76, text: 'Converting WebM frames to H.264 MP4...' });
           mp4Blob = await convertVideoToMp4(recorded.blob, fps, (pct) => {
-            setProgress({ percent: 76 + Math.round(pct * 0.23), text: `Encoding H.264 MP4 (${pct}%)...` });
+            updateProgress({ percent: 76 + Math.round(pct * 0.23), text: `Encoding H.264 MP4 (${pct}%)...` });
           });
         }
         downloadFile(mp4Blob, `${baseName}.mp4`, 'video/mp4');
-        setProgress({ percent: 100, text: 'MP4 exported!' });
+        updateProgress({ percent: 100, text: 'MP4 exported!' });
       } else if (selectedFormat === 'png-sequence') {
-        setProgress({ percent: 15, text: 'Rendering high-resolution PNG frames...' });
+        updateProgress({ percent: 15, text: 'Rendering high-resolution PNG frames...' });
         const zipBlob = await exportPngSequenceZip(
           project,
           fps,
           scale,
           (pct, curr, total) => {
-            setProgress({
+            updateProgress({
               percent: pct,
               text: `Rendering frame ${curr} of ${total} (${pct}%)...`,
             });
           }
         );
         downloadFile(zipBlob, `${baseName}_frames.zip`, 'application/zip');
-        setProgress({ percent: 100, text: 'Sequence exported!' });
+        updateProgress({ percent: 100, text: 'Sequence exported!' });
       }
 
+      onJobStatus?.('Done', selectedFormat);
       setTimeout(() => {
         setIsExporting(false);
         setProgress(null);
@@ -125,6 +133,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       console.error('Export error:', err);
       const message = err instanceof Error ? err.message : 'Video export failed.';
       setExportError(message);
+      onJobStatus?.('Failed', selectedFormat, message);
       setProgress(null);
       setIsExporting(false);
     }

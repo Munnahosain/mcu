@@ -115,6 +115,8 @@ export function recordPropertyKeyframe(
       time,
       value,
       easing,
+      interpolation: easing === 'linear' ? 'linear' : 'bezier',
+      ...(easing === 'cubicBezier' ? { bezier: [0.25, 0.1, 0.25, 1] as [number, number, number, number] } : {}),
     });
     keyframes.sort((a, b) => a.time - b.time);
   }
