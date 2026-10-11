@@ -55,6 +55,14 @@ const tools = [
     href: "/dashboard/vector-editor",
   },
   {
+    icon: <ImageIcon className="h-8 w-8 text-primary" />,
+    title: "Photo Studio",
+    description:
+      "Layer-based photo editor in your browser. Retouch, composite, and export production-ready images.",
+    isNew: true,
+    href: "/dashboard/photo-studio",
+  },
+  {
     icon: <Sparkles className="h-8 w-8 text-primary" />,
     title: "Reverse Prompt Generator",
     description:

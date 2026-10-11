@@ -24,6 +24,7 @@ import {
   LifeBuoy,
   Film,
   PenTool,
+  Image as ImageIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
@@ -59,6 +60,7 @@ const navLinks = [
   { name: "3D Icon Studio", href: "/dashboard/3d-icon-studio", icon: Box },
   { name: "Motion Studio", href: "/dashboard/svg-motion", icon: Film },
   { name: "Mata Pattern Studio", href: "/dashboard/vector-editor", icon: PenTool },
+  { name: "Photo Studio", href: "/dashboard/photo-studio", icon: ImageIcon },
   { name: "BG Remover", href: "/dashboard/bg-remover", icon: Eraser },
   { name: "Bento", href: "/dashboard/bento", icon: LayoutIcon },
   { name: "Grid", href: "/dashboard/grid-generator", icon: Grid3X3 },
