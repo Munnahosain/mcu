@@ -51,6 +51,7 @@ export async function connectToDatabase(): Promise<typeof mongoose | null> {
       console.log('MongoDB successfully connected');
       return mongooseInstance;
     }).catch((err) => {
+      cached!.promise = null;
       console.warn('MongoDB connection failed — continuing with in-memory fallbacks:', err.message);
       return null;
     });

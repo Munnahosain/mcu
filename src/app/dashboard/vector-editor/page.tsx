@@ -10,7 +10,7 @@ const EDITOR_URL = process.env.NEXT_PUBLIC_VECTORCRAFT_URL || "/vectorcraft/inde
 type Status = "checking" | "ready" | "missing";
 
 export default function VectorEditorPage() {
-  const editorSectionRef = useRef<HTMLElement>(null);
+  const studioRef = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<Status>(() =>
     EDITOR_URL.startsWith("/") ? "checking" : "ready",
   );
@@ -41,23 +41,21 @@ export default function VectorEditorPage() {
 
   useEffect(() => {
     const syncFullscreen = () => {
-      setIsFullscreen(document.fullscreenElement === editorSectionRef.current);
+      setIsFullscreen(document.fullscreenElement === studioRef.current);
     };
-
     document.addEventListener("fullscreenchange", syncFullscreen);
     return () => document.removeEventListener("fullscreenchange", syncFullscreen);
   }, []);
 
   const toggleFullscreen = async () => {
-    const editorSection = editorSectionRef.current;
-    if (!editorSection) return;
-
+    const studio = studioRef.current;
+    if (!studio) return;
     setFullscreenError("");
     try {
-      if (document.fullscreenElement === editorSection) {
+      if (document.fullscreenElement === studio) {
         await document.exitFullscreen();
       } else {
-        await editorSection.requestFullscreen();
+        await studio.requestFullscreen();
       }
     } catch (error) {
       console.error("Could not change Mata Pattern Studio fullscreen mode:", error);
@@ -82,11 +80,9 @@ export default function VectorEditorPage() {
 
   return (
     <section
-      ref={editorSectionRef}
-      className={`relative min-h-0 min-w-0 overflow-hidden bg-[var(--card-bg)] ${
-        isFullscreen
-          ? "fixed inset-0 z-[100] h-[100dvh] w-screen"
-          : "h-full w-full"
+      ref={studioRef}
+      className={`relative h-full min-h-0 min-w-0 w-full overflow-hidden bg-[var(--card-bg)] ${
+        isFullscreen ? "fixed inset-0 z-[100] h-[100dvh] w-screen" : ""
       }`}
     >
       {status === "checking" ? (
@@ -100,15 +96,6 @@ export default function VectorEditorPage() {
               {fullscreenError}
             </p>
           )}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
-            title={isFullscreen ? "Exit full screen" : "Full screen"}
-            className="absolute left-[65%] top-2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center text-foreground"
-          >
-            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-          </button>
           <iframe
             src={EDITOR_URL}
             title="Mata Pattern Studio"
@@ -118,6 +105,17 @@ export default function VectorEditorPage() {
             allowFullScreen
           />
         </>
+      )}
+      {status === "ready" && (
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit full screen" : "Full screen"}
+          aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+          className="absolute left-[65%] top-2 z-20 flex h-9 w-9 -translate-x-1/2 items-center justify-center text-foreground"
+        >
+          {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+        </button>
       )}
     </section>
   );

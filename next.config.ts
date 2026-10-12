@@ -18,6 +18,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Photo Studio web build: same caching rules as above.
+        source: '/photo-studio/:path((?!index\\.html).+)',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      {
+        source: '/photo-studio/index.html',
+        headers: [{ key: 'Cache-Control', value: 'no-cache' }],
+      },
+      {
         // VectorCraft web build: hashed .js/.wasm files never change, index.html must revalidate.
         source: '/vectorcraft/:path((?!index\\.html).+)',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],

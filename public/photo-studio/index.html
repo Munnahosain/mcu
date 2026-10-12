@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Mint Canvas</title>
+
+<script type="module">
+import init, * as bindings from './photocraft-web-f8b893e17055c08f.js';
+const wasm = await init({ module_or_path: './photocraft-web-f8b893e17055c08f_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e8f4f0; }
+    #photocraft_canvas { position: fixed; inset: 0; width: 100vw; height: 100dvh; display: block; }
+    #photocraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 0 16px; text-align: center; color: #61776d; font: 14px system-ui, sans-serif; pointer-events: none; }
+    #photocraft_loading p { margin: 0 0 8px; max-width: 420px; line-height: 1.5; }
+    #photocraft_loading a { color: #0aa979; pointer-events: auto; }
+    /* The app removes this element once it runs. If the WebAssembly never downloads or doesn't match
+       this page, no Rust runs to say so, so the page itself shows what to do after a while. */
+    #photocraft_stalled { color: #7e9188; visibility: hidden; animation: photocraft-stalled 0s 20s forwards; }
+    @keyframes photocraft-stalled { to { visibility: visible; } }
+  </style>
+<link rel="modulepreload" href="./photocraft-web-f8b893e17055c08f.js" crossorigin="anonymous" integrity="sha384-9CKpEuhxGgodL0ONF3/jmhRAN1p0AjZjv31p8WIZrgQPz7/ed9HGpbkgH7/3kW9g"><link rel="preload" href="./photocraft-web-f8b893e17055c08f_bg.wasm" crossorigin="anonymous" integrity="sha384-C+xxXrC3Dg+Lj12e1R2NZ8+wxHUUH/yNFbsnC7cWWx8UkaD1QWSu11MExAOm6tBE" as="fetch" type="application/wasm"></head>
+<body>
+  <canvas id="photocraft_canvas"></canvas>
+  <div id="photocraft_loading">
+    <p>Loading Mint Canvas&hellip;</p>
+    <p id="photocraft_stalled">This is taking longer than usual. If Mint Canvas doesn't start, its files may have failed to
+      download or come from a different version of this page. <a href="">Reload</a> to try again; the browser
+      console lists what failed.</p>
+  </div>
+</body>
+</html>
