@@ -4,7 +4,7 @@ import { REFRESH_COOKIE } from '@/server/auth/jwt';
 
 async function hasValidSession(request: NextRequest) {
   const token = request.cookies.get(REFRESH_COOKIE)?.value;
-  const secret = process.env.JWT_REFRESH_SECRET;
+  const secret = process.env.JWT_REFRESH_SECRET || 'mcustock-dev-jwt-refresh-secret-32-chars-minimum-key';
   if (!token || !secret || secret.length < 32) return false;
 
   try {

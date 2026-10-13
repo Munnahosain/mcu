@@ -1,5 +1,6 @@
 import { connectToDatabase } from './mongodb';
 import { User } from '../models/User';
+import { Plan } from '../models/Plan';
 import { MetadataHistory } from '../models/MetadataHistory';
 import { createDevUser, findDevUser, findDevUserById } from '../auth/dev-auth';
 import { verifyPassword } from '../auth/hash';
@@ -49,7 +50,16 @@ export async function createUser({ name, email, password }: { name: string; emai
   }
 
   await connectToDatabase();
-  return await User.create({ name: name.trim(), email: email.toLowerCase().trim(), password });
+  const freePlan = await Plan.findOne({ slug: 'free', active: true }).lean().catch(() => null);
+  const initialCredits = Number(freePlan?.monthlyCredits ?? 100);
+
+  return await User.create({
+    name: name.trim(),
+    email: email.toLowerCase().trim(),
+    password,
+    planId: freePlan?._id || null,
+    credits: { monthly: initialCredits, bonus: 0, used: 0 },
+  });
 }
 
 export async function listUserHistory(userId: string) {

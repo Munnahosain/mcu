@@ -30,12 +30,23 @@ export async function requireAuthenticatedUser(req: Request) {
     throw new AuthorizationError(403, 'This account is not active.');
   }
 
-  return user;
+  const id = String(user._id ?? user.id ?? userId);
+  return { ...user, _id: id, id };
+}
+
+export function isDesignatedAdminEmail(email?: string | null): boolean {
+  const configured = process.env.ADMIN_EMAIL?.trim();
+  if (!configured || !email) return false;
+  const emails = configured.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return emails.includes(email.trim().toLowerCase());
 }
 
 export async function requireRole(req: Request, allowedRoles: readonly UserRole[]) {
   const user = await requireAuthenticatedUser(req);
-  const userRole = (user.role as UserRole) || (!hasMongoDbConfig() ? 'super_admin' : 'user');
+  let userRole = (user.role as UserRole) || (!hasMongoDbConfig() ? 'super_admin' : 'user');
+  if (isDesignatedAdminEmail(user.email)) {
+    userRole = 'super_admin';
+  }
   const role = USER_ROLES.includes(userRole) ? userRole : 'user';
 
   if (!allowedRoles.includes(role)) {

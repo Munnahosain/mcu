@@ -1,9 +1,9 @@
 "use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Activity, BarChart3, Coins, CreditCard, Flag, Gauge, LayoutDashboard, LifeBuoy, Receipt, Settings, ShieldCheck, Users } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { Activity, BarChart3, Coins, CreditCard, Flag, Gauge, LayoutDashboard, LifeBuoy, Lock, LogIn, Receipt, Settings, ShieldAlert, ShieldCheck, Users } from 'lucide-react';
 import Image from 'next/image';
 import ThemeToggle from '@/components/ThemeToggle';
 import { ensureAccessToken, getAuthUser } from '@/lib/auth';
@@ -35,11 +35,12 @@ function getAdminAuthSnapshot() {
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === '/admin/login';
-  const [accessState, setAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
+  const [accessState, setAccessState] = useState<'checking' | 'allowed' | 'forbidden' | 'unauthenticated'>('checking');
   const user = useSyncExternalStore(
-    (callback) => {
+    (callback: () => void) => {
       window.addEventListener('mcustock-auth-changed', callback);
       window.addEventListener('storage', callback);
       return () => {
@@ -57,30 +58,101 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     void (async () => {
       const token = await ensureAccessToken();
       if (!token) {
-        if (active) setAccessState('denied');
+        if (active) setAccessState('unauthenticated');
         return;
       }
-      const response = await fetch('/api/admin/overview', {
-        credentials: 'include',
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => null);
-      if (active) setAccessState(response?.ok ? 'allowed' : 'denied');
+      try {
+        const response = await fetch('/api/admin/overview', {
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!active) return;
+        if (response.ok) {
+          setAccessState('allowed');
+        } else if (response.status === 401) {
+          setAccessState('unauthenticated');
+        } else {
+          setAccessState('forbidden');
+        }
+      } catch {
+        if (active) setAccessState('forbidden');
+      }
     })();
     return () => { active = false; };
   }, [isLoginPage]);
 
   useEffect(() => {
-    if (accessState === 'denied') window.location.replace('/dashboard/generator');
-  }, [accessState]);
+    if (accessState === 'unauthenticated') {
+      const nextParam = pathname ? `?next=${encodeURIComponent(pathname)}` : '';
+      router.replace(`/admin/login${nextParam}`);
+    }
+  }, [accessState, pathname, router]);
 
   if (isLoginPage) return <div className="admin-login-shell">{children}</div>;
 
-  if (accessState !== 'allowed') {
-    return <div className="flex min-h-screen items-center justify-center bg-[var(--main-bg)] text-primary"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" /></div>;
+  if (accessState === 'checking' || accessState === 'unauthenticated') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#06110f] text-white">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <p className="mt-4 text-xs font-semibold tracking-wider text-white/50 uppercase">Verifying administrative access...</p>
+      </div>
+    );
+  }
+
+  if (accessState === 'forbidden') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#06110f] px-4 py-12 text-white">
+        <div className="relative w-full max-w-lg rounded-3xl border border-primary/25 bg-[#071b17]/90 p-8 shadow-2xl backdrop-blur-2xl">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+
+          <div className="mt-6 text-center">
+            <span className="inline-block rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-400">
+              Access Restricted
+            </span>
+            <h1 className="mt-3 text-2xl font-black">Admin Access Denied</h1>
+            <p className="mt-2 text-sm text-white/60">
+              Your account is signed in, but it does not have administrative permissions for the MCUSTOCK Control Center.
+            </p>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-white/40 font-medium">Signed in as</span>
+              <span className="font-semibold text-white truncate max-w-[220px]">{user?.email || 'Logged in user'}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/5 pt-2">
+              <span className="text-white/40 font-medium">Assigned Role</span>
+              <span className="font-bold text-amber-400 capitalize">{user?.role || 'user'}</span>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <Link
+              href={`/admin/login?next=${encodeURIComponent(pathname || '/admin')}`}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-[#06110f] transition hover:bg-primary/90"
+            >
+              <LogIn className="h-4 w-4" /> Switch to Admin Account
+            </Link>
+            <Link
+              href="/dashboard/generator"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              Return to User Dashboard
+            </Link>
+          </div>
+
+          <p className="mt-6 text-center text-[11px] text-white/35">
+            Deployment owner? Ensure <code className="text-primary/70">ADMIN_EMAIL</code> is set in your Vercel project environment variables.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const displayName = user?.name || 'admin';
-  const initials = displayName.trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'AD';
+  const initials = displayName.trim().split(/\s+/).map((part: string) => part[0]).join('').slice(0, 2).toUpperCase() || 'AD';
 
   return (
     <div className="admin-shell min-h-screen bg-[#06110f] text-white" data-admin-theme="adaptive">

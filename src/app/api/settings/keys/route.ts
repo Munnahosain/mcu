@@ -81,17 +81,22 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const userId = await getAuthenticatedUserId(req);
-  if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  const body = await req.json() as { id?: string };
-  if (!body.id) return NextResponse.json({ success: false, error: 'Key id is required.' }, { status: 400 });
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json().catch(() => ({})) as { id?: string };
+    if (!body.id) return NextResponse.json({ success: false, error: 'Key id is required.' }, { status: 400 });
 
-  if (!hasMongoDbConfig()) {
-    inMemoryStore.providerKeys = inMemoryStore.providerKeys.filter(k => k.id !== body.id || k.userId !== userId);
+    if (!hasMongoDbConfig()) {
+      inMemoryStore.providerKeys = inMemoryStore.providerKeys.filter(k => k.id !== body.id || k.userId !== userId);
+      return NextResponse.json({ success: true });
+    }
+
+    await connectToDatabase();
+    await ProviderKey.deleteOne({ _id: body.id, userId });
     return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Provider key delete error:', error);
+    return NextResponse.json({ success: false, error: 'Could not delete API key.' }, { status: 500 });
   }
-
-  await connectToDatabase();
-  await ProviderKey.deleteOne({ _id: body.id, userId });
-  return NextResponse.json({ success: true });
 }

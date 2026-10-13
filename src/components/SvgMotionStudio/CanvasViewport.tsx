@@ -783,14 +783,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             >
               <div className="grid grid-cols-2 gap-6">
                 <button type="button" onClick={onCreateComposition} aria-label="Create a new composition"
-                  className="flex h-[230px] w-[214px] flex-col items-center justify-center gap-6 border border-[#121212] bg-[#1a1a1a] text-[#bcbcbc] transition-colors hover:border-[var(--st-accent)] hover:bg-[#292929] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                  className="flex h-[230px] w-[214px] flex-col items-center justify-center gap-6 border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] transition-colors hover:border-[var(--st-accent)] hover:bg-[var(--hover-bg)] hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)] shadow-sm">
                   <Clapperboard className="h-14 w-14 stroke-[1]" />
-                  <span className="text-[14px]">New Composition</span>
+                  <span className="text-[14px] font-medium">New Composition</span>
                 </button>
                 <button type="button" onClick={onOpenArtworkPicker} aria-label="Create a composition from artwork"
-                  className="flex h-[230px] w-[214px] flex-col items-center justify-center gap-6 border border-[#121212] bg-[#1a1a1a] text-[#bcbcbc] transition-colors hover:border-[var(--st-accent)] hover:bg-[#292929] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                  className="flex h-[230px] w-[214px] flex-col items-center justify-center gap-6 border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] transition-colors hover:border-[var(--st-accent)] hover:bg-[var(--hover-bg)] hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)] shadow-sm">
                   <FileImage className="h-14 w-14 stroke-[1]" />
-                  <span className="max-w-40 text-center text-[14px]">New Composition<br />From Artwork</span>
+                  <span className="max-w-40 text-center text-[14px] font-medium">New Composition<br />From Artwork</span>
                 </button>
               </div>
             </div>
@@ -885,37 +885,37 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         </div>
       </div>
 
-      <div className="group absolute inset-x-0 bottom-0 z-40 flex h-7 items-center gap-2 border-t border-[#121212] bg-[#232323]/95 px-2 text-[10px] text-[#aaa] opacity-45 transition-opacity hover:opacity-100 focus-within:opacity-100">
+      <div className="group absolute inset-x-0 bottom-0 z-40 flex h-7 items-center gap-2 border-t border-[var(--card-border)] bg-[var(--card-bg)]/95 px-2 text-[10px] text-[var(--text-muted)] opacity-60 transition-opacity hover:opacity-100 focus-within:opacity-100 backdrop-blur-sm">
         <label className="flex items-center gap-1">
           Magnification
           <select aria-label="Viewer magnification" value={['25', '50', '100', '200'].find((value) => Math.abs(zoom * 100 - Number(value)) < 3) ?? 'fit'}
             onChange={(event) => event.target.value === 'fit' ? handleFitToScreen() : setZoom(Number(event.target.value) / 100)}
-            className="motion-studio-select h-5 border border-[#121212] bg-[#1d1d1d] px-1 text-[9px] text-white">
+            className="motion-studio-select h-5 border border-[var(--card-border)] bg-[var(--input-bg)] px-1 text-[9px] text-foreground">
             <option value="fit">Fit</option><option value="25">25%</option><option value="50">50%</option><option value="100">100%</option><option value="200">200%</option>
           </select>
         </label>
-        <button type="button" onClick={onToggleGrid} aria-pressed={showGrid} title="Toggle grid" className={showGrid ? 'text-[var(--st-accent)]' : 'text-[#888]'}>Grid</button>
-        <button type="button" onClick={onToggleSafeArea} aria-pressed={showSafeArea} title="Toggle safe margins" className={showSafeArea ? 'text-[var(--st-accent)]' : 'text-[#888]'}>Safe</button>
-        <button type="button" onClick={onToggleCheckerboard} aria-pressed={canvasBg === 'checkerboard'} title="Toggle transparency checkerboard" className={canvasBg === 'checkerboard' ? 'text-[var(--st-accent)]' : 'text-[#888]'}>Transparency</button>
+        <button type="button" onClick={onToggleGrid} aria-pressed={showGrid} title="Toggle grid" className={showGrid ? 'text-[var(--st-accent)] font-semibold' : 'text-[var(--text-muted)] hover:text-foreground'}>Grid</button>
+        <button type="button" onClick={onToggleSafeArea} aria-pressed={showSafeArea} title="Toggle safe margins" className={showSafeArea ? 'text-[var(--st-accent)] font-semibold' : 'text-[var(--text-muted)] hover:text-foreground'}>Safe</button>
+        <button type="button" onClick={onToggleCheckerboard} aria-pressed={canvasBg === 'checkerboard'} title="Toggle transparency checkerboard" className={canvasBg === 'checkerboard' ? 'text-[var(--st-accent)] font-semibold' : 'text-[var(--text-muted)] hover:text-foreground'}>Transparency</button>
         <button type="button" disabled title="Snapshot is unavailable for this viewer" aria-label="Snapshot unavailable" className="flex items-center opacity-40"><Camera className="h-3.5 w-3.5" /></button>
         {isTimeEditing ? (
           <input autoFocus aria-label="Current time in seconds" type="number" min="0" max={project.document.duration} step={1 / Math.max(1, project.document.fps)} value={timeDraft}
             onChange={(event) => setTimeDraft(event.target.value)}
             onBlur={() => { const time = Number(timeDraft); if (Number.isFinite(time)) onSeek(Math.max(0, Math.min(project.document.duration, time))); setIsTimeEditing(false); }}
             onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') setIsTimeEditing(false); }}
-            className="w-16 border border-[#121212] bg-[#1d1d1d] px-1 font-mono text-[9px] text-white" />
+            className="w-16 border border-[var(--card-border)] bg-[var(--input-bg)] px-1 font-mono text-[9px] text-foreground" />
         ) : (
           <button type="button" onClick={() => { setTimeDraft(String(project.currentTime)); setIsTimeEditing(true); }} aria-label="Edit current time"
-            className="font-mono text-[#ddd]">{`${Math.floor(project.currentTime / 60)}:${String(Math.floor(project.currentTime % 60)).padStart(2, '0')}`}</button>
+            className="font-mono text-foreground">{`${Math.floor(project.currentTime / 60)}:${String(Math.floor(project.currentTime % 60)).padStart(2, '0')}`}</button>
         )}
         <label className="flex items-center gap-1">
           Resolution
           <select value={quality === 'Auto' ? 'Full' : quality} onChange={(event) => onQualityChange(event.target.value as 'Full' | 'Half' | 'Third' | 'Quarter')} aria-label="Viewer resolution"
-            className="motion-studio-select h-5 border border-[#121212] bg-[#1d1d1d] px-1 text-[9px] text-white">
+            className="motion-studio-select h-5 border border-[var(--card-border)] bg-[var(--input-bg)] px-1 text-[9px] text-foreground">
             {(['Full', 'Half', 'Third', 'Quarter'] as const).map((option) => <option key={option}>{option}</option>)}
           </select>
         </label>
-        <button type="button" onClick={handleFitToScreen} title="Fit composition to viewer" aria-label="Fit composition" className="ml-auto text-[#aaa] hover:text-white"><Maximize2 className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={handleFitToScreen} title="Fit composition to viewer" aria-label="Fit composition" className="ml-auto text-[var(--text-muted)] hover:text-foreground"><Maximize2 className="h-3.5 w-3.5" /></button>
       </div>
     </div>
   );

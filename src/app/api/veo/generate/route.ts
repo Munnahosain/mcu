@@ -1,15 +1,45 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
+import { enforceRateLimit } from '@/server/auth/rate-limit';
+import { resolveUserApiKey } from '@/server/services/vision-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  let userId: string | null = null;
+  let creditReserved = false;
+  let usesOwnApiKey = false;
+
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Authentication required to generate videos.' },
+        { status: 401 }
+      );
+    }
+
+    const featureDenial = await getFeatureFlagDenial(userId, 'ai_tools', 'AI generation');
+    if (featureDenial) return NextResponse.json({ error: featureDenial }, { status: 403 });
+
+    const rateLimitError = enforceRateLimit(req, userId, {
+      limit: 6,
+      windowMs: 60 * 1000,
+      keyPrefix: 'veo-generate',
+    });
+    if (rateLimitError) return rateLimitError;
+
+    const storedGeminiKey = await resolveUserApiKey(userId, 'Google Gemini');
+    usesOwnApiKey = Boolean(storedGeminiKey);
+    const apiKey = storedGeminiKey?.apiKey || process.env.GEMINI_API_KEY?.trim();
+
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'GEMINI_API_KEY is not configured on the server. Please check your API key in project settings.' },
-        { status: 500 }
+        { error: 'Google Gemini API key is not configured. Add your key in Settings or contact the administrator.' },
+        { status: 503 }
       );
     }
 
@@ -25,6 +55,9 @@ export async function POST(req: NextRequest) {
 
     const validAspectRatios = ['16:9', '9:16'];
     const selectedAspectRatio = validAspectRatios.includes(aspectRatio) ? aspectRatio : '16:9';
+
+    await consumeCredits(userId, 5, 'Veo video generation', 'heavy_ai', { usesOwnApiKey });
+    creditReserved = true;
 
     const ai = new GoogleGenAI({
       apiKey,
@@ -70,6 +103,13 @@ export async function POST(req: NextRequest) {
       aspectRatio: selectedAspectRatio,
     });
   } catch (err: unknown) {
+    if (creditReserved && userId) {
+      await refundCredits(userId, 5, 'Failed Veo video generation refund', 'heavy_ai', { usesOwnApiKey })
+        .catch((refundError) => console.error('[veo/generate] credit refund error:', refundError));
+    }
+    if (err instanceof InsufficientCreditsError) {
+      return NextResponse.json({ error: err.message }, { status: 402 });
+    }
     console.error('Veo video generation error:', err);
     const message = err instanceof Error ? err.message : String(err || 'Failed to start video generation.');
     return NextResponse.json({ error: message }, { status: 500 });

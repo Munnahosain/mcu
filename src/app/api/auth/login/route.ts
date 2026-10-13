@@ -53,10 +53,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const userEmail = String(user.email || emailLower).toLowerCase().trim();
+    const configuredAdmin = process.env.ADMIN_EMAIL?.trim();
+    const isConfiguredAdmin = Boolean(
+      configuredAdmin &&
+      configuredAdmin.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
+    );
+    const userRole = isConfiguredAdmin ? 'super_admin' : ((user.role as string) || 'user');
+
     const normalizedUser = {
       id: String(user._id ?? user.id),
       name: user.name,
       email: user.email,
+      role: userRole,
       avatarUrl: user.avatarUrl || '',
     };
 

@@ -20,6 +20,7 @@ export async function POST(req: Request) {
             id: 'dev-admin-id',
             name: String(devUser.name ?? 'Super Admin'),
             email: String(devUser.email ?? 'admin@mcustock.com'),
+            role: (devUser.role as string) || 'super_admin',
             avatarUrl: '',
           };
           const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });
@@ -38,10 +39,19 @@ export async function POST(req: Request) {
 
     const accessToken = await createAccessToken(userId);
     const rotatedRefreshToken = await createRefreshToken(userId);
+    const userEmail = String(user.email ?? '').toLowerCase().trim();
+    const configuredAdmin = process.env.ADMIN_EMAIL?.trim();
+    const isConfiguredAdmin = Boolean(
+      configuredAdmin &&
+      configuredAdmin.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
+    );
+    const userRole = isConfiguredAdmin ? 'super_admin' : String(user.role ?? 'user');
+
     const normalizedUser = {
       id: user._id ? String(user._id) : String(user.id),
       name: String(user.name ?? ''),
       email: String(user.email ?? ''),
+      role: userRole,
       avatarUrl: String(user.avatarUrl ?? ''),
     };
     const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });

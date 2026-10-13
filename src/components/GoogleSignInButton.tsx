@@ -120,11 +120,15 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
                 id: data.user.id,
                 email: data.user.email,
                 name: data.user.name,
+                role: data.user.role,
                 avatarUrl: data.user.avatarUrl || "",
                 signedInAt: Date.now(),
               });
 
-              router.replace(mode === "admin" ? "/admin" : "/dashboard/generator");
+              const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+              const nextUrl = urlParams?.get("next");
+              const target = nextUrl && nextUrl.startsWith("/") && !nextUrl.startsWith("//") ? nextUrl : (mode === "admin" ? "/admin" : "/dashboard/generator");
+              router.replace(target);
               router.refresh();
             } catch (reason: unknown) {
               if (reason instanceof Error && reason.name === "AbortError") {

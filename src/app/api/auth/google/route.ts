@@ -8,7 +8,7 @@ import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOpt
 import { hasMongoDbConfig } from "@/server/db/database-config";
 import { findDevUser, createDevUser } from "@/server/auth/dev-auth";
 
-type GoogleToken = { aud?: string; email?: string; email_verified?: string; name?: string; picture?: string };
+type GoogleToken = { aud?: string; email?: string; email_verified?: string | boolean; name?: string; picture?: string };
 
 export async function POST(req: Request) {
   try {
@@ -28,22 +28,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Could not reach Google to verify sign-in. Please try again." }, { status: 502 });
     }
     const googleUser = await tokenResponse.json() as GoogleToken;
-    if (!tokenResponse.ok || googleUser.aud !== clientId || googleUser.email_verified !== "true" || !googleUser.email) {
+    if (!tokenResponse.ok || googleUser.aud !== clientId || String(googleUser.email_verified) !== "true" || !googleUser.email) {
       return NextResponse.json({ success: false, error: "Google account verification failed." }, { status: 401 });
     }
 
+    const userEmail = googleUser.email.toLowerCase().trim();
+    const isConfiguredAdmin = Boolean(
+      process.env.ADMIN_EMAIL &&
+      process.env.ADMIN_EMAIL.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
+    );
+
     if (!hasMongoDbConfig()) {
-      let devUser = findDevUser(googleUser.email.toLowerCase());
+      let devUser = findDevUser(userEmail);
       if (!devUser) {
-        devUser = createDevUser(googleUser.name || googleUser.email.split('@')[0], googleUser.email.toLowerCase(), undefined, mode === 'admin' ? 'super_admin' : 'user');
+        devUser = createDevUser(
+          googleUser.name || userEmail.split('@')[0],
+          userEmail,
+          undefined,
+          (mode === 'admin' || isConfiguredAdmin) ? 'super_admin' : 'user'
+        );
       }
       if (!devUser) {
-        devUser = findDevUser(googleUser.email.toLowerCase()) || {
+        devUser = findDevUser(userEmail) || {
           id: 'dev-google-user',
           _id: 'dev-google-user',
-          name: googleUser.name || googleUser.email.split('@')[0],
-          email: googleUser.email.toLowerCase(),
-          role: mode === 'admin' ? 'super_admin' : 'user',
+          name: googleUser.name || userEmail.split('@')[0],
+          email: userEmail,
+          role: (mode === 'admin' || isConfiguredAdmin) ? 'super_admin' : 'user',
           status: 'active',
           credits: { monthly: 2000, bonus: 500, used: 0 },
           createdAt: new Date().toISOString(),
@@ -55,7 +66,13 @@ export async function POST(req: Request) {
       const refreshToken = await createRefreshToken(userId);
       const response = NextResponse.json({
         success: true,
-        user: { id: userId, name: devUser.name, email: devUser.email, avatarUrl: googleUser.picture || '' },
+        user: {
+          id: userId,
+          name: devUser.name,
+          email: devUser.email,
+          role: isConfiguredAdmin ? 'super_admin' : devUser.role,
+          avatarUrl: googleUser.picture || '',
+        },
         accessToken,
       });
       response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
@@ -69,25 +86,36 @@ export async function POST(req: Request) {
 
     let user;
     try {
-      user = await User.findOne({ email: googleUser.email.toLowerCase() });
-      if (user && mode === "admin" && !["super_admin", "admin", "support"].includes(user.role)) {
-        return NextResponse.json({ success: false, error: "This Google account does not have admin access." }, { status: 403 });
+      user = await User.findOne({ email: userEmail });
+      if (user && mode === "admin") {
+        if (isConfiguredAdmin && user.role !== 'super_admin') {
+          user.role = 'super_admin';
+          await user.save();
+        } else if (!["super_admin", "admin", "support"].includes(user.role)) {
+          return NextResponse.json({ success: false, error: "This Google account does not have admin access." }, { status: 403 });
+        }
       }
 
       if (!user) {
-        if (mode === "admin") return NextResponse.json({ success: false, error: "This Google account is not an authorized admin." }, { status: 403 });
+        if (mode === "admin" && !isConfiguredAdmin) {
+          return NextResponse.json({ success: false, error: "This Google account is not an authorized admin." }, { status: 403 });
+        }
         const freePlan = await Plan.findOne({ slug: "free", active: true }).lean();
-        const initialCredits = Number(freePlan?.monthlyCredits ?? 100);
+        const initialCredits = Number(freePlan?.monthlyCredits ?? (isConfiguredAdmin ? 2000 : 100));
         user = await User.create({
-          name: googleUser.name || googleUser.email.split("@")[0],
-          email: googleUser.email.toLowerCase(),
+          name: googleUser.name || userEmail.split("@")[0],
+          email: userEmail,
           avatarUrl: googleUser.picture || '',
           password: hashPassword(crypto.randomUUID()),
+          role: isConfiguredAdmin ? 'super_admin' : 'user',
           emailVerified: true,
           planId: freePlan?._id || null,
           credits: { monthly: initialCredits, bonus: 0, used: 0 },
         });
       } else {
+        if (isConfiguredAdmin && user.role !== 'super_admin') {
+          user.role = 'super_admin';
+        }
         const activePlan = user.planId
           ? await Plan.findById(user.planId).lean()
           : await Plan.findOne({ slug: "free", active: true }).lean();
@@ -116,7 +144,17 @@ export async function POST(req: Request) {
     const userId = String(user._id);
     const accessToken = await createAccessToken(userId);
     const refreshToken = await createRefreshToken(userId);
-    const response = NextResponse.json({ success: true, user: { id: userId, name: user.name, email: user.email, avatarUrl: user.avatarUrl || googleUser.picture || '' }, accessToken });
+    const response = NextResponse.json({
+      success: true,
+      user: {
+        id: userId,
+        name: user.name,
+        email: user.email,
+        role: isConfiguredAdmin ? 'super_admin' : (user.role || 'user'),
+        avatarUrl: user.avatarUrl || googleUser.picture || '',
+      },
+      accessToken,
+    });
     response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
     return response;
   } catch (error) {

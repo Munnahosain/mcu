@@ -18,7 +18,7 @@ async function resolveCreditAmount(amount: number, costKey?: CreditCostKey, opti
   const unitCost = Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_CREDIT_COSTS[costKey];
   if (options.usesOwnApiKey) {
     if (costs?.byo_api_mode === 'free') return 0;
-    if (costs?.byo_api_mode === 'reduced') return amount * unitCost * 0.5;
+    if (costs?.byo_api_mode === 'reduced') return Math.max(1, Math.ceil(amount * unitCost * 0.5));
   }
   return amount * unitCost;
 }

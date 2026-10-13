@@ -164,59 +164,78 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
   }
 
   await connectToDatabase();
-  const session = await mongoose.startSession();
+
+  const executeApproval = async (sess?: mongoose.ClientSession) => {
+    const paymentQuery = Payment.findById(paymentObjectId);
+    const payment = sess ? await paymentQuery.session(sess) : await paymentQuery;
+    if (!payment) throw new Error('PAYMENT_NOT_FOUND');
+    if (payment.status !== 'pending') throw new Error(payment.status === 'approved' ? 'PAYMENT_ALREADY_APPROVED' : 'PAYMENT_ALREADY_PROCESSED');
+    const userQuery = User.findById(payment.userId);
+    const planQuery = Plan.findById(payment.planId);
+    const [user, plan] = await Promise.all([
+      sess ? userQuery.session(sess) : userQuery,
+      sess ? planQuery.session(sess) : planQuery,
+    ]);
+    if (!user) throw new Error('USER_NOT_FOUND');
+    if (!plan) throw new Error('PLAN_NOT_FOUND');
+
+    const now = new Date();
+    payment.status = 'approved';
+    payment.reviewedAt = now;
+    payment.reviewedBy = adminId;
+    payment.approvedAt = now;
+    await payment.save(sess ? { session: sess } : undefined);
+
+    const subQuery = Subscription.findOne({ userId: user._id, status: { $in: ['active', 'trial'] } });
+    const existing = sess ? await subQuery.session(sess) : await subQuery;
+    if (existing) {
+      existing.status = 'cancelled';
+      existing.autoRenew = false;
+      existing.cancelledAt = now;
+      await existing.save(sess ? { session: sess } : undefined);
+    }
+
+    const currentBalance = (user.credits?.monthly || 0) + (user.credits?.bonus || 0);
+    const rollover = plan.creditRolloverEnabled ? Math.min(currentBalance, plan.maxRolloverCredits || payment.planSnapshot.credits) : 0;
+    const totalCredits = payment.planSnapshot.credits + rollover;
+    const end = new Date(now.getTime() + payment.planSnapshot.durationDays * 86400000);
+    await Subscription.create([{
+      userId: user._id, planId: payment.planId, status: 'active', billingInterval: payment.planSnapshot.billingInterval,
+      amount: payment.amount, currency: payment.currency, startedAt: now, currentPeriodStart: now,
+      currentPeriodEnd: end, expiresAt: end, provider: 'bkash', providerPaymentId: payment.paymentId, autoRenew: false,
+    }], sess ? { session: sess } : undefined);
+    await User.updateOne({ _id: user._id }, { $set: { planId: payment.planId, 'credits.monthly': payment.planSnapshot.credits, 'credits.bonus': rollover, 'credits.used': 0, updatedAt: now } }, sess ? { session: sess } : undefined);
+    await CreditLedger.create([{
+      userId: user._id, type: 'subscription_purchase', amount: payment.planSnapshot.credits,
+      reason: `${payment.planSnapshot.name} plan purchase`, description: `${payment.planSnapshot.name} plan purchase`,
+      paymentId: payment._id, planId: payment.planId, adminId, balanceBefore: currentBalance, balanceAfter: totalCredits,
+    }], sess ? { session: sess } : undefined);
+    if (rollover > 0) await CreditLedger.create([{
+      userId: user._id, type: 'rollover', amount: rollover, reason: 'Credit rollover', description: 'Credit rollover', adminId,
+      paymentId: payment._id, planId: payment.planId, balanceBefore: payment.planSnapshot.credits, balanceAfter: totalCredits,
+    }], sess ? { session: sess } : undefined);
+    await AuditLog.create([{ actorId: adminId, actorRole: 'admin', action: 'PAYMENT_APPROVED', targetUserId: user._id, metadata: { paymentId: payment.paymentId, amount: payment.amount, planId: String(payment.planId) }, ip: request.headers.get('x-forwarded-for') || '', userAgent: request.headers.get('user-agent') || '' }], sess ? { session: sess } : undefined);
+    return { paymentId: payment.paymentId, amount: payment.amount, credits: totalCredits, expiresAt: end.toISOString() };
+  };
+
   try {
-    let result: unknown;
-    await session.withTransaction(async () => {
-      const payment = await Payment.findById(paymentObjectId).session(session);
-      if (!payment) throw new Error('PAYMENT_NOT_FOUND');
-      if (payment.status !== 'pending') throw new Error(payment.status === 'approved' ? 'PAYMENT_ALREADY_APPROVED' : 'PAYMENT_ALREADY_PROCESSED');
-      const [user, plan] = await Promise.all([
-        User.findById(payment.userId).session(session),
-        Plan.findById(payment.planId).session(session),
-      ]);
-      if (!user) throw new Error('USER_NOT_FOUND');
-      if (!plan) throw new Error('PLAN_NOT_FOUND');
-
-      const now = new Date();
-      payment.status = 'approved';
-      payment.reviewedAt = now;
-      payment.reviewedBy = adminId;
-      payment.approvedAt = now;
-      await payment.save({ session });
-
-      const existing = await Subscription.findOne({ userId: user._id, status: { $in: ['active', 'trial'] } }).session(session);
-      if (existing) {
-        existing.status = 'cancelled';
-        existing.autoRenew = false;
-        existing.cancelledAt = now;
-        await existing.save({ session });
-      }
-
-      const currentBalance = (user.credits?.monthly || 0) + (user.credits?.bonus || 0);
-      const rollover = plan.creditRolloverEnabled ? Math.min(currentBalance, plan.maxRolloverCredits || payment.planSnapshot.credits) : 0;
-      const totalCredits = payment.planSnapshot.credits + rollover;
-      const end = new Date(now.getTime() + payment.planSnapshot.durationDays * 86400000);
-      await Subscription.create([{
-        userId: user._id, planId: payment.planId, status: 'active', billingInterval: payment.planSnapshot.billingInterval,
-        amount: payment.amount, currency: payment.currency, startedAt: now, currentPeriodStart: now,
-        currentPeriodEnd: end, expiresAt: end, provider: 'bkash', providerPaymentId: payment.paymentId, autoRenew: false,
-      }], { session });
-      await User.updateOne({ _id: user._id }, { $set: { planId: payment.planId, 'credits.monthly': payment.planSnapshot.credits, 'credits.bonus': rollover, 'credits.used': 0, updatedAt: now } }, { session });
-      await CreditLedger.create([{
-        userId: user._id, type: 'subscription_purchase', amount: payment.planSnapshot.credits,
-        reason: `${payment.planSnapshot.name} plan purchase`, description: `${payment.planSnapshot.name} plan purchase`,
-        paymentId: payment._id, planId: payment.planId, adminId, balanceBefore: currentBalance, balanceAfter: totalCredits,
-      }], { session });
-      if (rollover > 0) await CreditLedger.create([{
-        userId: user._id, type: 'rollover', amount: rollover, reason: 'Credit rollover', description: 'Credit rollover', adminId,
-        paymentId: payment._id, planId: payment.planId, balanceBefore: payment.planSnapshot.credits, balanceAfter: totalCredits,
-      }], { session });
-      await AuditLog.create([{ actorId: adminId, actorRole: 'admin', action: 'PAYMENT_APPROVED', targetUserId: user._id, metadata: { paymentId: payment.paymentId, amount: payment.amount, planId: String(payment.planId) }, ip: request.headers.get('x-forwarded-for') || '', userAgent: request.headers.get('user-agent') || '' }], { session });
-      result = { paymentId: payment.paymentId, amount: payment.amount, credits: totalCredits, expiresAt: end.toISOString() };
-    });
-    return result as { paymentId: string; amount: number; credits: number; expiresAt: string };
-  } finally { await session.endSession(); }
+    const session = await mongoose.startSession();
+    try {
+      let result: unknown;
+      await session.withTransaction(async () => {
+        result = await executeApproval(session);
+      });
+      return result as { paymentId: string; amount: number; credits: number; expiresAt: string };
+    } finally {
+      await session.endSession();
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('replica set') || msg.includes('Transaction numbers')) {
+      return await executeApproval();
+    }
+    throw err;
+  }
 }
 
 export function createPaymentId() {

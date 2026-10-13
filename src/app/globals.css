@@ -6523,6 +6523,86 @@ html.dark select.motion-studio-select option {
   background: var(--st-bg);
 }
 
+html.light .svg-motion-studio,
+.light .svg-motion-studio,
+[data-theme="light"] .svg-motion-studio {
+  --st-bg: #f8fafc;
+  --st-panel: #ffffff;
+  --st-accent: var(--primary);
+  --st-text: #0f172a;
+  --main-bg: #f8fafc;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --input-bg: #f1f5f9;
+  --input-border: #cbd5e1;
+  --foreground: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --hover-bg: #f1f5f9;
+  color: #0f172a !important;
+  background: #f8fafc !important;
+}
+
+html.light .svg-motion-studio header,
+html.light .svg-motion-studio aside,
+html.light .svg-motion-studio .svg-motion-timeline,
+html.light .svg-motion-studio .svg-motion-workspace {
+  color: #0f172a;
+}
+
+
+html.light .svg-motion-studio [class~="bg-[#121212]"],
+html.light .svg-motion-studio [class~="bg-[#151515]"],
+html.light .svg-motion-studio [class~="bg-[#1a1a1a]"],
+html.light .svg-motion-studio [class~="bg-[#1d1d1d]"] {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .svg-motion-studio [class~="bg-[#232323]"],
+html.light .svg-motion-studio [class~="bg-[#232323]/95"],
+html.light .svg-motion-studio [class~="bg-[#262626]"],
+html.light .svg-motion-studio [class~="bg-[#282828]"],
+html.light .svg-motion-studio [class~="bg-[#292929]"],
+html.light .svg-motion-studio [class~="bg-[#2a2a2a]"],
+html.light .svg-motion-studio [class~="bg-[#333]"] {
+  background-color: #ffffff !important;
+}
+
+html.light .svg-motion-studio [class~="border-[#121212]"],
+html.light .svg-motion-studio [class~="border-[#232323]"],
+html.light .svg-motion-studio [class~="border-[#282828]"],
+html.light .svg-motion-studio [class~="border-[#333]"],
+html.light .svg-motion-studio [class~="border-[#444]"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .svg-motion-studio [class~="text-[#888]"],
+html.light .svg-motion-studio [class~="text-[#777]"],
+html.light .svg-motion-studio [class~="text-[#666]"] {
+  color: #64748b !important;
+}
+
+html.light .svg-motion-studio [class~="text-[#aaa]"],
+html.light .svg-motion-studio [class~="text-[#bcbcbc]"],
+html.light .svg-motion-studio [class~="text-[#ccc]"],
+html.light .svg-motion-studio [class~="text-[#d5d5d5]"] {
+  color: #334155 !important;
+}
+
+html.light .svg-motion-studio [class~="text-white"]:not([class*="bg-primary"]):not([class*="bg-emerald-"]):not([class*="bg-red-"]):not(.force-white) {
+  color: #0f172a !important;
+}
+
+html.light .svg-motion-studio [class~="hover:bg-white/5"]:hover,
+html.light .svg-motion-studio [class~="hover:bg-white/10"]:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .svg-motion-studio [class~="bg-white/5"],
+html.light .svg-motion-studio [class~="bg-white/10"] {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
 input[type="number"] {
   appearance: textfield !important;
   -moz-appearance: textfield !important;

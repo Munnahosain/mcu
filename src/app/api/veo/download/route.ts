@@ -1,11 +1,20 @@
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthenticatedUserId } from '@/server/auth/request-auth';
+import { resolveUserApiKey } from '@/server/services/vision-service';
 
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    }
+
+    const storedGeminiKey = await resolveUserApiKey(userId, 'Google Gemini');
+    const apiKey = storedGeminiKey?.apiKey || process.env.GEMINI_API_KEY?.trim();
+
     if (!apiKey) {
       return NextResponse.json(
         { error: 'GEMINI_API_KEY is not configured on the server.' },
@@ -58,7 +67,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const videoRes = await fetch(uri, {
+    const downloadUrl = uri.includes('key=') ? uri : `${uri}${uri.includes('?') ? '&' : '?'}key=${apiKey}`;
+    const videoRes = await fetch(downloadUrl, {
       headers: { 'x-goog-api-key': apiKey },
     });
 

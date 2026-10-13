@@ -92,6 +92,7 @@ export async function POST(req: Request) {
       id: String(user?._id ?? user?.id),
       name: user?.name,
       email: user?.email,
+      role: (user?.role as string) || 'user',
     };
 
     const accessToken = await createAccessToken(normalizedUser.id);

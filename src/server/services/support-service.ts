@@ -72,16 +72,30 @@ export async function verifyTicketLinks(userId: string, body: Record<string, unk
 }
 
 export async function createTicketWithMessage(input: { userId: string; subject: string; categoryId: string; priority: string; message: string; links: Record<string, unknown>; relatedTool?: string }): Promise<{ ticketNumber: string; ticketId: string }> {
-  const session = await mongoose.startSession();
+  const executeCreation = async (sess?: mongoose.ClientSession) => {
+    const ticket = await SupportTicket.create([{ ticketNumber: createTicketNumber(), userId: input.userId, subject: input.subject, categoryId: input.categoryId, priority: input.priority, ...input.links, relatedTool: sanitizeSupportText(input.relatedTool, 100), lastMessageAt: new Date(), lastMessageBy: input.userId, unreadForAdmin: true }], sess ? { session: sess } : undefined);
+    await SupportMessage.create([{ ticketId: ticket[0]._id, senderId: input.userId, senderRole: 'user', message: input.message, internalNote: false }], sess ? { session: sess } : undefined);
+    await AuditLog.create([{ actorId: input.userId, actorRole: 'user', action: 'TICKET_CREATED', targetUserId: input.userId, metadata: { ticketId: String(ticket[0]._id), ticketNumber: ticket[0].ticketNumber } }], sess ? { session: sess } : undefined);
+    return { ticketNumber: ticket[0].ticketNumber, ticketId: String(ticket[0]._id) };
+  };
+
   try {
-    let result: { ticketNumber: string; ticketId: string } | null = null;
-    await session.withTransaction(async () => {
-      const ticket = await SupportTicket.create([{ ticketNumber: createTicketNumber(), userId: input.userId, subject: input.subject, categoryId: input.categoryId, priority: input.priority, ...input.links, relatedTool: sanitizeSupportText(input.relatedTool, 100), lastMessageAt: new Date(), lastMessageBy: input.userId, unreadForAdmin: true }], { session });
-      await SupportMessage.create([{ ticketId: ticket[0]._id, senderId: input.userId, senderRole: 'user', message: input.message, internalNote: false }], { session });
-      await AuditLog.create([{ actorId: input.userId, actorRole: 'user', action: 'TICKET_CREATED', targetUserId: input.userId, metadata: { ticketId: String(ticket[0]._id), ticketNumber: ticket[0].ticketNumber } }], { session });
-      result = { ticketNumber: ticket[0].ticketNumber, ticketId: String(ticket[0]._id) };
-    });
-    if (!result) throw new Error('TICKET_CREATION_FAILED');
-    return result;
-  } finally { await session.endSession(); }
+    const session = await mongoose.startSession();
+    try {
+      let result: { ticketNumber: string; ticketId: string } | null = null;
+      await session.withTransaction(async () => {
+        result = await executeCreation(session);
+      });
+      if (!result) throw new Error('TICKET_CREATION_FAILED');
+      return result;
+    } finally {
+      await session.endSession();
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('replica set') || msg.includes('Transaction numbers')) {
+      return await executeCreation();
+    }
+    throw err;
+  }
 }

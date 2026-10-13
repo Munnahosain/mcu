@@ -3085,23 +3085,23 @@ export const SvgMotionStudio: React.FC = () => {
 
         {/* Center Canvas Viewport */}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex h-6 shrink-0 items-center gap-1 border-b border-[#121212] bg-[var(--st-panel)] px-2 text-[10px]">
+        <div className="flex h-6 shrink-0 items-center gap-1 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 text-[10px]">
           <button type="button" aria-label="Close composition" title="Close composition" onClick={() => setProject((current) => ({
             ...current,
             compositions: [],
             projectItems: (current.projectItems ?? []).filter((item) => item.type !== 'composition'),
-          }))} className="text-[#888] hover:text-white">×</button>
-          <Lock className="h-3 w-3 text-[#888]" />
-          <span className="text-[#aaa]">Composition</span>
-          <span className="text-[var(--st-accent)]">{project.compositions?.[0]?.name ?? '(none)'}</span>
-          <button type="button" aria-label="Composition options" title="Composition options" aria-expanded={viewerMenuOpen} onClick={() => setViewerMenuOpen((open) => !open)} className="ml-1 text-[#888] hover:text-white">
+          }))} className="text-[var(--text-muted)] hover:text-foreground">×</button>
+          <Lock className="h-3 w-3 text-[var(--text-muted)]" />
+          <span className="text-[var(--text-secondary)]">Composition</span>
+          <span className="text-primary font-medium">{project.compositions?.[0]?.name ?? '(none)'}</span>
+          <button type="button" aria-label="Composition options" title="Composition options" aria-expanded={viewerMenuOpen} onClick={() => setViewerMenuOpen((open) => !open)} className="ml-1 text-[var(--text-muted)] hover:text-foreground">
             <Menu className="h-3 w-3" />
           </button>
-          {viewerMenuOpen && <div className="absolute left-24 top-6 z-[75] border border-[#121212] bg-[var(--st-panel)] p-1 shadow-xl">
-            <button type="button" onClick={() => { handleCompositionSettings(); setViewerMenuOpen(false); }} className="block px-2 py-1.5 text-left text-[10px] hover:text-[var(--st-accent)]">Composition Settings</button>
-            <button type="button" onClick={() => { setViewerLocked((locked) => !locked); setViewerMenuOpen(false); }} className="block px-2 py-1.5 text-left text-[10px] hover:text-[var(--st-accent)]">{viewerLocked ? 'Unlock Viewer' : 'Lock Viewer'}</button>
+          {viewerMenuOpen && <div className="absolute left-24 top-6 z-[75] border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-xl">
+            <button type="button" onClick={() => { handleCompositionSettings(); setViewerMenuOpen(false); }} className="block px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">Composition Settings</button>
+            <button type="button" onClick={() => { setViewerLocked((locked) => !locked); setViewerMenuOpen(false); }} className="block px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">{viewerLocked ? 'Unlock Viewer' : 'Lock Viewer'}</button>
           </div>}
-          <button type="button" onClick={() => setViewerLocked((locked) => !locked)} aria-pressed={viewerLocked} aria-label={viewerLocked ? 'Unlock viewer' : 'Lock viewer'} title={viewerLocked ? 'Unlock viewer' : 'Lock viewer'} className="ml-auto text-[#888] hover:text-white">
+          <button type="button" onClick={() => setViewerLocked((locked) => !locked)} aria-pressed={viewerLocked} aria-label={viewerLocked ? 'Unlock viewer' : 'Lock viewer'} title={viewerLocked ? 'Unlock viewer' : 'Lock viewer'} className="ml-auto text-[var(--text-muted)] hover:text-foreground">
             {viewerLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
           </button>
         </div>
@@ -3173,7 +3173,7 @@ export const SvgMotionStudio: React.FC = () => {
               title="Drag or use arrow keys to resize the properties panel"
             />
             <aside
-              className="flex h-full min-h-0 shrink-0 flex-col overflow-y-auto bg-[var(--st-panel)]"
+              className="flex h-full min-h-0 shrink-0 flex-col overflow-y-auto bg-[var(--card-bg)]"
               style={{ width: workspaceLayout.rightWidth, flexBasis: workspaceLayout.rightWidth }}
             >
               {dockPanelNames.filter((name) => workspaceLayout.visiblePanels.includes(name))
@@ -3182,45 +3182,45 @@ export const SvgMotionStudio: React.FC = () => {
                   const isOpen = workspaceLayout.openPanels.includes(name) || maximizedDockPanel === name;
                   const selectedNode = project.selectedElementId ? findElementById(project.elements, project.selectedElementId) : null;
                   return (
-                    <section key={name} className="shrink-0 border-b border-[#121212]">
-                      <div className={`flex h-[30px] items-center justify-between border-b border-[#121212] px-2 ${isOpen ? 'text-[var(--st-accent)]' : 'text-[#aaa]'}`}>
+                    <section key={name} className="shrink-0 border-b border-[var(--card-border)]">
+                      <div className={`flex h-[30px] items-center justify-between border-b border-[var(--card-border)] px-2 ${isOpen ? 'text-primary' : 'text-[var(--text-secondary)]'}`}>
                         <button type="button" onClick={(event) => setWorkspaceLayout((layout) => ({
                           ...layout,
                           openPanels: event.altKey
                             ? (isOpen && layout.openPanels.length === 1 ? [] : [name])
                             : isOpen ? layout.openPanels.filter((panel) => panel !== name) : [...layout.openPanels, name],
-                        }))} aria-expanded={isOpen} className="flex h-full flex-1 items-center gap-2 text-left text-[11px] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                        }))} aria-expanded={isOpen} className="flex h-full flex-1 items-center gap-2 text-left text-[11px] text-foreground hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary">
                           <span>{isOpen ? '▾' : '▸'}</span>{name}
                         </button>
                         <div className="relative">
                           <button type="button" aria-label={`${name} panel options`} title={`${name} panel options`} aria-expanded={dockMenuId === name}
-                            onClick={() => setDockMenuId((current) => current === name ? null : name)} className="flex h-6 w-6 items-center justify-center text-[#888] hover:text-white">
+                            onClick={() => setDockMenuId((current) => current === name ? null : name)} className="flex h-6 w-6 items-center justify-center text-[var(--text-muted)] hover:text-foreground">
                             <Menu className="h-3 w-3" />
                           </button>
-                          {dockMenuId === name && <div className="absolute right-0 top-full z-[70] min-w-36 border border-[#121212] bg-[var(--st-panel)] p-1 shadow-xl">
+                          {dockMenuId === name && <div className="absolute right-0 top-full z-[70] min-w-36 border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-xl">
                             <button type="button" onClick={() => { setWorkspaceLayout((layout) => ({ ...layout, visiblePanels: layout.visiblePanels.filter((panel) => panel !== name) })); setDockMenuId(null); }}
-                              className="block w-full px-2 py-1.5 text-left text-[10px] hover:text-[var(--st-accent)]">Close</button>
+                              className="block w-full px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">Close</button>
                             <button type="button" onClick={() => { setMaximizedDockPanel((current) => current === name ? null : name); setDockMenuId(null); }}
-                              className="block w-full px-2 py-1.5 text-left text-[10px] hover:text-[var(--st-accent)]">{maximizedDockPanel === name ? 'Restore panel' : 'Maximise panel'}</button>
+                              className="block w-full px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">{maximizedDockPanel === name ? 'Restore panel' : 'Maximise panel'}</button>
                             <button type="button" onClick={() => { setWorkspace('Default'); setMaximizedDockPanel(null); setDockMenuId(null); }}
-                              className="block w-full px-2 py-1.5 text-left text-[10px] hover:text-[var(--st-accent)]">Reset layout</button>
+                              className="block w-full px-2 py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">Reset layout</button>
                           </div>}
                         </div>
                       </div>
                       {isOpen && (
                         <div className={`min-h-0 overflow-y-auto ${maximizedDockPanel === name ? 'max-h-full' : 'max-h-[min(42vh,360px)]'}`}>
                           {name === 'Info' && (
-                            <div className="space-y-1.5 p-2 text-[10px] text-[#aaa]">
+                            <div className="space-y-1.5 p-2 text-[10px] text-[var(--text-secondary)]">
                               <div className="flex justify-between gap-2"><span>Pointer</span><span ref={pointerReadoutRef}>Move over viewer</span></div>
-                              <div className="flex justify-between gap-2"><span>Composition</span><span className="truncate text-right text-[#ddd]">{project.compositions?.[0]?.name ?? 'None'}</span></div>
+                              <div className="flex justify-between gap-2"><span>Composition</span><span className="truncate text-right text-foreground">{project.compositions?.[0]?.name ?? 'None'}</span></div>
                               {selectedNode ? <>
-                                <div className="flex justify-between gap-2"><span>Layer</span><span className="truncate text-right text-[#ddd]">{selectedNode.name}</span></div>
+                                <div className="flex justify-between gap-2"><span>Layer</span><span className="truncate text-right text-foreground">{selectedNode.name}</span></div>
                                 <div className="flex justify-between gap-2"><span>In / Out</span><span>{(selectedNode.inPoint ?? 0).toFixed(2)} / {(selectedNode.outPoint ?? project.document.duration).toFixed(2)} s</span></div>
                                 <div className="flex justify-between gap-2"><span>Duration</span><span>{((selectedNode.outPoint ?? project.document.duration) - (selectedNode.inPoint ?? 0)).toFixed(2)} s</span></div>
                               </> : <span>No layer selected.</span>}
                             </div>
                           )}
-                          {name === 'Audio' && <div className="p-3 text-[10px] text-[#888]">No audio track in this composition.</div>}
+                          {name === 'Audio' && <div className="p-3 text-[10px] text-[var(--text-muted)]">No audio track in this composition.</div>}
                           {name === 'Preview' && <PreviewPanel
                             project={project}
                             tab="info"
@@ -3261,9 +3261,9 @@ export const SvgMotionStudio: React.FC = () => {
                           />}
                           {name === 'Align' && (
                             <div className="space-y-2 p-2">
-                              <label className="flex items-center justify-between text-[10px] text-[#aaa]">
+                              <label className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
                                 Align layers to
-                                <select value={alignTo} onChange={(event) => setAlignTo(event.target.value as 'selection' | 'composition')} className="motion-studio-select rounded border border-[#121212] bg-[#1d1d1d] px-1.5 py-1 text-[10px] text-white">
+                                <select value={alignTo} onChange={(event) => setAlignTo(event.target.value as 'selection' | 'composition')} className="motion-studio-select rounded border border-[var(--card-border)] bg-[var(--input-bg)] px-1.5 py-1 text-[10px] text-foreground">
                                   <option value="selection">Selection</option><option value="composition">Composition</option>
                                 </select>
                               </label>
@@ -3273,7 +3273,7 @@ export const SvgMotionStudio: React.FC = () => {
                                     const required = action.startsWith('distribute-') ? 3 : alignTo === 'composition' ? 1 : 2;
                                     const disabled = validSelectedLayers.length < required;
                                     return <button key={action} type="button" disabled={disabled} aria-label={label} title={label} onClick={() => handleAlignLayers(action)}
-                                      className="flex h-7 items-center justify-center rounded border border-[#121212] text-[#aaa] hover:bg-white/5 hover:text-[var(--st-accent)] disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                                      className="flex h-7 items-center justify-center rounded border border-[var(--card-border)] text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] hover:text-primary disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary">
                                       {React.cloneElement(icon, { className: 'h-3.5 w-3.5' })}
                                     </button>;
                                   })}
@@ -3282,12 +3282,12 @@ export const SvgMotionStudio: React.FC = () => {
                             </div>
                           )}
                           {name === 'Presets' && <div className="space-y-1 p-2">
-                            <input type="search" value={presetSearch} onChange={(event) => setPresetSearch(event.target.value)} placeholder="Search presets" aria-label="Search animation presets" className="mb-1 h-7 w-full border border-[#121212] bg-[#1d1d1d] px-2 text-[10px] text-white outline-none focus:border-[var(--st-accent)]" />
+                            <input type="search" value={presetSearch} onChange={(event) => setPresetSearch(event.target.value)} placeholder="Search presets" aria-label="Search animation presets" className="mb-1 h-7 w-full rounded-md border border-[var(--card-border)] bg-[var(--input-bg)] px-2 text-[10px] text-foreground outline-none focus:border-primary" />
                             {visiblePresets.map((preset) => <button key={preset.id} type="button" disabled={!project.selectedElementId}
                               onDoubleClick={() => project.selectedElementId && handleApplyPreset(project.selectedElementId, preset.id)}
                               title={`${preset.description} — double-click to apply`}
-                              className="block w-full border-b border-[#121212] px-1 py-1.5 text-left text-[10px] text-[#ccc] hover:text-[var(--st-accent)] disabled:opacity-40">
-                              <span className="block font-medium">{preset.name}</span><span className="text-[9px] text-[#888]">{preset.category} · Double-click to apply</span>
+                              className="block w-full border-b border-[var(--card-border)] px-1 py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary disabled:opacity-40">
+                              <span className="block font-medium">{preset.name}</span><span className="text-[9px] text-[var(--text-muted)]">{preset.category} · Double-click to apply</span>
                             </button>)}
                           </div>}
                           {name === 'Character' && <div className="space-y-2 p-2">
@@ -3295,22 +3295,22 @@ export const SvgMotionStudio: React.FC = () => {
                               const next = { ...previous, characterSlots: autoDetectCharacterSlots(previous.elements) };
                               pushHistory(next);
                               return next;
-                            })} className="border border-[#121212] px-2 py-1 text-[10px] text-[#ccc] hover:text-[var(--st-accent)]">Auto-detect parts</button>
+                            })} className="rounded-md border border-[var(--card-border)] px-2 py-1 text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">Auto-detect parts</button>
                             {(['head', 'hair', 'eyes', 'mouth', 'body', 'left_arm', 'right_arm', 'left_leg', 'right_leg'] as const).map((slot) => (
-                              <label key={slot} className="flex items-center justify-between gap-2 text-[9px] capitalize text-[#aaa]">
+                              <label key={slot} className="flex items-center justify-between gap-2 text-[9px] capitalize text-[var(--text-secondary)]">
                                 {slot.replace('_', ' ')}
-                                <select value={project.characterSlots?.[slot] ?? ''} onChange={(event) => setProject((previous) => ({ ...previous, characterSlots: { ...previous.characterSlots, [slot]: event.target.value || undefined } }))} aria-label={`Character ${slot} layer`} className="motion-studio-select max-w-32 rounded border border-[#121212] bg-[#1d1d1d] px-1 py-1 text-[9px] text-white">
+                                <select value={project.characterSlots?.[slot] ?? ''} onChange={(event) => setProject((previous) => ({ ...previous, characterSlots: { ...previous.characterSlots, [slot]: event.target.value || undefined } }))} aria-label={`Character ${slot} layer`} className="motion-studio-select max-w-32 rounded border border-[var(--card-border)] bg-[var(--input-bg)] px-1 py-1 text-[9px] text-foreground">
                                   <option value="">Unassigned</option>{flattenElementTree(project.elements).map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}
                                 </select>
                               </label>
                             ))}
-                            {CHARACTER_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => handleApplyCharacterPreset(preset.id)} className="block w-full border-t border-[#121212] py-1.5 text-left text-[10px] text-[#ccc] hover:text-[var(--st-accent)]">{preset.name}</button>)}
+                            {CHARACTER_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => handleApplyCharacterPreset(preset.id)} className="block w-full border-t border-[var(--card-border)] py-1.5 text-left text-[10px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary">{preset.name}</button>)}
                           </div>}
                           {name === 'Text' && <div className="p-2">
                             {selectedNode?.tagName === 'text' ? <>
-                              <label className="mb-1 block text-[9px] text-[#888]">Text content</label>
-                              <textarea value={selectedNode.textContent ?? ''} onChange={(event) => handleUpdateElementText(selectedNode.id, event.target.value)} aria-label="Selected text layer content" className="min-h-20 w-full border border-[#121212] bg-[#1d1d1d] p-2 text-[10px] text-white outline-none focus:border-[var(--st-accent)]" />
-                            </> : <span className="text-[10px] text-[#888]">Select a text layer to edit its content.</span>}
+                              <label className="mb-1 block text-[9px] text-[var(--text-muted)]">Text content</label>
+                              <textarea value={selectedNode.textContent ?? ''} onChange={(event) => handleUpdateElementText(selectedNode.id, event.target.value)} aria-label="Selected text layer content" className="min-h-20 w-full rounded-md border border-[var(--card-border)] bg-[var(--input-bg)] p-2 text-[10px] text-foreground outline-none focus:border-primary" />
+                            </> : <span className="text-[10px] text-[var(--text-muted)]">Select a text layer to edit its content.</span>}
                           </div>}
                         </div>
                       )}
@@ -3324,17 +3324,17 @@ export const SvgMotionStudio: React.FC = () => {
 
       {/* 3. BOTTOM DOCK */}
       {(workspaceLayout.visiblePanels.includes('Timeline') || workspaceLayout.visiblePanels.includes('Render Queue')) && (
-      <div className="flex shrink-0 flex-col border-t border-[#121212]" style={{ height: workspaceLayout.timelineHeight + 28 }}>
-      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-[#121212] bg-[var(--st-panel)] px-2 text-[10px]">
+      <div className="flex shrink-0 flex-col border-t border-[var(--card-border)]" style={{ height: workspaceLayout.timelineHeight + 28 }}>
+      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 text-[10px]">
         {workspaceLayout.visiblePanels.includes('Timeline') && <button type="button" aria-pressed={workspaceLayout.bottomTab === 'timeline'} onClick={() => setWorkspaceLayout((layout) => ({ ...layout, bottomTab: 'timeline' }))}
-          className={`flex h-full items-center gap-1 border-b-2 px-2 ${workspaceLayout.bottomTab === 'timeline' ? 'border-[var(--st-accent)] text-[var(--st-accent)]' : 'border-transparent text-[#888] hover:text-white'}`}>
+          className={`flex h-full items-center gap-1 border-b-2 px-2 ${workspaceLayout.bottomTab === 'timeline' ? 'border-primary text-primary font-bold' : 'border-transparent text-[var(--text-muted)] hover:text-foreground'}`}>
           {project.compositions?.[0]?.name ?? 'Timeline'} <span aria-label="Close timeline" onClick={(event) => { event.stopPropagation(); setWorkspaceLayout((layout) => ({ ...layout, visiblePanels: layout.visiblePanels.filter((panel) => panel !== 'Timeline') })); }}>×</span>
         </button>}
         {workspaceLayout.visiblePanels.includes('Render Queue') && <button type="button" aria-pressed={workspaceLayout.bottomTab === 'renderQueue'} onClick={() => setWorkspaceLayout((layout) => ({ ...layout, bottomTab: 'renderQueue' }))}
-          className={`flex h-full items-center gap-1 border-b-2 px-2 ${workspaceLayout.bottomTab === 'renderQueue' ? 'border-[var(--st-accent)] text-[var(--st-accent)]' : 'border-transparent text-[#888] hover:text-white'}`}>
+          className={`flex h-full items-center gap-1 border-b-2 px-2 ${workspaceLayout.bottomTab === 'renderQueue' ? 'border-primary text-primary font-bold' : 'border-transparent text-[var(--text-muted)] hover:text-foreground'}`}>
           Render Queue <span aria-label="Close render queue" onClick={(event) => { event.stopPropagation(); setWorkspaceLayout((layout) => ({ ...layout, visiblePanels: layout.visiblePanels.filter((panel) => panel !== 'Render Queue') })); }}>×</span>
         </button>}
-        <button type="button" aria-label="Bottom panel options" title="Bottom panel options" className="ml-auto text-[#888] hover:text-white"><Menu className="h-3 w-3" /></button>
+        <button type="button" aria-label="Bottom panel options" title="Bottom panel options" className="ml-auto text-[var(--text-muted)] hover:text-foreground"><Menu className="h-3 w-3" /></button>
       </div>
       {workspaceLayout.bottomTab === 'timeline' && workspaceLayout.visiblePanels.includes('Timeline') && <Timeline
         project={project}
@@ -3448,26 +3448,26 @@ export const SvgMotionStudio: React.FC = () => {
         }))}
       />}
       {workspaceLayout.bottomTab === 'renderQueue' && workspaceLayout.visiblePanels.includes('Render Queue') && (
-        <div className="min-h-0 flex-1 overflow-auto bg-[#1d1d1d] text-[9px] text-[#aaa]">
-          <div className="flex h-8 items-center gap-2 border-b border-[#121212] px-2">
-            <span className="w-24 font-semibold text-[#ddd]">Current Render</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded bg-[#292929]" role="progressbar" aria-label="Current render progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={renderJobs.find((job) => job.status === 'Rendering')?.progress ?? 0}>
-              <div className="h-full bg-[var(--st-accent)] transition-[width]" style={{ width: `${renderJobs.find((job) => job.status === 'Rendering')?.progress ?? 0}%` }} />
+        <div className="min-h-0 flex-1 overflow-auto bg-[var(--main-bg)] text-[9px] text-[var(--text-secondary)]">
+          <div className="flex h-8 items-center gap-2 border-b border-[var(--card-border)] px-2">
+            <span className="w-24 font-semibold text-foreground">Current Render</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded bg-[var(--input-bg)]" role="progressbar" aria-label="Current render progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={renderJobs.find((job) => job.status === 'Rendering')?.progress ?? 0}>
+              <div className="h-full bg-primary transition-[width]" style={{ width: `${renderJobs.find((job) => job.status === 'Rendering')?.progress ?? 0}%` }} />
             </div>
             <span>Elapsed: {renderJobs.some((job) => job.status === 'Rendering') ? `${Math.floor((elapsedTick - (renderJobs.find((job) => job.status === 'Rendering')?.startedAt ?? elapsedTick)) / 1000)}s` : '—'}</span>
             <span>Est. Remain: —</span>
             <button type="button" disabled={!renderJobs.some((job) => job.status === 'Rendering')} title="Stop is unavailable for the active browser export" className="rounded px-2 py-1 opacity-40">Stop</button>
             <button type="button" disabled title="Pause is unavailable for browser exports" className="rounded px-2 py-1 opacity-40">Pause</button>
-            <button type="button" onClick={() => setIsExportOpen(true)} className="rounded bg-[var(--st-accent)] px-2 py-1 font-semibold text-[#111]">Render</button>
+            <button type="button" onClick={() => setIsExportOpen(true)} className="rounded bg-primary px-2 py-1 font-semibold text-[#071b17]">Render</button>
           </div>
-          <div className="grid grid-cols-[72px_70px_34px_minmax(120px,1fr)_84px_125px_96px] border-b border-[#121212] bg-[#232323] px-2 py-1 font-semibold text-[#aaa]">
+          <div className="grid grid-cols-[72px_70px_34px_minmax(120px,1fr)_84px_125px_96px] border-b border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 font-semibold text-[var(--text-secondary)]">
             <span>Render</span><span>Label</span><span>#</span><span>Comp name</span><span>Status</span><span>Started</span><span>Render time</span>
           </div>
           {renderJobs.map((job, index) => {
             const elapsed = Math.max(0, ((job.finishedAt ?? elapsedTick) - job.startedAt) / 1000);
-            return <div key={job.id} className="grid grid-cols-[72px_70px_34px_minmax(120px,1fr)_84px_125px_96px] border-b border-[#121212] px-2 py-1">
+            return <div key={job.id} className="grid grid-cols-[72px_70px_34px_minmax(120px,1fr)_84px_125px_96px] border-b border-[var(--card-border)] px-2 py-1">
               <span>{job.format}</span><span>—</span><span>{index + 1}</span><span className="truncate">{job.compName}</span>
-              <span className={job.status === 'Failed' ? 'text-red-400' : job.status === 'Done' ? 'text-[var(--st-accent)]' : 'text-amber-300'} title={job.error}>{job.status}</span>
+              <span className={job.status === 'Failed' ? 'text-red-400' : job.status === 'Done' ? 'text-primary' : 'text-amber-400'} title={job.error}>{job.status}</span>
               <span>{new Date(job.startedAt).toLocaleTimeString()}</span><span>{elapsed.toFixed(1)}s</span>
             </div>;
           })}
@@ -3475,7 +3475,7 @@ export const SvgMotionStudio: React.FC = () => {
       )}
       </div>
       )}
-      <div className="flex h-[22px] shrink-0 items-center gap-4 border-t border-[#121212] bg-[#232323] px-2 text-[9px] text-[#888]">
+      <div className="flex h-[22px] shrink-0 items-center gap-4 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-2 text-[9px] text-[var(--text-muted)]">
         <span className="min-w-0 flex-1 truncate">Message: {toasts.at(-1)?.title ?? 'Ready'}</span>
         {browserMemory && <span>RAM: {Math.round(browserMemory.usedJSHeapSize / 1024 / 1024)} MB</span>}
         <span>Renders Started: {renderJobs.length}</span>

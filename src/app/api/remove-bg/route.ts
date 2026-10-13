@@ -33,10 +33,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "No image file provided" }, { status: 400 });
     }
 
-    const apiKey = process.env.POOF_API_KEY || process.env.REMOVE_BG_API_KEY;
+    const apiKey =
+      process.env.POOF_API_KEY ||
+      process.env.REMOVE_BG_API_KEY ||
+      process.env.BG_Remover_API ||
+      process.env.BG_REMOVER_API;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: "POOF_API_KEY is not configured. Add your Poof.bg key to the server environment." },
+        { success: false, error: "POOF_API_KEY is not configured. Add your Poof.bg key (or BG_Remover_API) to the server environment." },
         { status: 503 }
       );
     }

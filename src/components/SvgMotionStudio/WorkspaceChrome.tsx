@@ -109,25 +109,25 @@ export function WorkspaceChrome({
   }, [onAddShape, onAddText, onSetTool]);
 
   return (
-    <header className="shrink-0 border-b border-[#121212] bg-[var(--st-panel)] text-[var(--st-text)]">
+    <header className="shrink-0 border-b border-[var(--card-border)] bg-[var(--card-bg)] text-foreground">
       <input id="motion-studio-artwork-input" type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp" className="hidden"
         aria-label="Open SVG artwork or image" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onOpenArtworkFile(file); event.currentTarget.value = ''; }} />
       <input id="motion-studio-project-input" type="file" accept=".mcuproj,.json" className="hidden" aria-label="Open project file"
         onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onLoadProjectFile(file); event.currentTarget.value = ''; }} />
-      <div className="flex h-8 items-center gap-1 border-b border-[#121212] px-2">
+      <div className="flex h-8 items-center gap-1 border-b border-[var(--card-border)] px-2">
         <nav aria-label="Studio menus" className="flex h-full min-w-0 items-center">
           {menus.map((label) => (
             <div className="relative h-full" key={label}>
               <button type="button" aria-haspopup="menu" aria-expanded={openMenu === label}
                 onClick={() => setOpenMenu((open) => open === label ? null : label)}
-                className={`h-full px-2 text-[11px] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)] ${openMenu === label ? 'text-[var(--st-accent)]' : 'text-[var(--st-text)]'}`}>
+                className={`h-full px-2 text-[11px] transition-colors hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary ${openMenu === label ? 'text-primary' : 'text-foreground/80'}`}>
                 {label}
               </button>
               {openMenu === label && (
-                <div role="menu" aria-label={`${label} menu`} className="absolute left-0 top-full z-[80] min-w-52 border border-[#121212] bg-[var(--st-panel)] p-1 shadow-2xl">
+                <div role="menu" aria-label={`${label} menu`} className="absolute left-0 top-full z-[80] min-w-52 border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-2xl">
                   {menuActions[label].map(({ label: itemLabel, action }) => (
                     <button key={itemLabel} type="button" role="menuitem" onClick={() => { action(); setOpenMenu(null); }}
-                      className="block w-full whitespace-nowrap px-2.5 py-1.5 text-left text-[11px] text-[var(--st-text)] hover:bg-white/5 hover:text-[var(--st-accent)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+                      className="block w-full whitespace-nowrap px-2.5 py-1.5 text-left text-[11px] text-foreground hover:bg-[var(--hover-bg)] hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary">
                       {itemLabel}
                     </button>
                   ))}
@@ -136,52 +136,52 @@ export function WorkspaceChrome({
             </div>
           ))}
         </nav>
-        <label className="ml-auto flex h-6 w-44 items-center gap-1 border border-[#121212] bg-[#1d1d1d] px-1.5">
-          <Search className="h-3 w-3 shrink-0 text-[#888]" />
+        <label className="ml-auto flex h-6 w-44 items-center gap-1 border border-[var(--card-border)] bg-[var(--input-bg)] px-1.5 rounded-md">
+          <Search className="h-3 w-3 shrink-0 text-[var(--text-muted)]" />
           <input value={helpSearch} onChange={(event) => { setHelpSearch(event.target.value); onFilterShortcuts(event.target.value); }}
-            aria-label="Search help and shortcuts" placeholder="Search help" className="min-w-0 flex-1 bg-transparent text-[10px] text-white outline-none placeholder:text-[#777]" />
+            aria-label="Search help and shortcuts" placeholder="Search help" className="min-w-0 flex-1 bg-transparent text-[10px] text-foreground outline-none placeholder:text-[var(--text-muted)]" />
         </label>
       </div>
       <div className="flex h-7 items-center gap-1 px-2">
         <Link href="/dashboard" onClick={(event) => { event.preventDefault(); onOpenHome(); }}
-          aria-label="Back to dashboard" title="Back to dashboard" className="flex h-6 w-6 items-center justify-center text-[#aaa] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">
+          aria-label="Back to dashboard" title="Back to dashboard" className="flex h-6 w-6 items-center justify-center text-[var(--text-secondary)] hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary">
           <Home className="h-4 w-4" />
         </Link>
-        <div className="mx-1 h-4 w-px bg-[#121212]" />
+        <div className="mx-1 h-4 w-px bg-[var(--card-border)]" />
         {toolOptions.map(({ id, label, shortcut, icon }) => {
           const active = activeTool === id;
           return (
             <button key={id} type="button" title={`${label} (${shortcut})`} aria-label={`${label} tool`} aria-pressed={active}
               onClick={() => id === 'shape' ? onAddShape() : id === 'text' ? onAddText() : onSetTool(id)}
-              className={`flex h-6 w-6 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)] ${active ? 'bg-white/10 text-[var(--st-accent)]' : 'text-[#aaa] hover:bg-white/5 hover:text-white'}`}>
+              className={`flex h-6 w-6 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary ${active ? 'bg-primary/20 text-primary' : 'text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] hover:text-foreground'}`}>
               {React.cloneElement(icon as React.ReactElement<{ className?: string }>, { className: 'h-4 w-4' })}
             </button>
           );
         })}
-        <label className="ml-2 flex items-center gap-1.5 text-[10px] text-[#aaa]">
-          <input type="checkbox" checked={snapping} onChange={onToggleSnapping} aria-label="Enable snapping" className="accent-[var(--st-accent)]" />
+        <label className="ml-2 flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
+          <input type="checkbox" checked={snapping} onChange={onToggleSnapping} aria-label="Enable snapping" className="accent-primary" />
           <Magnet className="h-3.5 w-3.5" /> Snapping
         </label>
         <div className="ml-auto flex h-full items-center gap-3">
           {(['Default', 'Standard', 'Small screen'] as MotionWorkspace[]).map((tab) => (
             <button key={tab} type="button" aria-pressed={workspace === tab} onClick={() => setWorkspaceTab(tab)}
-              className={`h-full border-b-2 px-2 text-[10px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)] ${workspace === tab ? 'border-[var(--st-accent)] text-[var(--st-accent)]' : 'border-transparent text-[#aaa] hover:text-white'}`}>
+              className={`h-full border-b-2 px-2 text-[10px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary ${workspace === tab ? 'border-primary text-primary font-bold' : 'border-transparent text-[var(--text-secondary)] hover:text-foreground'}`}>
               {tab === 'Small screen' ? 'Small Screen' : tab}
             </button>
           ))}
           <button type="button" aria-label="Workspace options" title="Workspace options" onClick={() => setShowWorkspaceMenu((open) => !open)}
-            className="flex h-6 w-6 items-center justify-center text-[#aaa] hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--st-accent)]">»</button>
+            className="flex h-6 w-6 items-center justify-center text-[var(--text-secondary)] hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary">»</button>
           <div className="relative">
             <button type="button" aria-label="Workspace options" title="Workspace options" aria-expanded={showWorkspaceMenu}
-              onClick={() => setShowWorkspaceMenu((open) => !open)} className="flex h-6 w-6 items-center justify-center text-[#aaa] hover:text-white">
+              onClick={() => setShowWorkspaceMenu((open) => !open)} className="flex h-6 w-6 items-center justify-center text-[var(--text-secondary)] hover:text-foreground">
               <Menu className="h-3.5 w-3.5" />
             </button>
-            {showWorkspaceMenu && <div className="absolute right-0 top-full z-[80] min-w-40 border border-[#121212] bg-[var(--st-panel)] p-1 shadow-xl">
-              <button type="button" onClick={() => { onSaveWorkspace(); setShowWorkspaceMenu(false); }} className="block w-full px-2 py-1.5 text-left text-[11px] hover:text-[var(--st-accent)]">Save Workspace</button>
-              <button type="button" onClick={() => { onResetWorkspace(); setShowWorkspaceMenu(false); }} className="block w-full px-2 py-1.5 text-left text-[11px] hover:text-[var(--st-accent)]">Reset Workspace</button>
+            {showWorkspaceMenu && <div className="absolute right-0 top-full z-[80] min-w-40 border border-[var(--card-border)] bg-[var(--card-bg)] p-1 shadow-xl">
+              <button type="button" onClick={() => { onSaveWorkspace(); setShowWorkspaceMenu(false); }} className="block w-full px-2 py-1.5 text-left text-[11px] text-foreground hover:text-primary hover:bg-[var(--hover-bg)]">Save Workspace</button>
+              <button type="button" onClick={() => { onResetWorkspace(); setShowWorkspaceMenu(false); }} className="block w-full px-2 py-1.5 text-left text-[11px] text-foreground hover:text-primary hover:bg-[var(--hover-bg)]">Reset Workspace</button>
             </div>}
           </div>
-          <ChevronDown className="h-3 w-3 text-[#666]" />
+          <ChevronDown className="h-3 w-3 text-[var(--text-muted)]" />
         </div>
       </div>
     </header>

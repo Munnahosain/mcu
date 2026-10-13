@@ -73,6 +73,24 @@ export default function EmbeddedStudio({ title, url, icon, installHint }: Props)
     };
   }, [url, attempt]);
 
+  const currentThemeRef = useRef<string | null>(null);
+
+  const getThemeUrl = useCallback(() => {
+    try {
+      const u = new URL(url, window.location.href);
+      const stored = typeof window !== "undefined" ? localStorage.getItem("mcustock_theme") : null;
+      const mode = stored === "light" || stored === "dark"
+        ? stored
+        : typeof document !== "undefined" && document.documentElement.classList.contains("light")
+          ? "light"
+          : "dark";
+      u.searchParams.set("theme", mode);
+      return u.pathname + u.search;
+    } catch {
+      return url;
+    }
+  }, [url]);
+
   const syncEditorTheme = useCallback(() => {
     const frame = iframeRef.current?.contentWindow;
     if (!frame) return;
@@ -86,35 +104,37 @@ export default function EmbeddedStudio({ title, url, icon, installHint }: Props)
       : document.documentElement.classList.contains("light")
         ? "light"
         : "dark";
+    try {
+      localStorage.setItem("photocraft-theme", mode);
+      localStorage.setItem("vectorcraft-theme", mode);
+    } catch {}
+
+    const isThemeChange = currentThemeRef.current !== null && currentThemeRef.current !== mode;
+    currentThemeRef.current = mode;
+
+    if (isThemeChange) {
+      try {
+        const nextUrl = new URL(url, window.location.href);
+        nextUrl.searchParams.set("theme", mode);
+        frame.location.replace(nextUrl.pathname + nextUrl.search);
+        return;
+      } catch {}
+    }
+
+    try {
+      if (frame.document) {
+        frame.document.documentElement.className = mode;
+        if (frame.document.body) {
+          frame.document.body.style.background = mode === 'dark' ? '#101116' : '#f7fbf9';
+        }
+      }
+    } catch {}
     frame.postMessage({ type: "mint-canvas:theme", mode }, editorUrl.origin);
+    frame.postMessage({ type: "vectorcraft:theme", mode }, editorUrl.origin);
+    frame.postMessage({ type: "mcustock:theme", mode }, editorUrl.origin);
   }, [url]);
 
-  useEffect(() => {
-    const sync = () => syncEditorTheme();
-    const onMessage = (event: MessageEvent) => {
-      const frame = iframeRef.current?.contentWindow;
-      if (event.origin !== window.location.origin || event.source !== frame) return;
-      if (event.data?.type === "mint-canvas:ready") syncEditorTheme();
-    };
-    window.addEventListener("mcustock-theme-changed", sync);
-    window.addEventListener("storage", sync);
-    window.addEventListener("message", onMessage);
-    return () => {
-      window.removeEventListener("mcustock-theme-changed", sync);
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("message", onMessage);
-    };
-  }, [syncEditorTheme]);
-
-  useEffect(() => {
-    const syncFullscreen = () => {
-      setIsFullscreen(document.fullscreenElement === studioRef.current);
-    };
-    document.addEventListener("fullscreenchange", syncFullscreen);
-    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
-  }, []);
-
-  const toggleFullscreen = async () => {
+  const toggleFullscreen = useCallback(async () => {
     const studio = studioRef.current;
     if (!studio) return;
 
@@ -127,7 +147,42 @@ export default function EmbeddedStudio({ title, url, icon, installHint }: Props)
     } catch (error) {
       console.error(`Could not change ${title} fullscreen mode:`, error);
     }
-  };
+  }, [title]);
+
+  useEffect(() => {
+    const sync = () => syncEditorTheme();
+    const onMessage = (event: MessageEvent) => {
+      const frame = iframeRef.current?.contentWindow;
+      if (event.origin !== window.location.origin || event.source !== frame) return;
+      if (event.data?.type === "mint-canvas:ready" || event.data?.type === "vectorcraft:ready") syncEditorTheme();
+      if (event.data?.type === "mint-canvas:toggle-fullscreen" || event.data?.type === "vectorcraft:toggle-fullscreen") toggleFullscreen();
+    };
+    window.addEventListener("mcustock-theme-changed", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("mcustock-theme-changed", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [syncEditorTheme, toggleFullscreen]);
+
+  useEffect(() => {
+    const syncFullscreen = () => {
+      const isFs = document.fullscreenElement === studioRef.current;
+      setIsFullscreen(isFs);
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "mint-canvas:fullscreen-state", isFullscreen: isFs },
+        "*"
+      );
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "vectorcraft:fullscreen-state", isFullscreen: isFs },
+        "*"
+      );
+    };
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
 
   if (status.kind === "missing" || status.kind === "broken") {
     const missing = status.kind === "missing";
@@ -169,21 +224,12 @@ export default function EmbeddedStudio({ title, url, icon, installHint }: Props)
             <iframe
               ref={iframeRef}
               onLoad={syncEditorTheme}
-              src={url}
+              src={getThemeUrl()}
               title={title}
-              className="block h-full min-h-0 w-full flex-1 border-0 bg-[#0f1014]"
+              className="block h-full min-h-0 w-full flex-1 border-0 bg-[var(--main-bg)]"
               allow="fullscreen; clipboard-read; clipboard-write"
               allowFullScreen
             />
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? "Exit full screen" : "Full screen"}
-              aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
-              className="absolute right-[16%] top-1 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#25262b] text-white transition-colors hover:bg-[#3a3b42]"
-            >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </button>
           </div>
         </div>
       )}

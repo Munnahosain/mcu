@@ -4,25 +4,158 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>Mata Pattern Studio</title>
+
+  <script>
+  (function() {
+    function getParentTheme() {
+      try {
+        const parentTheme = window.parent?.localStorage?.getItem('mcustock_theme') || localStorage.getItem('mcustock_theme');
+        if (parentTheme === 'light' || parentTheme === 'dark') return parentTheme;
+        if (window.parent?.document?.documentElement?.classList?.contains('light')) return 'light';
+      } catch {}
+      return 'dark';
+    }
+
+    let activeTheme = getParentTheme();
+    try {
+      localStorage.setItem('vectorcraft-theme', activeTheme);
+      localStorage.setItem('mcustock_theme', activeTheme);
+    } catch {}
+
+    const origMatchMedia = window.matchMedia ? window.matchMedia.bind(window) : null;
+    window.matchMedia = function(query) {
+      if (query && query.includes('prefers-color-scheme')) {
+        const isDarkQuery = query.includes('dark');
+        const matches = isDarkQuery ? (activeTheme === 'dark') : (activeTheme === 'light');
+        return {
+          matches: matches,
+          media: query,
+          onchange: null,
+          addListener: function() {},
+          removeListener: function() {},
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return true; }
+        };
+      }
+      return origMatchMedia ? origMatchMedia(query) : { matches: false, media: query };
+    };
+
+    function applyTheme(theme) {
+      activeTheme = theme;
+      try {
+        localStorage.setItem('vectorcraft-theme', theme);
+        localStorage.setItem('mcustock_theme', theme);
+      } catch {}
+      const isDark = theme === 'dark';
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        if (document.body) document.body.style.background = '#101116';
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+        if (document.body) document.body.style.background = '#f7fbf9';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      applyTheme(activeTheme);
+      try {
+        window.parent?.postMessage({ type: 'vectorcraft:ready' }, '*');
+      } catch {}
+    });
+
+    window.addEventListener('message', (event) => {
+      if ((event.data?.type === 'vectorcraft:theme' || event.data?.type === 'mcustock:theme') && (event.data.mode === 'dark' || event.data.mode === 'light')) {
+        if (event.data.mode !== activeTheme) {
+          activeTheme = event.data.mode;
+          try {
+            localStorage.setItem('vectorcraft-theme', activeTheme);
+            localStorage.setItem('mcustock_theme', activeTheme);
+          } catch {}
+          window.location.reload();
+        } else {
+          applyTheme(event.data.mode);
+        }
+      }
+    });
+
+    try {
+      Object.defineProperty(navigator, 'gpu', { get: () => undefined, configurable: true });
+    } catch {}
+
+    function hookShaderSource(proto, name) {
+      if (typeof proto === 'undefined' || !proto.shaderSource) return;
+      const orig = proto.shaderSource;
+      proto.shaderSource = function(shader, source) {
+        if (typeof source === 'string') {
+          if (source.includes('out_color_gamma =') && source.includes('dither_interleaved')) {
+            const eguiRegex = /vec4\s+([a-zA-Z0-9_]+)\s*=\s*out_color_gamma\s*;\s*([a-zA-Z0-9_]+)\s*=\s*\1\s*;/;
+            source = source.replace(eguiRegex, (match, vName, outName) => {
+              return `vec4 ${vName} = out_color_gamma;
+    if (${vName}.b > 0.60 && (${vName}.b - ${vName}.r) > 0.28 && (${vName}.b - ${vName}.g) > 0.12) {
+        float t = clamp((${vName}.b - 0.60) / 0.38, 0.0, 1.0);
+        vec3 mint = mix(vec3(0.086, 0.780, 0.518), vec3(0.153, 0.890, 0.604), t);
+        ${vName}.rgb = mint * ${vName}.a;
+    }
+    ${outName} = ${vName};`;
+            });
+          }
+        }
+        return orig.apply(this, arguments);
+      };
+    }
+
+    if (typeof WebGL2RenderingContext !== 'undefined') hookShaderSource(WebGL2RenderingContext.prototype, 'WebGL2');
+    if (typeof WebGLRenderingContext !== 'undefined') hookShaderSource(WebGLRenderingContext.prototype, 'WebGL');
+  })();
+  </script>
   
-<script type="module">
-import init, * as bindings from './vectorcraft-web-9500da79572123b.js';
-const wasm = await init({ module_or_path: './vectorcraft-web-9500da79572123b_bg.wasm' });
+  <script type="module">
+  import init, * as bindings from './vectorcraft-web-9500da79572123b.js';
+  const wasm = await init({ module_or_path: './vectorcraft-web-9500da79572123b_bg.wasm' });
 
+  window.wasmBindings = bindings;
+  dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+  </script>
 
-window.wasmBindings = bindings;
-
-
-dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
-
-</script>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #101116; }
-    #vectorcraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-    #vectorcraft_loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      color: #a8b1c4; font: 14px system-ui, sans-serif; pointer-events: none; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #101116;
+      color: #f8fafc;
+    }
+    html.light, html.light body {
+      background: #f7fbf9;
+      color: #071b17;
+    }
+    #vectorcraft_canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #vectorcraft_loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #a8b1c4;
+      font: 14px system-ui, sans-serif;
+      pointer-events: none;
+    }
   </style>
-<link rel="modulepreload" href="./vectorcraft-web-9500da79572123b.js" crossorigin="anonymous" integrity="sha384-Z1841TystUHfozDQT6tzNn71pgIVGwF2hML+T0VtoppaM8u43mEcMI5/GWDAwYMh"><link rel="preload" href="./vectorcraft-web-9500da79572123b_bg.wasm" crossorigin="anonymous" integrity="sha384-hGYiMaCBXMd6kAlJHMJbQfT3VTyLqAEpAtER4Tr1DqMgwEo1EBuwQRZwkC10WJp+" as="fetch" type="application/wasm"></head>
+  <link rel="modulepreload" href="./vectorcraft-web-9500da79572123b.js" crossorigin="anonymous" integrity="sha384-Z1841TystUHfozDQT6tzNn71pgIVGwF2hML+T0VtoppaM8u43mEcMI5/GWDAwYMh">
+  <link rel="preload" href="./vectorcraft-web-9500da79572123b_bg.wasm" crossorigin="anonymous" integrity="sha384-hGYiMaCBXMd6kAlJHMJbQfT3VTyLqAEpAtER4Tr1DqMgwEo1EBuwQRZwkC10WJp+" as="fetch" type="application/wasm">
+</head>
 <body>
   <canvas id="vectorcraft_canvas"></canvas>
   <div id="vectorcraft_loading">Loading Mata Pattern Studio&hellip;</div>
