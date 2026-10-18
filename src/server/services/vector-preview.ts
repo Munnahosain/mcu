@@ -83,14 +83,16 @@ function sanitizeSvg(source: string): string {
     .replace(/<script\b[\s\S]*?<\/script>/gi, '')
     .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, '')
     .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, (attribute) => {
-      return /(?:#|data:image\/(?:png|jpeg|webp);base64,)/i.test(attribute) ? attribute : '';
+    .replace(/<!DOCTYPE[^>[]*(?:\[[\s\S]*?\])?\s*>/gi, '')
+    .replace(/\s(?:href|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi, (attribute, dq, sq, bare) => {
+      const value = String(dq ?? sq ?? bare ?? '').trim();
+      return /^(?:#|data:image\/(?:png|jpeg|webp);base64,)/i.test(value) ? attribute : '';
     })
-    .replace(/url\s*\(\s*["']?(?:https?:|file:|javascript:)[^)]*["']?\s*\)/gi, 'none')
-    .replace(/(?:https?:|file:|javascript:)[^"'\s)]+/gi, '');
+    .replace(/url\s*\(\s*["']?\s*(?:https?:|file:|javascript:)[^)]*\)/gi, 'none')
+    .replace(/@import\s+(?:url\s*\()?\s*["']?[^;]*;?/gi, '');
 
   if (!/<svg\b/i.test(svg)) throw new VectorPreviewError('INVALID_FILE_SIGNATURE', 'The SVG structure is invalid.');
-  if (!/\bxmlns\s*=\s*["']http:\/\/www\.w3\.org\/2000\/svg["']/i.test(svg)) {
+  if (!/<svg\b[^>]*\sxmlns\s*=\s*["']http:\/\/www\.w3\.org\/2000\/svg["']/i.test(svg)) {
     svg = svg.replace(/<svg\b([^>]*)>/i, '<svg$1 xmlns="http://www.w3.org/2000/svg">');
   }
   return svg;
