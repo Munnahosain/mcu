@@ -54,8 +54,17 @@ export function getProviderKeys(): StoredProviderKey[] {
   if (typeof window === "undefined") return [];
   const raw = getScopedValue(KEYS_STORAGE) || getScopedValue(LEGACY_KEYS_STORAGE);
   const oldRaw = getScopedValue(OLD_KEYS_STORAGE);
-  const parsed: unknown[] = raw ? JSON.parse(raw) : [];
-  const oldParsed: unknown[] = oldRaw ? JSON.parse(oldRaw) : [];
+  const parseList = (value: string | null): unknown[] => {
+    if (!value) return [];
+    try {
+      const result = JSON.parse(value);
+      return Array.isArray(result) ? result : [];
+    } catch {
+      return [];
+    }
+  };
+  const parsed = parseList(raw);
+  const oldParsed = parseList(oldRaw);
   const keys = [...parsed, ...oldParsed];
   const normalized = keys.flatMap((entry, index) => {
     if (typeof entry === "string" && entry.trim()) {

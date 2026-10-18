@@ -19,6 +19,16 @@ export function disableGoogleAutoSelect() {
   document.cookie = "g_state=; Max-Age=0; path=/";
 }
 
+// Treat a token as expired shortly before its real expiry so callers never send a stale one.
+function isTokenFresh(token: string) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    return typeof payload.exp !== 'number' || payload.exp * 1000 - Date.now() > 15_000;
+  } catch {
+    return true;
+  }
+}
+
 export const getAccessToken = () => accessToken;
 
 export const setAccessToken = (token: string) => {
@@ -32,7 +42,7 @@ export const clearAccessToken = () => {
 
 export async function ensureAccessToken() {
   if (logoutRequested) return null;
-  if (accessToken) return accessToken;
+  if (accessToken && isTokenFresh(accessToken)) return accessToken;
   try {
     const response = await fetch('/api/auth/refresh', {
       method: 'POST',
@@ -71,10 +81,9 @@ export async function refreshAuthSession() {
 export const getAuthUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
 
-  const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return null;
-
   try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
     return JSON.parse(raw) as AuthUser;
   } catch {
     return null;
@@ -98,7 +107,11 @@ export const clearAuthUser = () => {
   // real sign-outs and for session restoration when the user is unauthenticated,
   // so leaving logoutRequested=true would freeze future login attempts.
   logoutRequested = false;
-  localStorage.removeItem(USER_KEY);
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    // Storage may be blocked; still clear in-memory state.
+  }
   clearAccessToken();
   void clearAllWorkspaceStorage();
 };

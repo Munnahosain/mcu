@@ -135,7 +135,7 @@ export default function AdminPlansPage() {
       yearlyPrice: String(plan.yearlyPrice ?? 0),
       monthlyCredits: String(plan.monthlyCredits || 0),
       batchLimit: String(plan.batchLimit || 5),
-      bgRemovalLimit: String(plan.bgRemovalLimit || 3),
+      bgRemovalLimit: String(plan.bgRemovalLimit ?? 3),
       creditRolloverEnabled: Boolean(plan.creditRolloverEnabled),
       maxRolloverCredits: String(plan.maxRolloverCredits || 0),
       activeDeviceLimit: String(plan.activeDeviceLimit || 1),
@@ -384,7 +384,7 @@ export default function AdminPlansPage() {
                     </div>
                     <div className="flex justify-between text-white/60">
                       <span>BG Remover:</span>
-                      <span className="font-bold text-white">{plan.bgRemovalLimit || 3} / mo</span>
+                      <span className="font-bold text-white">{plan.bgRemovalLimit ?? 3} / mo</span>
                     </div>
                     <div className="flex justify-between text-white/60">
                       <span className="flex items-center gap-1">

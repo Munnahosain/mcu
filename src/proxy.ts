@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
-import { REFRESH_COOKIE } from '@/server/auth/jwt';
+import { REFRESH_COOKIE, getRefreshSecretKey } from '@/server/auth/jwt';
 
 async function hasValidSession(request: NextRequest) {
   const token = request.cookies.get(REFRESH_COOKIE)?.value;
-  const secret = process.env.JWT_REFRESH_SECRET;
-  if (!token || !secret || secret.length < 32) return false;
+  if (!token) return false;
 
   try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    const { payload } = await jwtVerify(token, getRefreshSecretKey(), { algorithms: ['HS256'] });
     return payload.type === 'refresh' && typeof payload.sub === 'string';
   } catch {
     return false;

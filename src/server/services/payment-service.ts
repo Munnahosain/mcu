@@ -128,14 +128,18 @@ export async function getPaymentSettings(requestedProvider?: string) {
   if (provider) {
     let settings = await PaymentSettings.findOne({ provider }).lean();
     if (!settings) {
-      settings = await PaymentSettings.create({
-        provider,
-        paymentMethod: 'manual',
-        enabled: false,
-        accountNumber: '',
-        accountType: 'merchant',
-        instructions: PROVIDER_RULES[provider]?.defaultInstructions || '',
-      });
+      settings = await PaymentSettings.findOneAndUpdate(
+        { provider },
+        { $setOnInsert: {
+          provider,
+          paymentMethod: 'manual',
+          enabled: false,
+          accountNumber: '',
+          accountType: 'merchant',
+          instructions: PROVIDER_RULES[provider]?.defaultInstructions || '',
+        } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      ).lean();
     }
     return settings;
   }
@@ -159,6 +163,7 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
   if (!hasMongoDbConfig()) {
     const payment = inMemoryStore.payments.find(p => p._id === paymentObjectId);
     if (!payment) throw new Error('PAYMENT_NOT_FOUND');
+    if (payment.status !== 'pending') throw new Error(payment.status === 'approved' ? 'PAYMENT_ALREADY_APPROVED' : 'PAYMENT_ALREADY_PROCESSED');
     payment.status = 'approved';
     return { paymentId: payment.paymentId, amount: payment.amount, credits: 5000, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString() };
   }
@@ -200,7 +205,7 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
       await Subscription.create([{
         userId: user._id, planId: payment.planId, status: 'active', billingInterval: payment.planSnapshot.billingInterval,
         amount: payment.amount, currency: payment.currency, startedAt: now, currentPeriodStart: now,
-        currentPeriodEnd: end, expiresAt: end, provider: 'bkash', providerPaymentId: payment.paymentId, autoRenew: false,
+        currentPeriodEnd: end, expiresAt: end, provider: payment.provider || 'bkash', providerPaymentId: payment.paymentId, autoRenew: false,
       }], { session });
       await User.updateOne({ _id: user._id }, { $set: { planId: payment.planId, 'credits.monthly': payment.planSnapshot.credits, 'credits.bonus': rollover, 'credits.used': 0, updatedAt: now } }, { session });
       await CreditLedger.create([{

@@ -7,8 +7,18 @@ const DEFAULT_ACCESS_SECRET = 'mcustock-dev-jwt-access-secret-32-chars-minimum-k
 const DEFAULT_REFRESH_SECRET = 'mcustock-dev-jwt-refresh-secret-32-chars-minimum-key';
 
 function secret(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET') {
-  const value = process.env[name] || (name === 'JWT_ACCESS_SECRET' ? DEFAULT_ACCESS_SECRET : DEFAULT_REFRESH_SECRET);
+  const configured = process.env[name];
+  // Never fall back to the publicly known dev secrets in production: anyone could forge tokens.
+  if (!configured && process.env.NODE_ENV === 'production') {
+    throw new Error(`${name} must be set in production.`);
+  }
+  const value = configured || (name === 'JWT_ACCESS_SECRET' ? DEFAULT_ACCESS_SECRET : DEFAULT_REFRESH_SECRET);
   return new TextEncoder().encode(value);
+}
+
+/** Refresh-token verification key, shared with src/proxy.ts so both use the same secret. */
+export function getRefreshSecretKey() {
+  return secret('JWT_REFRESH_SECRET');
 }
 
 export const REFRESH_COOKIE = 'mcustock_refresh_token';
@@ -30,7 +40,7 @@ export async function createRefreshToken(userId: string) {
 }
 
 export async function verifyAccessToken(token: string) {
-  const { payload } = await jwtVerify(token, secret('JWT_ACCESS_SECRET'));
+  const { payload } = await jwtVerify(token, secret('JWT_ACCESS_SECRET'), { algorithms: ['HS256'] });
   if (payload.type !== 'access' || typeof payload.sub !== 'string') {
     throw new Error('Invalid access token');
   }
@@ -38,7 +48,7 @@ export async function verifyAccessToken(token: string) {
 }
 
 export async function verifyRefreshToken(token: string) {
-  const { payload } = await jwtVerify(token, secret('JWT_REFRESH_SECRET'));
+  const { payload } = await jwtVerify(token, secret('JWT_REFRESH_SECRET'), { algorithms: ['HS256'] });
   if (payload.type !== 'refresh' || typeof payload.sub !== 'string') {
     throw new Error('Invalid refresh token');
   }

@@ -11,6 +11,7 @@ type CreditOptions = { usesOwnApiKey?: boolean };
 
 async function resolveCreditAmount(amount: number, costKey?: CreditCostKey, options: CreditOptions = {}) {
   if (!costKey) return amount;
+  if (hasMongoDbConfig()) await connectToDatabase();
   const costs = hasMongoDbConfig()
     ? (await SystemSetting.findOne({ key: 'credit_costs' }).lean())?.value as Record<string, unknown> | undefined
     : inMemoryStore.creditCosts;

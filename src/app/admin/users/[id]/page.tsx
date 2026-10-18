@@ -29,7 +29,7 @@ export default function AdminUserDetailsPage() {
     fetch('/api/admin/plans', { credentials: 'include' }).then((response) => response.json()).then((payload) => setPlans(payload.plans || [])).catch(() => undefined);
   }, []);
 
-  if (error) return <div className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>;
+  if (error && !user) return <div className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>;
   if (!user) return <p className="text-sm text-white/50">Loading user...</p>;
 
   const changeCredits = async (action: 'add' | 'remove' | 'reset') => {

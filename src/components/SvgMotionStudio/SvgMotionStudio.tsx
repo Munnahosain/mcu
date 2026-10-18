@@ -317,7 +317,7 @@ export const SvgMotionStudio: React.FC = () => {
   const [dockMenuId, setDockMenuId] = useState<string | null>(null);
   const [maximizedDockPanel, setMaximizedDockPanel] = useState<string | null>(null);
   const [elapsedTick, setElapsedTick] = useState(Date.now());
-  const studioStartedAt = useRef(Date.now());
+  const [studioStartedAt] = useState(() => Date.now());
   const pointerReadoutRef = useRef<HTMLSpanElement>(null);
   const [viewerLocked, setViewerLocked] = useState(false);
   const [viewerMenuOpen, setViewerMenuOpen] = useState(false);
@@ -2614,7 +2614,7 @@ export const SvgMotionStudio: React.FC = () => {
     : null;
   const canCutSelectedImage = Boolean(
     selectedLayer
-    && rasterSourceRef.current.some((source) => source.elementOriginalId === selectedLayer.originalId)
+    && (project.rasterSources ?? []).some((source) => source.elementOriginalId === selectedLayer.originalId)
   );
 
   const handleCreateProjectFolder = (parentId?: string) => {
@@ -3479,7 +3479,7 @@ export const SvgMotionStudio: React.FC = () => {
         <span className="min-w-0 flex-1 truncate">Message: {toasts.at(-1)?.title ?? 'Ready'}</span>
         {browserMemory && <span>RAM: {Math.round(browserMemory.usedJSHeapSize / 1024 / 1024)} MB</span>}
         <span>Renders Started: {renderJobs.length}</span>
-        <span>Total Time Elapsed: {Math.floor((elapsedTick - studioStartedAt.current) / 1000)}s</span>
+        <span>Total Time Elapsed: {Math.floor((elapsedTick - studioStartedAt) / 1000)}s</span>
       </div>
 
       {/* Modals */}

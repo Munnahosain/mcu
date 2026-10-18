@@ -33,17 +33,21 @@ export async function idbGet<T>(key: string): Promise<T | null> {
   }
   try {
     const db = await getIDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.get(key);
-      req.onsuccess = () => {
-        const val = (req.result as T) ?? null;
-        if (val !== null) memoryCache.set(key, val);
-        resolve(val);
-      };
-      req.onerror = () => resolve(null);
-    });
+    try {
+      return await new Promise<T | null>((resolve) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.get(key);
+        req.onsuccess = () => {
+          const val = (req.result as T) ?? null;
+          if (val !== null) memoryCache.set(key, val);
+          resolve(val);
+        };
+        req.onerror = () => resolve(null);
+      });
+    } finally {
+      db.close();
+    }
   } catch {
     return null;
   }
@@ -57,13 +61,17 @@ export async function idbSet<T>(key: string, value: T): Promise<boolean> {
   memoryCache.set(key, value);
   try {
     const db = await getIDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.put(value, key);
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => resolve(false);
-    });
+    try {
+      return await new Promise<boolean>((resolve) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.put(value, key);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      });
+    } finally {
+      db.close();
+    }
   } catch {
     return false;
   }
@@ -73,13 +81,17 @@ export async function idbRemove(key: string): Promise<void> {
   memoryCache.delete(key);
   try {
     const db = await getIDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.delete(key);
-      req.onsuccess = () => resolve();
-      req.onerror = () => resolve();
-    });
+    try {
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+      });
+    } finally {
+      db.close();
+    }
   } catch {
     // Ignore
   }
@@ -137,13 +149,17 @@ export async function clearAllWorkspaceStorage(): Promise<void> {
       window.sessionStorage.removeItem("mcustock_3d_studio_controls");
     }
     const db = await getIDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.clear();
-      req.onsuccess = () => resolve();
-      req.onerror = () => resolve();
-    });
+    try {
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+      });
+    } finally {
+      db.close();
+    }
   } catch {
     // Ignore
   }

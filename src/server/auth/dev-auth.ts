@@ -146,11 +146,12 @@ export function updateDevUserStatus(id: string, status: DevUser['status']): DevU
 }
 
 export function deleteDevUser(id: string): boolean {
-  for (const [email, user] of store.users.entries()) {
+  let deleted = false;
+  for (const [key, user] of Array.from(store.users.entries())) {
     if (user.id === id || user._id === id) {
-      store.users.delete(email);
-      return true;
+      store.users.delete(key);
+      deleted = true;
     }
   }
-  return false;
+  return deleted;
 }

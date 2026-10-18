@@ -41,8 +41,8 @@ export interface InMemoryProviderKey {
 class InMemoryStore {
   systemSettings: Map<string, unknown> = new Map();
   featureFlags: InMemoryFeatureFlag[] = [
-    { _id: 'flag-1', key: 'ai_tools', enabled: true, plans: ['free', 'pro', 'enterprise'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { _id: 'flag-2', key: 'export_high_res', enabled: true, plans: ['pro', 'enterprise'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { _id: 'flag-1', key: 'ai_tools', enabled: true, plans: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { _id: 'flag-2', key: 'export_high_res', enabled: true, plans: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   ];
   payments: InMemoryPayment[] = [];
   providerKeys: InMemoryProviderKey[] = [];

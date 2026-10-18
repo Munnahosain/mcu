@@ -7,12 +7,17 @@ const CreditLedgerSchema = new Schema({
   reason: { type: String, required: true, maxlength: 500 },
   adminId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   description: { type: String, default: '' },
-  paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', default: null, index: true },
+  paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', index: true },
   planId: { type: Schema.Types.ObjectId, ref: 'Plan', default: null },
   balanceBefore: { type: Number, default: 0 },
   balanceAfter: { type: Number, default: 0 },
 }, { timestamps: { createdAt: true, updatedAt: false } });
 
-CreditLedgerSchema.index({ paymentId: 1, type: 1 }, { unique: true, sparse: true });
+// Only enforce one ledger row per (payment, type) when a payment is actually linked;
+// a plain `sparse` index still indexes rows with paymentId null and would reject every 2nd deduct/refund.
+CreditLedgerSchema.index(
+  { paymentId: 1, type: 1 },
+  { unique: true, partialFilterExpression: { paymentId: { $type: 'objectId' } } },
+);
 
 export const CreditLedger = models.CreditLedger || model('CreditLedger', CreditLedgerSchema);

@@ -61,6 +61,12 @@ export const VeoVideoModal: React.FC<VeoVideoModalProps> = ({
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    };
+  }, []);
+
+  // Revoke the previous blob URL only when it is replaced/cleared (must not stop running timers).
+  useEffect(() => {
+    return () => {
       if (videoUrl && videoUrl.startsWith('blob:')) {
         URL.revokeObjectURL(videoUrl);
       }
@@ -204,7 +210,9 @@ export const VeoVideoModal: React.FC<VeoVideoModalProps> = ({
     if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
 
     let attempts = 0;
+    let finished = false;
     pollingTimerRef.current = setInterval(async () => {
+      if (finished) return;
       attempts++;
 
       // Reassuring dynamic progress messages
@@ -229,6 +237,8 @@ export const VeoVideoModal: React.FC<VeoVideoModalProps> = ({
         }
 
         if (statusData.done) {
+          if (finished) return;
+          finished = true;
           if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
           setStatusMessage('Generation complete! Fetching video stream...');
           downloadGeneratedVideo(opName);
