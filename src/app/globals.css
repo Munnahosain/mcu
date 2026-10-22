@@ -207,6 +207,13 @@ html {
   box-shadow: 0 0 0 2px var(--background), 0 0 15px rgba(168, 85, 247, 0.28);
 }
 
+.dashboard-plan-badge-studio {
+  border-color: rgba(168, 85, 247, 0.85);
+  background: linear-gradient(135deg, #2e1065, #7e22ce 45%, #c084fc 100%);
+  color: #faf5ff !important;
+  box-shadow: 0 0 0 2px var(--background), 0 0 16px rgba(168, 85, 247, 0.35);
+}
+
 @keyframes dashboardPlanBadgeLightSweep {
   0% { transform: skewX(-18deg) translateX(0); opacity: 0; }
   12% { opacity: 0.8; }

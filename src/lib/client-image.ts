@@ -1,5 +1,5 @@
-const MAX_UPLOAD_BYTES = 1_500_000;
-const MAX_DIMENSION = 1600;
+const MAX_UPLOAD_BYTES = 500_000;
+const MAX_DIMENSION = 800;
 const VECTOR_FILE_PATTERN = /\.(ai|eps|epsf|svg|pdf)$/i;
 const VIDEO_FILE_PATTERN = /\.(mp4|mov|webm|m4v)$/i;
 
@@ -32,7 +32,7 @@ async function rasterizeSvgForUpload(file: File): Promise<File> {
     if (!context) throw new Error('Could not prepare the SVG preview.');
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    const blob = await canvasToBlob(canvas, 0.86, 'image/jpeg');
+    const blob = await canvasToBlob(canvas, 0.82, 'image/jpeg');
     return new File([blob], file.name.replace(/\.svg$/i, '.jpg'), {
       type: 'image/jpeg',
       lastModified: file.lastModified,
@@ -44,9 +44,37 @@ async function rasterizeSvgForUpload(file: File): Promise<File> {
   }
 }
 
-export function prepareImageForUpload(file: File) {
+async function extractVectorThumbnailForUpload(file: File): Promise<File | null> {
+  try {
+    const slice = file.slice(0, Math.min(file.size, 2 * 1024 * 1024));
+    const text = await slice.text();
+    const match = text.match(/<xmpGImg:image>([A-Za-z0-9+/=\s]+)<\/xmpGImg:image>/i);
+    if (match) {
+      const cleanB64 = match[1].replace(/\s+/g, '');
+      const byteChars = atob(cleanB64);
+      const byteNumbers = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      return new File([byteNumbers], file.name.replace(/\.[^.]+$/, '.jpg'), {
+        type: 'image/jpeg',
+        lastModified: file.lastModified,
+      });
+    }
+  } catch {
+    // fallback to uploading raw vector
+  }
+  return null;
+}
+
+export async function prepareImageForUpload(file: File): Promise<File> {
   if (isSvgFile(file)) return rasterizeSvgForUpload(file);
-  return isVectorFile(file) ? Promise.resolve(file) : compressImageForUpload(file);
+  if (isVectorFile(file)) {
+    const thumb = await extractVectorThumbnailForUpload(file);
+    if (thumb) return thumb;
+    return file;
+  }
+  return compressImageForUpload(file);
 }
 
 export async function createVideoContactSheet(file: File): Promise<File> {
@@ -107,7 +135,7 @@ export async function createVideoContactSheet(file: File): Promise<File> {
 }
 
 export async function compressImageForUpload(file: File): Promise<File> {
-  if (file.size <= MAX_UPLOAD_BYTES && file.type === 'image/jpeg') return file;
+  if (file.size <= 120_000 && file.type === 'image/jpeg') return file;
 
   let bitmap: ImageBitmap;
   try {

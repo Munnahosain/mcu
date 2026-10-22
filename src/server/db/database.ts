@@ -1,6 +1,7 @@
 import { connectToDatabase } from './mongodb';
 import { User } from '../models/User';
 import { Plan } from '../models/Plan';
+import { Subscription } from '../models/Subscription';
 import { MetadataHistory } from '../models/MetadataHistory';
 import { createDevUser, findDevUser, findDevUserById } from '../auth/dev-auth';
 import { verifyPassword } from '../auth/hash';
@@ -8,6 +9,35 @@ import { hasMongoDbConfig } from './database-config';
 
 export { getDatabaseProvider, hasMongoDbConfig } from './database-config';
 export type { DatabaseProvider } from './database-config';
+
+export async function resolveUserActivePlan(user: { _id?: unknown; id?: unknown; planId?: unknown }): Promise<{ name: string; slug: string }> {
+  if (!hasMongoDbConfig()) {
+    return { name: 'Free', slug: 'free' };
+  }
+  try {
+    await connectToDatabase();
+    if (user.planId) {
+      const planDoc = await Plan.findById(user.planId).select('name slug').lean();
+      if (planDoc && planDoc.name && planDoc.slug) {
+        return { name: String(planDoc.name), slug: String(planDoc.slug) };
+      }
+    }
+    const userId = user._id || user.id;
+    if (userId) {
+      const sub = await Subscription.findOne({
+        userId,
+        status: { $in: ['active', 'trial', 'pending_payment'] },
+      }).sort({ createdAt: -1 }).populate('planId', 'name slug').lean();
+      if (sub && sub.planId && typeof sub.planId === 'object' && 'name' in sub.planId && 'slug' in sub.planId) {
+        const p = sub.planId as { name: string; slug: string };
+        return { name: String(p.name), slug: String(p.slug) };
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return { name: 'Free', slug: 'free' };
+}
 
 export async function tryDevLogin(email: string, password: string) {
   if (hasMongoDbConfig()) {

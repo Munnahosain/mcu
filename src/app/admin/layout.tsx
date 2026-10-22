@@ -38,7 +38,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === '/admin/login';
-  const [accessState, setAccessState] = useState<'checking' | 'allowed' | 'forbidden' | 'unauthenticated'>('checking');
+  const [accessState, setAccessState] = useState<'checking' | 'allowed' | 'forbidden' | 'unauthenticated'>(() => {
+    if (isLoginPage) return 'allowed';
+    const snapshot = getAdminAuthSnapshot();
+    if (!snapshot) return 'checking';
+    if (snapshot.role === 'super_admin' || snapshot.role === 'admin' || snapshot.role === 'support') {
+      return 'allowed';
+    }
+    return 'forbidden';
+  });
   const user = useSyncExternalStore(
     (callback: () => void) => {
       window.addEventListener('mcustock-auth-changed', callback);

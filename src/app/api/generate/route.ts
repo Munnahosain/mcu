@@ -60,9 +60,11 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Authentication required to generate metadata.' }, { status: 401 });
     }
-    const featureDenial = await getFeatureFlagDenial(userId, 'ai_tools', 'AI generation');
+    const [featureDenial, operationDenial] = await Promise.all([
+      getFeatureFlagDenial(userId, 'ai_tools', 'AI generation'),
+      getFeatureFlagDenial(userId, 'metadata_generation', 'Metadata generation'),
+    ]);
     if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
-    const operationDenial = await getFeatureFlagDenial(userId, 'metadata_generation', 'Metadata generation');
     if (operationDenial) return NextResponse.json({ success: false, error: operationDenial }, { status: 403 });
 
     const rateLimitError = enforceRateLimit(req, userId, {
@@ -142,7 +144,7 @@ export async function POST(req: Request) {
       base64,
       dataUrl,
       jsonMode: true,
-      maxTokens: 2048,
+      maxTokens: 600,
       temperature: 0.1,
     });
 
@@ -188,7 +190,7 @@ export async function POST(req: Request) {
       metadata.title = metadata.title.slice(0, titleLength).trimEnd();
     }
 
-    await Promise.all([
+    void Promise.all([
       incrementUsage(userId, 'metadataGenerated').catch((usageError) => console.error('[generate] usage metadata error:', usageError)),
       incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[generate] usage api error:', usageError)),
       incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate] usage credits error:', usageError)),

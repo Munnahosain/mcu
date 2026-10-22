@@ -22,17 +22,37 @@ export interface VectorPath {
 /**
  * Parses DOS EPS binary header or ASCII PostScript string
  */
-export function extractPostScriptText(bufferOrString: ArrayBuffer | string): string {
+export function extractPostScriptText(bufferOrString: ArrayBuffer | string | Uint8Array): string {
   if (typeof bufferOrString === 'string') {
+    // Check if string begins with DOS EPS binary header magic chars: 0xC5, 0xD0, 0xD3, 0xC6
+    if (
+      bufferOrString.length >= 30 &&
+      bufferOrString.charCodeAt(0) === 0xc5 &&
+      bufferOrString.charCodeAt(1) === 0xd0 &&
+      bufferOrString.charCodeAt(2) === 0xd3 &&
+      bufferOrString.charCodeAt(3) === 0xc6
+    ) {
+      const bytes = new Uint8Array(bufferOrString.length);
+      for (let i = 0; i < bufferOrString.length; i++) {
+        bytes[i] = bufferOrString.charCodeAt(i) & 0xff;
+      }
+      const psOffset = (bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) >>> 0;
+      const psLength = (bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24)) >>> 0;
+      const subBytes = bytes.subarray(psOffset, Math.min(bytes.length, psOffset + psLength));
+      return new TextDecoder('utf-8', { fatal: false }).decode(subBytes);
+    }
+    const psIdx = bufferOrString.indexOf('%!PS');
+    if (psIdx > 0) {
+      return bufferOrString.slice(psIdx);
+    }
     return bufferOrString;
   }
 
-  const bytes = new Uint8Array(bufferOrString);
+  const bytes = bufferOrString instanceof Uint8Array ? bufferOrString : new Uint8Array(bufferOrString);
   // Check for DOS EPS binary header magic: 0xC5, 0xD0, 0xD3, 0xC6
   if (bytes.length >= 30 && bytes[0] === 0xc5 && bytes[1] === 0xd0 && bytes[2] === 0xd3 && bytes[3] === 0xc6) {
-    const dataView = new DataView(bufferOrString);
-    const psOffset = dataView.getUint32(4, true);
-    const psLength = dataView.getUint32(8, true);
+    const psOffset = (bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) >>> 0;
+    const psLength = (bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24)) >>> 0;
     const subBytes = bytes.subarray(psOffset, Math.min(bytes.length, psOffset + psLength));
     return new TextDecoder('utf-8', { fatal: false }).decode(subBytes);
   }

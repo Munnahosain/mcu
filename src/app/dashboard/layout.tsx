@@ -27,7 +27,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession } from "@/lib/auth";
+import { AuthUser, clearAuthUser, disableGoogleAutoSelect, ensureAccessToken, getAuthUser, refreshAuthSession, setAuthUser } from "@/lib/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GeneratorStateProvider } from "./GeneratorStateContext";
 import CreditSummary, { prefetchCreditSummary } from "@/components/dashboard/CreditSummary";
@@ -84,9 +84,15 @@ function getInitials(nameOrEmail: string): string {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [canAccessAdmin, setCanAccessAdmin] = useState(false);
-  const [activePlan, setActivePlan] = useState<{ name: string; slug: string } | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => getAuthUser());
+  const [canAccessAdmin, setCanAccessAdmin] = useState(() => {
+    const u = getAuthUser();
+    return u?.role === 'super_admin' || u?.role === 'admin' || u?.role === 'support';
+  });
+  const [activePlan, setActivePlan] = useState<{ name: string; slug: string } | null>(() => {
+    const u = getAuthUser();
+    return u?.plan || null;
+  });
   const [isHydrated, setIsHydrated] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNavCompact, setIsNavCompact] = useState(false);
@@ -97,39 +103,63 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let cancelled = false;
 
     const restoreSession = async () => {
+      const storedUser = getAuthUser();
+      if (storedUser) {
+        setUser(storedUser);
+        if (storedUser.plan) setActivePlan(storedUser.plan);
+        if (storedUser.role === 'super_admin' || storedUser.role === 'admin' || storedUser.role === 'support') {
+          setCanAccessAdmin(true);
+        }
+      }
+
       const token = await ensureAccessToken();
       if (cancelled) return;
 
-      const storedUser = getAuthUser();
-      if (token && storedUser) prefetchCreditSummary();
-      if (token && storedUser && !storedUser.avatarUrl) {
-        const userId = storedUser.id;
+      const latestUser = getAuthUser();
+      if (!token || !latestUser) {
+        clearAuthUser();
+        setUser(null);
+        setCanAccessAdmin(false);
+        setActivePlan(null);
+        setIsHydrated(true);
+        return;
+      }
+
+      setUser(latestUser);
+      if (latestUser.plan) setActivePlan(latestUser.plan);
+      if (latestUser.role === 'super_admin' || latestUser.role === 'admin' || latestUser.role === 'support') {
+        setCanAccessAdmin(true);
+      }
+      setIsHydrated(true);
+      prefetchCreditSummary();
+
+      if (!latestUser.avatarUrl) {
         void refreshAuthSession().then((refreshedUser) => {
-          if (!cancelled && refreshedUser && getAuthUser()?.id === userId) {
+          if (!cancelled && refreshedUser && getAuthUser()?.id === latestUser.id) {
             setUser({ ...refreshedUser, signedInAt: Date.now() });
+            if (refreshedUser.plan) setActivePlan(refreshedUser.plan);
           }
         });
       }
-      if (!token || !storedUser) {
-        clearAuthUser();
-        setUser(null);
-      } else {
-        setUser(storedUser);
-        setIsHydrated(true);
-        const [billingResponse, adminResponse] = await Promise.all([
-          fetch('/api/account/billing', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-          fetch('/api/admin/overview', { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-        ]);
-        if (cancelled || getAuthUser()?.id !== storedUser.id) return;
-        if (adminResponse?.ok) setCanAccessAdmin(true);
-        if (billingResponse?.ok) {
-          const billingData = await billingResponse.json().catch(() => null) as { plan?: { name?: string; slug?: string } } | null;
-          if (!cancelled && getAuthUser()?.id === storedUser.id && billingData?.plan?.name && billingData.plan.slug) {
-            setActivePlan({ name: billingData.plan.name, slug: billingData.plan.slug });
+
+      // Silent background sync for latest billing plan (updates state and localStorage without blocking)
+      void fetch('/api/account/billing', {
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(async (res) => {
+          if (!res.ok || cancelled) return;
+          const billingData = (await res.json().catch(() => null)) as { plan?: { name?: string; slug?: string } } | null;
+          if (billingData?.plan?.name && billingData.plan.slug) {
+            const resolvedPlan = { name: billingData.plan.name, slug: billingData.plan.slug };
+            setActivePlan(resolvedPlan);
+            const currentUser = getAuthUser();
+            if (currentUser && currentUser.id === latestUser.id) {
+              setAuthUser({ ...currentUser, plan: resolvedPlan });
+            }
           }
-        }
-      }
-      setIsHydrated(true);
+        })
+        .catch(() => null);
     };
 
     void restoreSession();
@@ -189,9 +219,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const userInitials = getInitials(user.name || user.email || "mcu");
-  const planBadge = activePlan?.slug === 'free'
+  const effectivePlan = activePlan || user.plan;
+  const planBadge = effectivePlan?.slug === 'free'
     ? { label: 'FREE', className: 'dashboard-plan-badge dashboard-plan-badge-free' }
-    : { label: (activePlan?.name || 'PRO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${activePlan?.slug || 'pro'}` };
+    : { label: (effectivePlan?.name || 'STUDIO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${effectivePlan?.slug || 'studio'}` };
 
   const isSvgMotion = pathname?.startsWith('/dashboard/svg-motion');
   const isVectorEditor = pathname === '/dashboard/vector-editor';

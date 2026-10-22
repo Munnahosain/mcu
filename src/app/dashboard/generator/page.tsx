@@ -255,6 +255,21 @@ export default function GeneratorPage() {
       };
     });
     setImages(prev => [...prev, ...newImages]);
+
+    // Asynchronously try to extract embedded XMP thumbnail for vector files so the user sees a preview immediately
+    newImages.forEach(img => {
+      if (isVectorFile(img.file) && !img.preview) {
+        img.file.slice(0, Math.min(img.file.size, 2 * 1024 * 1024)).text().then(text => {
+          const match = text.match(/<xmpGImg:image>([A-Za-z0-9+/=\s]+)<\/xmpGImg:image>/i);
+          if (match) {
+            const b64 = match[1].replace(/\s+/g, '');
+            const dataUrl = `data:image/jpeg;base64,${b64}`;
+            setImages(current => current.map(item => item.id === img.id && !item.preview ? { ...item, preview: dataUrl } : item));
+          }
+        }).catch(() => undefined);
+      }
+    });
+
     if (newImages.length < supportedFiles.length) alert('The queue is full. Only 500 assets can be queued at once.');
   }, [images.length, setImages]);
 
@@ -351,11 +366,10 @@ export default function GeneratorPage() {
           previewDataUrl: data.previewDataUrl,
         } : i));
 
-        // Save to MongoDB history
+        // Save to MongoDB history in background without blocking UI or batch queue
         if (user) {
-          try {
-            const accessToken = await ensureAccessToken();
-            await fetch('/api/history/save', {
+          void ensureAccessToken().then((accessToken) => {
+            fetch('/api/history/save', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -368,16 +382,16 @@ export default function GeneratorPage() {
                 keywords: data.metadata.keywords,
                 category: data.metadata.category,
               }),
-            });
-          } catch (e) {
-            console.error("Failed to save generation to history database:", e);
-          }
+            }).catch((e) => console.error("Failed to save generation to history database:", e));
+          }).catch((e) => console.error("Failed to ensure token for history save:", e));
         }
       } else if (activeTab === 'Prompt' && data.prompt) {
         setImages(prev => prev.map(i => i.id === img.id ? {
           ...i,
           status: 'done',
-          prompt: data.prompt
+          prompt: data.prompt,
+          preview: data.previewDataUrl || i.preview,
+          previewDataUrl: data.previewDataUrl,
         } : i));
       }
 

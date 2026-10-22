@@ -90,6 +90,7 @@ export async function prepareImage(imageBuffer: Buffer, maxSize = MAX_IMAGE_SIZE
 
   let resized = await sharp(imageBuffer)
     .resize(curSize, curSize, { fit: 'inside', withoutEnlargement: true })
+    .flatten({ background: '#ffffff' })
     .jpeg({ quality: curQuality })
     .toBuffer();
 
@@ -98,6 +99,7 @@ export async function prepareImage(imageBuffer: Buffer, maxSize = MAX_IMAGE_SIZE
     curQuality = Math.max(curQuality - 10, 40);
     resized = await sharp(imageBuffer)
       .resize(curSize, curSize, { fit: 'inside', withoutEnlargement: true })
+      .flatten({ background: '#ffffff' })
       .jpeg({ quality: curQuality })
       .toBuffer();
   }

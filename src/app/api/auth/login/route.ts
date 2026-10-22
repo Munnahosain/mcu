@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { findUserByEmail, hasMongoDbConfig, tryDevLogin } from '@/server/db/database';
+import { findUserByEmail, hasMongoDbConfig, resolveUserActivePlan, tryDevLogin } from '@/server/db/database';
 import { verifyPassword } from '@/server/auth/hash';
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/server/auth/jwt';
 
@@ -60,6 +60,7 @@ export async function POST(req: Request) {
       configuredAdmin.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
     );
     const userRole = isConfiguredAdmin ? 'super_admin' : ((user.role as string) || 'user');
+    const userPlan = await resolveUserActivePlan(user);
 
     const normalizedUser = {
       id: String(user._id ?? user.id),
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
       email: user.email,
       role: userRole,
       avatarUrl: user.avatarUrl || '',
+      plan: userPlan,
     };
 
     const accessToken = await createAccessToken(normalizedUser.id);

@@ -25,9 +25,11 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Authentication required to generate prompts.' }, { status: 401 });
     }
-    const featureDenial = await getFeatureFlagDenial(userId, 'ai_tools', 'AI generation');
+    const [featureDenial, operationDenial] = await Promise.all([
+      getFeatureFlagDenial(userId, 'ai_tools', 'AI generation'),
+      getFeatureFlagDenial(userId, 'prompt_generation', 'Prompt generation'),
+    ]);
     if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
-    const operationDenial = await getFeatureFlagDenial(userId, 'prompt_generation', 'Prompt generation');
     if (operationDenial) return NextResponse.json({ success: false, error: operationDenial }, { status: 403 });
 
     const rateLimitError = enforceRateLimit(req, userId, {
@@ -127,12 +129,12 @@ OUTPUT RULES:
       temperature: 0.7,
     });
 
-    await Promise.all([
+    void Promise.all([
       incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[generate-prompt] usage api error:', usageError)),
       incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate-prompt] usage credits error:', usageError)),
     ]);
 
-    return NextResponse.json({ success: true, prompt: responseText.trim() });
+    return NextResponse.json({ success: true, prompt: responseText.trim(), previewDataUrl: vectorFormat ? dataUrl : undefined });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
       await refundCredits(authenticatedUserId, 1, 'Failed AI prompt generation refund', 'prompt_generation', { usesOwnApiKey: true }).catch((refundError) => console.error('[generate-prompt] credit refund error:', refundError));

@@ -7,6 +7,10 @@ export type AuthUser = {
   role?: string;
   avatarUrl?: string;
   signedInAt: number;
+  plan?: {
+    name: string;
+    slug: string;
+  };
 };
 
 const USER_KEY = "mcustock_user";
@@ -43,7 +47,9 @@ export async function ensureAccessToken() {
     if (!logoutRequested && response.ok && data.accessToken) {
       accessToken = data.accessToken;
       if (data.user) {
-        setAuthUser({ ...data.user, signedInAt: Date.now() });
+        const existing = getAuthUser();
+        const mergedPlan = data.user.plan || existing?.plan;
+        setAuthUser({ ...data.user, plan: mergedPlan, signedInAt: Date.now() });
       }
       return accessToken;
     }
@@ -60,8 +66,11 @@ export async function refreshAuthSession() {
     const data = await response.json() as { accessToken?: string; user?: Omit<AuthUser, 'signedInAt'> };
     if (!logoutRequested && response.ok && data.accessToken && data.user) {
       accessToken = data.accessToken;
-      setAuthUser({ ...data.user, signedInAt: Date.now() });
-      return data.user;
+      const existing = getAuthUser();
+      const mergedPlan = data.user.plan || existing?.plan;
+      const finalUser = { ...data.user, plan: mergedPlan, signedInAt: Date.now() };
+      setAuthUser(finalUser);
+      return finalUser;
     }
   } catch {
     // Keep the current session when the refresh endpoint is temporarily unavailable.

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { findUserById, hasMongoDbConfig } from '@/server/db/database';
+import { findUserById, hasMongoDbConfig, resolveUserActivePlan } from '@/server/db/database';
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions, verifyRefreshToken } from '@/server/auth/jwt';
 
 export async function POST(req: Request) {
@@ -22,6 +22,7 @@ export async function POST(req: Request) {
             email: String(devUser.email ?? 'admin@mcustock.com'),
             role: (devUser.role as string) || 'super_admin',
             avatarUrl: '',
+            plan: { name: 'Studio', slug: 'studio' },
           };
           const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });
           response.cookies.set(REFRESH_COOKIE, rotatedRefreshToken, refreshCookieOptions());
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
       configuredAdmin.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
     );
     const userRole = isConfiguredAdmin ? 'super_admin' : String(user.role ?? 'user');
+    const userPlan = await resolveUserActivePlan(user);
 
     const normalizedUser = {
       id: user._id ? String(user._id) : String(user.id),
@@ -53,6 +55,7 @@ export async function POST(req: Request) {
       email: String(user.email ?? ''),
       role: userRole,
       avatarUrl: String(user.avatarUrl ?? ''),
+      plan: userPlan,
     };
     const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });
     response.cookies.set(REFRESH_COOKIE, rotatedRefreshToken, refreshCookieOptions());

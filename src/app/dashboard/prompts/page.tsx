@@ -97,7 +97,7 @@ export default function PromptsPage() {
         if (!data.success) throw new Error(data.error);
         
         // Update valid prompt
-        setImages(prev => prev.map(item => item.id === img.id ? { ...item, status: 'done', prompt: data.prompt } : item));
+        setImages(prev => prev.map(item => item.id === img.id ? { ...item, status: 'done', prompt: data.prompt, preview: data.previewDataUrl || item.preview } : item));
         
         // Advance Key Index on Success (Round Robin)
         keyIdx = (keyIdx + 1) % providerKeys.length;
