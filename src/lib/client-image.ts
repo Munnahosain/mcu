@@ -44,25 +44,182 @@ async function rasterizeSvgForUpload(file: File): Promise<File> {
   }
 }
 
-async function extractVectorThumbnailForUpload(file: File): Promise<File | null> {
-  try {
-    const slice = file.slice(0, Math.min(file.size, 2 * 1024 * 1024));
-    const text = await slice.text();
-    const match = text.match(/<xmpGImg:image>([A-Za-z0-9+/=\s]+)<\/xmpGImg:image>/i);
-    if (match) {
-      const cleanB64 = match[1].replace(/\s+/g, '');
-      const byteChars = atob(cleanB64);
-      const byteNumbers = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) {
-        byteNumbers[i] = byteChars.charCodeAt(i);
+let pdfjsPromise: Promise<any> | null = null;
+
+function loadPdfJs(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('Window not available'));
+  if ((window as any).pdfjsLib) return Promise.resolve((window as any).pdfjsLib);
+  if (pdfjsPromise) return pdfjsPromise;
+
+  pdfjsPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-pdfjs="true"]') as HTMLScriptElement | null;
+    if (existing) {
+      if ((window as any).pdfjsLib) return resolve((window as any).pdfjsLib);
+      existing.addEventListener('load', () => resolve((window as any).pdfjsLib));
+      existing.addEventListener('error', () => reject(new Error('PDF.js script load error')));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.async = true;
+    script.setAttribute('data-pdfjs', 'true');
+    script.onload = () => {
+      const pdfjs = (window as any).pdfjsLib;
+      if (pdfjs) {
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(pdfjs);
+      } else {
+        reject(new Error('PDF.js not initialized'));
       }
-      return new File([byteNumbers], file.name.replace(/\.[^.]+$/, '.jpg'), {
-        type: 'image/jpeg',
-        lastModified: file.lastModified,
-      });
+    };
+    script.onerror = () => reject(new Error('Failed to load PDF preview engine from CDN'));
+    document.head.appendChild(script);
+  });
+
+  return pdfjsPromise;
+}
+
+async function isValidImageBlob(blob: Blob): Promise<boolean> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(blob);
+      const ok = bmp.width >= 32 && bmp.height >= 32;
+      bmp.close();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img.naturalWidth >= 32 && img.naturalHeight >= 32);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(false);
+    };
+    img.src = url;
+  });
+}
+
+async function extractXmpThumbnail(file: File): Promise<File | null> {
+  const CHUNK_SIZE = 4 * 1024 * 1024;
+  const tagRegex = /(?:<|&lt;)(?:xmpGImg|xapGImg):image\b[^>&]*(?:>|&gt;)(?:<!\[CDATA\[)?\s*([A-Za-z0-9+/=\s]{100,})\s*(?:\]\]>)?(?:<\/|&lt;\/)(?:xmpGImg|xapGImg):image(?:>|&gt;)/i;
+  const attrRegex = /(?:xmpGImg|xapGImg):image\s*=\s*["']([A-Za-z0-9+/=\s]{100,})["']/i;
+
+  const sliceRanges: Array<[number, number]> = [];
+  sliceRanges.push([0, Math.min(file.size, CHUNK_SIZE)]);
+  if (file.size > CHUNK_SIZE) {
+    sliceRanges.push([Math.max(0, file.size - CHUNK_SIZE), file.size]);
+  }
+  if (file.size > CHUNK_SIZE * 2 && file.size <= 30 * 1024 * 1024) {
+    for (let offset = CHUNK_SIZE; offset < file.size - CHUNK_SIZE; offset += CHUNK_SIZE) {
+      sliceRanges.push([offset, Math.min(file.size, offset + CHUNK_SIZE)]);
+    }
+  }
+
+  for (const [start, end] of sliceRanges) {
+    try {
+      const slice = file.slice(start, end);
+      const text = await slice.text();
+      const match = text.match(tagRegex) || text.match(attrRegex);
+      if (match && match[1]) {
+        const cleanB64 = match[1].replace(/\s+/g, '');
+        const byteChars = atob(cleanB64);
+        const bytes = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+          bytes[i] = byteChars.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'image/jpeg' });
+        if (await isValidImageBlob(blob)) {
+          return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: file.lastModified,
+          });
+        }
+      }
+    } catch {
+      // ignore slice read errors
+    }
+  }
+  return null;
+}
+
+async function renderPdfWithPdfJs(file: File): Promise<File | null> {
+  try {
+    const pdfjs = await loadPdfJs();
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(arrayBuffer),
+      stopAtErrors: false,
+    });
+    const pdf = await loadingTask.promise;
+    if (!pdf || pdf.numPages < 1) return null;
+
+    const page = await pdf.getPage(1);
+    const initialViewport = page.getViewport({ scale: 1.0 });
+    const maxDim = Math.max(initialViewport.width || 1, initialViewport.height || 1);
+    const scale = Math.min(2.0, MAX_DIMENSION / maxDim);
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    await page.render({
+      canvasContext: context,
+      viewport,
+      background: 'rgb(255, 255, 255)',
+    }).promise;
+
+    const blob = await canvasToBlob(canvas, 0.82, 'image/jpeg');
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+      type: 'image/jpeg',
+      lastModified: file.lastModified,
+    });
+  } catch (err) {
+    console.warn('[client-image] PDF preview rendering skipped:', err);
+    return null;
+  }
+}
+
+async function extractEmbeddedJpeg(file: File): Promise<File | null> {
+  try {
+    const scanSize = Math.min(file.size, 16 * 1024 * 1024);
+    const slice = file.slice(0, scanSize);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    for (let i = 0; i < bytes.length - 1000; i++) {
+      if (bytes[i] === 0xff && bytes[i + 1] === 0xd8 && bytes[i + 2] === 0xff) {
+        for (let j = i + 1000; j < Math.min(bytes.length, i + 4_000_000); j++) {
+          if (bytes[j] === 0xff && bytes[j + 1] === 0xd9) {
+            const jpegBytes = bytes.subarray(i, j + 2);
+            if (jpegBytes.length >= 4096) {
+              const blob = new Blob([jpegBytes], { type: 'image/jpeg' });
+              if (await isValidImageBlob(blob)) {
+                return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                  type: 'image/jpeg',
+                  lastModified: file.lastModified,
+                });
+              }
+            }
+            break;
+          }
+        }
+      }
     }
   } catch {
-    // fallback to uploading raw vector
+    // ignore
   }
   return null;
 }
@@ -70,9 +227,29 @@ async function extractVectorThumbnailForUpload(file: File): Promise<File | null>
 export async function prepareImageForUpload(file: File): Promise<File> {
   if (isSvgFile(file)) return rasterizeSvgForUpload(file);
   if (isVectorFile(file)) {
-    const thumb = await extractVectorThumbnailForUpload(file);
-    if (thumb) return thumb;
-    return file;
+    // 1. Try XMP thumbnail extraction across chunks (first 4MB, last 4MB, etc.)
+    const xmpThumb = await extractXmpThumbnail(file);
+    if (xmpThumb) return xmpThumb;
+
+    // 2. Try PDF.js rendering for PDF/AI vector assets
+    if (/\.(ai|pdf)$/i.test(file.name)) {
+      const pdfThumb = await renderPdfWithPdfJs(file);
+      if (pdfThumb) return pdfThumb;
+    }
+
+    // 3. Try embedded JPEG stream extraction
+    const jpegThumb = await extractEmbeddedJpeg(file);
+    if (jpegThumb) return jpegThumb;
+
+    // 4. If under 4MB, safe to upload raw file for server Ghostscript rendering
+    if (file.size <= 4 * 1024 * 1024) {
+      return file;
+    }
+
+    // 5. File is over 4MB and cannot be rendered on client
+    throw new Error(
+      `The vector file "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the upload size limit (4MB). In Adobe Illustrator, please save with "Create PDF Compatible File" checked, or export as SVG/JPG.`
+    );
   }
   return compressImageForUpload(file);
 }

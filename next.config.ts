@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ['@resvg/resvg-js'],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+  },
   async headers() {
     return [
       {

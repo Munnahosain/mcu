@@ -165,10 +165,15 @@ async function extractEmbeddedPreview(buffer: Buffer): Promise<Buffer | null> {
     }
   }
 
-  // 2. Check for XMP thumbnail (<xmpGImg:image>) in metadata
-  const headerText = buffer.subarray(0, Math.min(buffer.length, 3 * 1024 * 1024)).toString('latin1');
-  const xmpMatch = headerText.match(/<xmpGImg:image>([A-Za-z0-9+/=\s]+)<\/xmpGImg:image>/i);
-  if (xmpMatch) {
+  // 2. Check for XMP thumbnail (<xmpGImg:image> or <xapGImg:image>) in metadata (both head and tail)
+  const headText = buffer.subarray(0, Math.min(buffer.length, 4 * 1024 * 1024)).toString('latin1');
+  const tailText = buffer.length > 4 * 1024 * 1024
+    ? buffer.subarray(buffer.length - 4 * 1024 * 1024).toString('latin1')
+    : '';
+  const xmpRegex = /(?:<|&lt;)(?:xmpGImg|xapGImg):image\b[^>&]*(?:>|&gt;)(?:<!\[CDATA\[)?\s*([A-Za-z0-9+/=\s]{20,})\s*(?:\]\]>)?(?:<\/|&lt;\/)(?:xmpGImg|xapGImg):image(?:>|&gt;)/i;
+  const attrRegex = /(?:xmpGImg|xapGImg):image\s*=\s*["']([A-Za-z0-9+/=\s]{20,})["']/i;
+  const xmpMatch = headText.match(xmpRegex) || headText.match(attrRegex) || (tailText ? tailText.match(xmpRegex) || tailText.match(attrRegex) : null);
+  if (xmpMatch && xmpMatch[1]) {
     try {
       const cleanB64 = xmpMatch[1].replace(/\s+/g, '');
       const imgBuf = Buffer.from(cleanB64, 'base64');
@@ -183,7 +188,7 @@ async function extractEmbeddedPreview(buffer: Buffer): Promise<Buffer | null> {
   }
 
   // 3. Check for embedded SVG markup inside EPS PostScript comments/metadata
-  const embeddedSvg = extractEmbeddedSVG(headerText);
+  const embeddedSvg = extractEmbeddedSVG(headText);
   if (embeddedSvg) {
     try {
       const sanitized = sanitizeSvg(embeddedSvg);

@@ -92,7 +92,12 @@ export default function PromptsPage() {
           body: formData
         });
         
-        const data = await res.json().catch(() => ({ success: false, error: `Generation failed (${res.status})` }));
+        const data = await res.json().catch(() => ({
+          success: false,
+          error: res.status === 413
+            ? 'Upload payload is too large (HTTP 413). Please export this asset as SVG/JPG or save with "Create PDF Compatible File" in Illustrator.'
+            : `Generation failed (${res.status})`,
+        }));
         
         if (!data.success) throw new Error(data.error);
         

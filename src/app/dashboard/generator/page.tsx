@@ -349,10 +349,19 @@ export default function GeneratorPage() {
       const res = await fetch(endpoint, { method: 'POST', headers, body: fd, signal: controller.signal }).finally(() => {
         window.clearTimeout(requestTimeout);
       });
-      const data = await res.json().catch(() => ({ success: false, error: `Generation service returned HTTP ${res.status}` }));
+      const data = await res.json().catch(() => ({
+        success: false,
+        error: res.status === 413
+          ? 'Upload payload is too large (HTTP 413). Please export this asset as SVG/JPG or save with "Create PDF Compatible File" in Illustrator.'
+          : `Generation service returned HTTP ${res.status}`,
+      }));
 
       if (!res.ok || !data.success) {
-        const requestError = new Error(data.error || 'Generation failed') as Error & { status: number };
+        let errorMsg = data.error || 'Generation failed';
+        if (res.status === 413) {
+          errorMsg = 'Upload payload is too large (HTTP 413). Please export this asset as SVG/JPG or save with "Create PDF Compatible File" in Illustrator.';
+        }
+        const requestError = new Error(errorMsg) as Error & { status: number };
         requestError.status = res.status;
         throw requestError;
       }
