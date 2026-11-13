@@ -122,6 +122,7 @@ export default function GoogleSignInButton({ mode = "user" }: { mode?: GoogleMod
                 name: data.user.name,
                 role: data.user.role,
                 avatarUrl: data.user.avatarUrl || "",
+                plan: data.user.plan,
                 signedInAt: Date.now(),
               });
 

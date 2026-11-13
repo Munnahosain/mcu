@@ -5,6 +5,7 @@ import { enforceRateLimit } from '@/server/auth/rate-limit';
 import { resolveUserApiKey } from '@/server/services/vision-service';
 import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
 import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
+import { incrementUsage } from '@/server/services/usage-service';
 
 export const maxDuration = 60;
 
@@ -56,7 +57,9 @@ export async function POST(req: NextRequest) {
     const validAspectRatios = ['16:9', '9:16'];
     const selectedAspectRatio = validAspectRatios.includes(aspectRatio) ? aspectRatio : '16:9';
 
-    await consumeCredits(userId, 5, 'Veo video generation', 'heavy_ai', { usesOwnApiKey });
+    // amount is a unit count; the per-unit price (heavy_ai = 5 credits) is applied inside
+    // consumeCredits. Passing 5 here used to charge 5 x 5 = 25 credits per video.
+    const charge = await consumeCredits(userId, 1, 'Veo video generation', 'heavy_ai', { usesOwnApiKey });
     creditReserved = true;
 
     const ai = new GoogleGenAI({
@@ -97,6 +100,11 @@ export async function POST(req: NextRequest) {
       config: videoConfig,
     });
 
+    void Promise.all([
+      incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[veo/generate] usage api error:', usageError)),
+      incrementUsage(userId, 'creditsUsed', charge.charged).catch((usageError) => console.error('[veo/generate] usage credits error:', usageError)),
+    ]);
+
     return NextResponse.json({
       operationName: operation.name,
       model: 'veo-3.1-fast-generate-preview',
@@ -104,7 +112,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     if (creditReserved && userId) {
-      await refundCredits(userId, 5, 'Failed Veo video generation refund', 'heavy_ai', { usesOwnApiKey })
+      await refundCredits(userId, 1, 'Failed Veo video generation refund', 'heavy_ai', { usesOwnApiKey })
         .catch((refundError) => console.error('[veo/generate] credit refund error:', refundError));
     }
     if (err instanceof InsufficientCreditsError) {

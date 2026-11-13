@@ -120,7 +120,7 @@ export async function POST(req: Request) {
     const { base64, dataUrl } = await prepareImage(imageBuffer, 512, 65);
     const provider = detectProvider(apiKey, providerHint);
 
-    await consumeCredits(userId, 1, 'AI metadata generation', 'metadata_generation', { usesOwnApiKey: true });
+    const charge = await consumeCredits(userId, 1, 'AI metadata generation', 'metadata_generation', { usesOwnApiKey: true });
     creditReserved = true;
 
     console.log(`[generate] provider=${provider}, model=${modelHint}, title=${titleLength}, description=${descriptionLength}, kw=${keywordsCount}, platform=${platform}`);
@@ -193,7 +193,7 @@ export async function POST(req: Request) {
     void Promise.all([
       incrementUsage(userId, 'metadataGenerated').catch((usageError) => console.error('[generate] usage metadata error:', usageError)),
       incrementUsage(userId, 'apiRequests').catch((usageError) => console.error('[generate] usage api error:', usageError)),
-      incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate] usage credits error:', usageError)),
+      incrementUsage(userId, 'creditsUsed', charge.charged).catch((usageError) => console.error('[generate] usage credits error:', usageError)),
     ]);
 
     return NextResponse.json({ success: true, metadata, previewDataUrl: vectorFormat ? dataUrl : undefined });

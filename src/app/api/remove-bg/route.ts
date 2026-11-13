@@ -3,6 +3,7 @@ import { getAuthenticatedUserId } from "@/server/auth/request-auth";
 import { enforceRateLimit } from "@/server/auth/rate-limit";
 import { consumeCredits, InsufficientCreditsError, refundCredits } from "@/server/services/credit-service";
 import { getFeatureFlagDenial } from "@/server/services/feature-flag-service";
+import { incrementUsage } from "@/server/services/usage-service";
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await consumeCredits(userId, 1, "Background removal", "background_removal");
+    const charge = await consumeCredits(userId, 1, "Background removal", "background_removal");
     creditReserved = true;
 
     const { Poof } = await import("@poof-bg/js");
@@ -55,6 +56,13 @@ export async function POST(request: Request) {
       format: "png",
       size: "full",
     });
+
+    const chargedUserId = userId;
+    void Promise.all([
+      incrementUsage(chargedUserId, "backgroundRemoved").catch((usageError) => console.error("[remove-bg] usage bg error:", usageError)),
+      incrementUsage(chargedUserId, "apiRequests").catch((usageError) => console.error("[remove-bg] usage api error:", usageError)),
+      incrementUsage(chargedUserId, "creditsUsed", charge.charged).catch((usageError) => console.error("[remove-bg] usage credits error:", usageError)),
+    ]);
 
     return new NextResponse(result.data, {
       status: 200,

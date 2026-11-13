@@ -7,6 +7,7 @@ import { hashPassword } from "@/server/auth/hash";
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from "@/server/auth/jwt";
 import { hasMongoDbConfig } from "@/server/db/database-config";
 import { findDevUser, createDevUser } from "@/server/auth/dev-auth";
+import { resolveUserActivePlan } from "@/server/db/database";
 
 type GoogleToken = { aud?: string; email?: string; email_verified?: string | boolean; name?: string; picture?: string };
 
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       const userId = String(devUser.id || devUser._id);
       const accessToken = await createAccessToken(userId);
       const refreshToken = await createRefreshToken(userId);
+      const devPlan = await resolveUserActivePlan(devUser);
       const response = NextResponse.json({
         success: true,
         user: {
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
           email: devUser.email,
           role: isConfiguredAdmin ? 'super_admin' : devUser.role,
           avatarUrl: googleUser.picture || '',
+          plan: devPlan,
         },
         accessToken,
       });
@@ -144,6 +147,9 @@ export async function POST(req: Request) {
     const userId = String(user._id);
     const accessToken = await createAccessToken(userId);
     const refreshToken = await createRefreshToken(userId);
+    // Send the real plan with the login response so the dashboard never has to
+    // guess (or briefly show a paid plan) while the billing request is in flight.
+    const userPlan = await resolveUserActivePlan(user);
     const response = NextResponse.json({
       success: true,
       user: {
@@ -152,6 +158,7 @@ export async function POST(req: Request) {
         email: user.email,
         role: isConfiguredAdmin ? 'super_admin' : (user.role || 'user'),
         avatarUrl: user.avatarUrl || googleUser.picture || '',
+        plan: userPlan,
       },
       accessToken,
     });

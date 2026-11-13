@@ -64,6 +64,7 @@ export default function AdminLoginPage() {
         name: data.user.name,
         role: data.user.role,
         avatarUrl: data.user.avatarUrl || "",
+        plan: data.user.plan,
         signedInAt: Date.now(),
       });
 

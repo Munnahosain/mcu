@@ -16,7 +16,8 @@ export async function getUserUsage(userId: string, period = currentUsagePeriod()
 }
 
 export async function incrementUsage(userId: string, field: UsageField, amount = 1, period = currentUsagePeriod()) {
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Usage amount must be positive.');
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('Usage amount must not be negative.');
+  if (amount === 0) return null; // e.g. free BYO-key mode charges 0 credits
   if (!hasMongoDbConfig()) return null;
   await connectToDatabase();
   return Usage.findOneAndUpdate(

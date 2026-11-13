@@ -220,9 +220,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const userInitials = getInitials(user.name || user.email || "mcu");
   const effectivePlan = activePlan || user.plan;
-  const planBadge = effectivePlan?.slug === 'free'
-    ? { label: 'FREE', className: 'dashboard-plan-badge dashboard-plan-badge-free' }
-    : { label: (effectivePlan?.name || 'STUDIO').toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${effectivePlan?.slug || 'studio'}` };
+  // Never guess a paid plan. Until the real plan is known (login response, refresh
+  // or billing sync) we render nothing, so a free user never sees "STUDIO" flash.
+  const planBadge = !effectivePlan?.slug
+    ? null
+    : effectivePlan.slug === 'free'
+      ? { label: 'FREE', className: 'dashboard-plan-badge dashboard-plan-badge-free' }
+      : { label: (effectivePlan.name || effectivePlan.slug).toUpperCase(), className: `dashboard-plan-badge dashboard-plan-badge-${effectivePlan.slug}` };
 
   const isSvgMotion = pathname?.startsWith('/dashboard/svg-motion');
   const isVectorEditor = pathname === '/dashboard/vector-editor';
@@ -262,14 +266,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {user.avatarUrl ? <img src={user.avatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover" /> : null}
               <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-white" />
             </span>
-            <span className={`${planBadge.className} dashboard-plan-badge-mobile`} aria-label={planBadge.label}>
-              <span className="dashboard-plan-badge-stars" aria-hidden="true">
-                <span className="spark spark-1">✦</span>
-                <span className="spark spark-2">✦</span>
-                <span className="spark spark-3">✦</span>
+            {planBadge ? (
+              <span className={`${planBadge.className} dashboard-plan-badge-mobile`} aria-label={planBadge.label}>
+                <span className="dashboard-plan-badge-stars" aria-hidden="true">
+                  <span className="spark spark-1">✦</span>
+                  <span className="spark spark-2">✦</span>
+                  <span className="spark spark-3">✦</span>
+                </span>
+                <span className="dashboard-plan-badge-text">{planBadge.label}</span>
               </span>
-              <span className="dashboard-plan-badge-text">{planBadge.label}</span>
-            </span>
+            ) : null}
           </button>
           <AnimatePresence>
             {isProfileOpen ? <motion.div initial={{ opacity: 0, y: -6, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.96 }} className="absolute right-0 mt-2 w-64 rounded-2xl border border-foreground/10 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl">
@@ -394,14 +400,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {user.avatarUrl ? <img src={user.avatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full rounded-full object-cover" /> : null}
                     <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-white dark:ring-[#071b17]" />
                   </span>
-                  <span className={`${planBadge.className} dashboard-plan-badge-desktop`} aria-label={planBadge.label}>
-                    <span className="dashboard-plan-badge-stars" aria-hidden="true">
-                      <span className="spark spark-1">✦</span>
-                      <span className="spark spark-2">✦</span>
-                      <span className="spark spark-3">✦</span>
+                  {planBadge ? (
+                    <span className={`${planBadge.className} dashboard-plan-badge-desktop`} aria-label={planBadge.label}>
+                      <span className="dashboard-plan-badge-stars" aria-hidden="true">
+                        <span className="spark spark-1">✦</span>
+                        <span className="spark spark-2">✦</span>
+                        <span className="spark spark-3">✦</span>
+                      </span>
+                      <span className="dashboard-plan-badge-text">{planBadge.label}</span>
                     </span>
-                    <span className="dashboard-plan-badge-text">{planBadge.label}</span>
-                  </span>
+                  ) : null}
 
                   <div className="hidden md:flex items-center gap-1 overflow-hidden whitespace-nowrap">
                     <span className="max-w-[75px] truncate text-xs font-bold text-foreground">

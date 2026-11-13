@@ -44,19 +44,19 @@ export async function consumeCredits(
     if (!hasMongoDbConfig()) {
       const user = findDevUserById(userId);
       if (!user) throw new InsufficientCreditsError();
-      return { _id: userId, credits: user.credits };
+      return { _id: userId, credits: user.credits, charged: 0 };
     }
     await connectToDatabase();
     const user = await User.findById(userId).select('_id credits').lean();
     if (!user) throw new InsufficientCreditsError();
-    return user;
+    return { ...user, charged: 0 };
   }
 
   if (!hasMongoDbConfig()) {
     try {
       const updated = deductDevUserCredits(userId, effectiveAmount);
       if (!updated) throw new InsufficientCreditsError();
-      return { _id: userId, credits: updated.credits };
+      return { _id: userId, credits: updated.credits, charged: effectiveAmount };
     } catch {
       throw new InsufficientCreditsError();
     }
@@ -85,8 +85,16 @@ export async function consumeCredits(
 
   if (!updated) throw new InsufficientCreditsError();
 
-  await CreditLedger.create({ userId, type: 'deduct', amount: effectiveAmount, reason });
-  return updated;
+  const balanceAfter = Number(updated.credits?.monthly ?? 0) + Number(updated.credits?.bonus ?? 0);
+  await CreditLedger.create({
+    userId,
+    type: 'deduct',
+    amount: effectiveAmount,
+    reason,
+    balanceBefore: balanceAfter + effectiveAmount,
+    balanceAfter,
+  });
+  return { ...updated, charged: effectiveAmount };
 }
 
 export async function refundCredits(
@@ -107,9 +115,30 @@ export async function refundCredits(
   }
 
   await connectToDatabase();
-  await User.findByIdAndUpdate(userId, {
-    $inc: { 'credits.bonus': effectiveAmount, 'credits.used': -effectiveAmount },
-    $set: { updatedAt: new Date() },
+  // Credits are spent from `monthly` first, so a refund goes back to `monthly`.
+  // Refunding into `bonus` left monthly low with used === 0, which the login/credits
+  // top-up check (monthly < allowance && used === 0) then "healed" -> free extra credits.
+  // `used` is clamped at 0 so it can never go negative.
+  const updated = await User.findByIdAndUpdate(
+    userId,
+    [
+      {
+        $set: {
+          'credits.monthly': { $add: ['$credits.monthly', effectiveAmount] },
+          'credits.used': { $max: [0, { $subtract: ['$credits.used', effectiveAmount] }] },
+          updatedAt: new Date(),
+        },
+      },
+    ],
+    { new: true, updatePipeline: true },
+  ).select('credits').lean();
+  const balanceAfter = Number(updated?.credits?.monthly ?? 0) + Number(updated?.credits?.bonus ?? 0);
+  await CreditLedger.create({
+    userId,
+    type: 'refund',
+    amount: effectiveAmount,
+    reason,
+    balanceBefore: Math.max(0, balanceAfter - effectiveAmount),
+    balanceAfter,
   });
-  await CreditLedger.create({ userId, type: 'refund', amount: effectiveAmount, reason });
 }
