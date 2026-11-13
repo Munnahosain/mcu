@@ -49,13 +49,17 @@ export async function POST(request: Request) {
     const charge = await consumeCredits(userId, 1, "Background removal", "background_removal");
     creditReserved = true;
 
-    const { Poof } = await import("@poof-bg/js");
+    const { Poof, isJob } = await import("@poof-bg/js");
     const poof = new Poof({ apiKey });
 
     const result = await poof.removeBackground(imageFile, {
       format: "png",
       size: "full",
     });
+    // removeBackground() returns a Job only for video input; we only send images.
+    if (isJob(result)) {
+      throw new Error("Background removal returned an unexpected video job.");
+    }
 
     const chargedUserId = userId;
     void Promise.all([

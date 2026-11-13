@@ -10,6 +10,7 @@ import {
   Loader2,
   Layers,
 } from 'lucide-react';
+import { consumeFeatureCredit } from '@/lib/feature-credits';
 import { ProjectState } from './types';
 import {
   generateAnimatedSvg,
@@ -56,6 +57,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       .replace(/[^a-z0-9_-]/g, '_');
 
     try {
+      // Every real export costs credits (1 per download). Saving the project file is a backup, so it stays free.
+      if (selectedFormat !== 'json-project') {
+        await consumeFeatureCredit('motion_generation');
+      }
       if (selectedFormat === 'animated-svg') {
         updateProgress({ percent: 60, text: 'Compiling CSS @keyframes and packaging SVG...' });
         const animatedSvg = generateAnimatedSvg(project);

@@ -49,7 +49,17 @@ Credits per taka: Creator ~10, Pro ~15, Studio ~20. Higher tiers are cheaper per
 4. Log `creditsUsed` with the credits actually charged (`consumeCredits(...).charged`), not `1`.
 5. The dashboard plan badge must show nothing until the real plan is known. Never default to a paid plan.
 
+## Deploy note
+
+`remove-bg/route.ts` had a TypeScript error with `@poof-bg/js` 1.3.1 (`removeBackground` returns
+`Result | Job`). `next build` type-checks, so that error can fail the Vercel build and leave the live
+site on an older deployment. Fixed with the SDK's `isJob` guard. After merging, confirm the Vercel
+deployment for the latest commit is green.
+
 ## Known gaps (not changed here)
+
+- Photo Studio and Mata Pattern Studio are embedded prebuilt apps (iframe). Their downloads
+  cannot be charged from this repo.
 
 - Plan limits `bgRemovalLimit` and `batchLimit` are shown on pricing pages but not enforced
   server-side. `backgroundRemoved` usage is now recorded, so enforcement can be added.
