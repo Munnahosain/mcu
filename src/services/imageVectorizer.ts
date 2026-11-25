@@ -71,6 +71,8 @@ export interface RasterInput {
 
 export interface TracedIcon {
   index: number;
+  /** Index of the slice piece this icon was traced from. */
+  sourcePiece?: number;
   bbox: BoundingBox;
   paths: VectorPath[];
 }
@@ -591,7 +593,74 @@ function idsBox(ids: number[], c: Components) {
   return { minX, minY, maxX, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
-function sliceAuto(ids: number[], c: Components): number[][] {
+/**
+ * A column (or row) of icons that touch, or are separated by a hairline gap, shows
+ * up as one long piece. Icons in such strips are square-ish tiles, so cut the strip
+ * into `round(length / thickness)` equal parts, each cut snapped to the emptiest
+ * spot of the ink profile nearby. Long thin things (lines of text, table rules) are
+ * left alone: only strips as thick as the thickest piece on the sheet qualify.
+ */
+function splitMergedStrip(cell: number[], c: Components, w: number, refShort: number): number[][] {
+  const b = idsBox(cell, c);
+  const long = Math.max(b.w, b.h);
+  const short = Math.min(b.w, b.h);
+  if (long / short < 2.2 || short < refShort * 0.6) return [cell];
+  const n = Math.round(long / short);
+  if (n < 2 || n > 24) return [cell];
+  const pitch = long / n;
+  if (pitch < short * 0.6 || pitch > short * 1.6) return [cell];
+
+  const vertical = b.h >= b.w;
+  const member = new Uint8Array(c.count + 1);
+  for (const id of cell) member[id] = 1;
+  const profile = new Float32Array(long);
+  for (let y = b.minY; y <= b.maxY; y++) {
+    for (let x = b.minX; x <= b.maxX; x++) {
+      const lb = c.labels[y * w + x];
+      if (lb && member[lb]) profile[vertical ? y - b.minY : x - b.minX]++;
+    }
+  }
+
+  const cuts: number[] = [];
+  for (let k = 1; k < n; k++) {
+    const centre = Math.round(k * pitch);
+    const lo = Math.max(1, Math.round(centre - pitch * 0.3));
+    const hi = Math.min(long - 1, Math.round(centre + pitch * 0.3));
+    let best = Infinity;
+    for (let t = lo; t <= hi; t++) best = Math.min(best, profile[t]);
+    let first = -1, last = -1, bestRun: [number, number] | null = null;
+    for (let t = lo; t <= hi + 1; t++) {
+      if (t <= hi && profile[t] <= best + 0.5) { if (first < 0) first = t; last = t; }
+      else if (first >= 0) {
+        const mid = (first + last) / 2;
+        if (!bestRun || Math.abs(mid - centre) < Math.abs((bestRun[0] + bestRun[1]) / 2 - centre)) bestRun = [first, last];
+        first = -1;
+      }
+    }
+    if (!bestRun) return [cell];
+    cuts.push(Math.round((bestRun[0] + bestRun[1]) / 2));
+  }
+  const edges = [0, ...cuts, long];
+  if (edges.some((e, i) => i > 0 && e - edges[i - 1] < short * 0.45)) return [cell];
+
+  const parts: number[][] = edges.slice(1).map(() => []);
+  const lowEdge = vertical ? c.minY : c.minX;
+  const highEdge = vertical ? c.maxY : c.maxX;
+  const origin = vertical ? b.minY : b.minX;
+  for (const id of cell) {
+    const a = lowEdge[id] - origin;
+    const z = highEdge[id] - origin;
+    if (z - a + 1 > pitch * 1.5) continue; // table rule / frame spanning several icons
+    const centre = (a + z) / 2;
+    let bucket = edges.findIndex((e, i) => i > 0 && centre < e);
+    if (bucket < 0) bucket = parts.length;
+    parts[bucket - 1].push(id);
+  }
+  const kept = parts.filter((part) => part.length);
+  return kept.length >= 2 ? kept : [cell];
+}
+
+function sliceAuto(ids: number[], c: Components, w: number): number[][] {
   let cells: number[][];
   const rows = cutIds(ids, c, 'y', 0.004, 2);
   if (rows) {
@@ -618,6 +687,8 @@ function sliceAuto(ids: number[], c: Components): number[][] {
     return parts && sane ? parts.flatMap((p) => refine(p, depth + 1)) : [cell];
   };
   cells = cells.flatMap((cell) => refine(cell, 0));
+  const refShort = Math.max(0, ...cells.map((cell) => { const b = idsBox(cell, c); return Math.min(b.w, b.h); }));
+  cells = cells.flatMap((cell) => splitMergedStrip(cell, c, w, refShort));
 
   // Specks that survived the noise filter are not icons.
   if (cells.length > 3) {
@@ -1390,6 +1461,31 @@ export async function prepareSlices(
   for (let id = 1; id <= comps.count; id++) if (comps.area[id] >= minArea) ids.push(id);
   const rawPieces = ids.length;
 
+  // Hairlines between icon tiles (faint rules, thin table borders) run across the
+  // whole tile, so no blank band is ever left between the icons above and below
+  // and a column of icons stays glued into one long piece. They are never icons:
+  // thin, much longer than thick and lighter than real artwork (a minus-sign icon
+  // is thicker and fully inked, so it survives).
+  if (ids.length > 6) {
+    const thinLimit = Math.max(3, Math.round(Math.max(w, h) * 0.003));
+    const hairlines = ids.filter((id) => {
+      const bw = comps.maxX[id] - comps.minX[id] + 1, bh = comps.maxY[id] - comps.minY[id] + 1;
+      const thin = Math.min(bw, bh);
+      return thin <= thinLimit && Math.max(bw, bh) >= thin * 12;
+    });
+    const drop = new Set<number>();
+    for (const id of hairlines) {
+      let sum = 0, count = 0;
+      for (let y = comps.minY[id]; y <= comps.maxY[id]; y++) {
+        for (let x = comps.minX[id]; x <= comps.maxX[id]; x++) {
+          if (comps.labels[y * w + x] === id) { sum += ink[y * w + x]; count++; }
+        }
+      }
+      if (count && sum / count < 0.8) drop.add(id);
+    }
+    if (drop.size && ids.length - drop.size >= 4) ids = ids.filter((id) => !drop.has(id));
+  }
+
   // Table / frame lines that wrap many icons would glue everything together.
   if (ids.length > 3) {
     const bigFrame = ids.filter((id) => {
@@ -1408,7 +1504,7 @@ export async function prepareSlices(
   let gap = 0;
   const groups: Group[] = [];
   if (opt.grouping == null) {
-    for (const cell of sliceAuto(ids, comps)) {
+    for (const cell of sliceAuto(ids, comps, w)) {
       const b = idsBox(cell, comps);
       groups.push({ ids: cell, minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY });
     }
@@ -1580,6 +1676,7 @@ export async function traceSession(
       }
       icons.push({
         index: icons.length + 1,
+        sourcePiece: gi,
         bbox: { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) },
         paths,
       });
@@ -1683,54 +1780,62 @@ export function findDuplicatePieces(session: TraceSession): number[][] {
 }
 
 /** Small PNG crops of each piece (artwork only, on the sheet background). Browser only. */
-export function renderPieceThumbnails(session: TraceSession, maxSize = 160): string[] {
+function renderOnePiece(session: TraceSession, piece: SlicePiece, maxSize: number): string {
   const { img, an, comps, groupOf } = session.state;
   const { width: w } = img;
   const [br, bg, bb] = an.bg;
-  return session.pieces.map((piece) => {
-    const b = piece.bbox;
-    const pad = 6;
-    const x0 = Math.max(0, Math.floor(b.x) - pad), y0 = Math.max(0, Math.floor(b.y) - pad);
-    const x1 = Math.min(img.width, Math.ceil(b.x + b.width) + pad), y1 = Math.min(img.height, Math.ceil(b.y + b.height) + pad);
-    const cw = x1 - x0, ch = y1 - y0;
-    const full = document.createElement('canvas');
-    full.width = cw; full.height = ch;
-    const fctx = full.getContext('2d');
-    if (!fctx) return '';
-    const data = fctx.createImageData(cw, ch);
-    for (let y = 0; y < ch; y++) {
-      for (let x = 0; x < cw; x++) {
-        const gi = (y0 + y) * w + x0 + x;
-        const o = (y * cw + x) * 4;
-        // keep anti-aliased fringe: show original pixel next to this piece's ink, background elsewhere
-        let mine = false;
-        for (let dy = -2; dy <= 2 && !mine; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            const yy = y0 + y + dy, xx = x0 + x + dx;
-            if (yy < 0 || xx < 0 || yy >= img.height || xx >= w) continue;
-            const lb = comps.labels[yy * w + xx];
-            if (lb && groupOf[lb] === piece.index + 1) { mine = true; break; }
-          }
+  const b = piece.bbox;
+  const pad = 6;
+  const x0 = Math.max(0, Math.floor(b.x) - pad), y0 = Math.max(0, Math.floor(b.y) - pad);
+  const x1 = Math.min(img.width, Math.ceil(b.x + b.width) + pad), y1 = Math.min(img.height, Math.ceil(b.y + b.height) + pad);
+  const cw = x1 - x0, ch = y1 - y0;
+  const full = document.createElement('canvas');
+  full.width = cw; full.height = ch;
+  const fctx = full.getContext('2d');
+  if (!fctx) return '';
+  const data = fctx.createImageData(cw, ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const gi = (y0 + y) * w + x0 + x;
+      const o = (y * cw + x) * 4;
+      // keep anti-aliased fringe: show original pixel next to this piece's ink, background elsewhere
+      let mine = false;
+      for (let dy = -2; dy <= 2 && !mine; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const yy = y0 + y + dy, xx = x0 + x + dx;
+          if (yy < 0 || xx < 0 || yy >= img.height || xx >= w) continue;
+          const lb = comps.labels[yy * w + xx];
+          if (lb && groupOf[lb] === piece.index + 1) { mine = true; break; }
         }
-        if (mine) {
-          data.data[o] = img.data[gi * 4]; data.data[o + 1] = img.data[gi * 4 + 1]; data.data[o + 2] = img.data[gi * 4 + 2];
-        } else {
-          data.data[o] = br; data.data[o + 1] = bg; data.data[o + 2] = bb;
-        }
-        data.data[o + 3] = 255;
       }
+      if (mine) {
+        data.data[o] = img.data[gi * 4]; data.data[o + 1] = img.data[gi * 4 + 1]; data.data[o + 2] = img.data[gi * 4 + 2];
+      } else {
+        data.data[o] = br; data.data[o + 1] = bg; data.data[o + 2] = bb;
+      }
+      data.data[o + 3] = 255;
     }
-    fctx.putImageData(data, 0, 0);
-    const k = Math.min(1, maxSize / Math.max(cw, ch));
-    if (k >= 1) return full.toDataURL('image/png');
-    const small = document.createElement('canvas');
-    small.width = Math.max(1, Math.round(cw * k)); small.height = Math.max(1, Math.round(ch * k));
-    const sctx = small.getContext('2d');
-    if (!sctx) return full.toDataURL('image/png');
-    sctx.imageSmoothingQuality = 'high';
-    sctx.drawImage(full, 0, 0, small.width, small.height);
-    return small.toDataURL('image/png');
-  });
+  }
+  fctx.putImageData(data, 0, 0);
+  const k = Math.min(1, maxSize / Math.max(cw, ch));
+  if (k >= 1) return full.toDataURL('image/png');
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(cw * k)); small.height = Math.max(1, Math.round(ch * k));
+  const sctx = small.getContext('2d');
+  if (!sctx) return full.toDataURL('image/png');
+  sctx.imageSmoothingQuality = 'high';
+  sctx.drawImage(full, 0, 0, small.width, small.height);
+  return small.toDataURL('image/png');
+}
+
+export function renderPieceThumbnails(session: TraceSession, maxSize = 160): string[] {
+  return session.pieces.map((piece) => renderOnePiece(session, piece, maxSize));
+}
+
+/** The untouched pixels of one slice piece, large enough for a before/after view. */
+export function renderPieceCrop(session: TraceSession, pieceIndex: number, maxSize = 1000): string {
+  const piece = session.pieces[pieceIndex];
+  return piece ? renderOnePiece(session, piece, maxSize) : '';
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1765,6 +1870,7 @@ export function traceResultToDocument(result: TraceResult, filename: string, fil
       id: `icon-${stamp}-${idx}`,
       name,
       index: num,
+      sourcePiece: ti.sourcePiece,
       bbox,
       originalBbox: [bbox.x, height - (bbox.y + bbox.height), bbox.x + bbox.width, height - bbox.y],
       svgContent: buildIconSvg(ti.paths, bbox, 6),

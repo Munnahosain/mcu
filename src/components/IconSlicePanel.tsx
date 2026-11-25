@@ -42,6 +42,7 @@ interface IconSlicePanelProps {
   onCheckDuplicates: () => void;
   onRestoreAll: () => void;
   onVectorize: () => void;
+  onPreview: (index: number) => void;
   onOpenSettings: () => void;
   onCancel: () => void;
 }
@@ -53,7 +54,7 @@ export function IconSlicePanel(props: IconSlicePanelProps) {
   const dupToRemove = [...duplicates].filter((i) => !removed.has(i)).length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-compact-ui>
       <div className="space-y-3 rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -82,12 +83,12 @@ export function IconSlicePanel(props: IconSlicePanelProps) {
           const off = removed.has(piece.index);
           return (
             <article key={piece.index} className={`group relative overflow-hidden rounded-2xl border bg-[var(--card-bg)] transition-all ${off ? "border-[var(--card-border)] opacity-45" : "border-primary/40"}`}>
-              <button type="button" onClick={() => props.onToggle(piece.index)} className="block aspect-square w-full bg-white p-3" title={off ? "Click to restore" : "Click to remove"}>
+              <button type="button" onClick={() => props.onPreview(piece.index)} className="block aspect-square w-full bg-white p-3" title="Click to enlarge" aria-label={`Enlarge piece ${piece.index + 1}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={thumbs[piece.index]} alt={`Piece ${piece.index + 1}`} className="h-full w-full object-contain" />
               </button>
-              <span className="absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-black text-white">#{piece.index + 1}</span>
-              <button type="button" onClick={() => props.onToggle(piece.index)} aria-label={off ? "Restore piece" : "Remove piece"} className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full shadow ${off ? "bg-primary text-[#071b17]" : "bg-red-600 text-white hover:bg-red-500"}`}>
+              <span className="pointer-events-none !absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-black text-white">#{piece.index + 1}</span>
+              <button type="button" onClick={() => props.onToggle(piece.index)} aria-label={off ? "Restore piece" : "Remove piece"} className={`!absolute right-2 top-2 z-10 flex !h-6 !min-h-0 !w-6 !min-w-0 items-center justify-center !rounded-full !p-0 shadow ${off ? "bg-primary text-[#071b17]" : "bg-red-600 text-white hover:bg-red-500"}`}>
                 {off ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
               </button>
               <div className="flex items-center justify-between gap-1 px-2.5 py-2">
