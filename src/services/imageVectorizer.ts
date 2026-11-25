@@ -83,7 +83,7 @@ export interface TraceResult {
   info: { background: string; groupingGap: number; detail: number; rawPieces: number };
 }
 
-export type TraceProgress = (message: string, percent: number) => void;
+export type TraceProgress = (message: string, percent: number, stats?: { done: number; total: number }) => void;
 
 /* -------------------------------------------------------------------------- */
 /*  Small helpers                                                             */
@@ -514,6 +514,119 @@ function autoGap(ids: number[], c: Components, w: number, h: number): number {
   }
   // Middle of the plateau (geometric), nudged towards the safe (smaller) side.
   return Math.max(0, Math.round(Math.sqrt((best.lo + 1) * (best.hi + 1)) - 1));
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Grid-aware slicing (XY-cut)                                               */
+/*                                                                            */
+/*  Icon sheets are laid out in rows and columns, so instead of guessing one  */
+/*  global "closeness" for every piece we cut the sheet along the blank       */
+/*  bands that separate rows, then the blank bands that separate columns.     */
+/*  A blank band only counts when it clears every piece on the sheet, which   */
+/*  is why a dot above a frame (or the bars of a pause icon) never splits.    */
+/* -------------------------------------------------------------------------- */
+
+interface AxisRun { lo: number; hi: number; ids: number[] }
+
+function axisRuns(ids: number[], c: Components, axis: 'x' | 'y'): AxisRun[] {
+  const lo = axis === 'x' ? c.minX : c.minY;
+  const hi = axis === 'x' ? c.maxX : c.maxY;
+  const sorted = [...ids].sort((a, b) => lo[a] - lo[b]);
+  const runs: AxisRun[] = [];
+  for (const id of sorted) {
+    const last = runs[runs.length - 1];
+    if (last && lo[id] <= last.hi + 1) {
+      last.hi = Math.max(last.hi, hi[id]);
+      last.ids.push(id);
+    } else {
+      runs.push({ lo: lo[id], hi: hi[id], ids: [id] });
+    }
+  }
+  return runs;
+}
+
+/**
+ * Which blank bands separate icons and which only separate the parts of one?
+ * Look for the biggest jump between sorted gap sizes; with no jump, every gap
+ * that clears `floor` is a separator.
+ */
+function pickGapThreshold(gaps: number[], floor: number): number {
+  const s = [...gaps].sort((a, b) => a - b);
+  if (s.length === 1) return s[0] >= floor ? s[0] : Infinity;
+  // Separators are the LARGEST gaps, so take the last clear jump. Picking the
+  // biggest ratio instead would stop at the gap between two bars of one icon
+  // (8px → 40px) and cut pause / equals / dotted icons in half. Anything bigger
+  // than an icon that this leaves merged is split later by the size-based pass.
+  let bestIdx = -1;
+  for (let i = 0; i < s.length - 1; i++) {
+    if (s[i + 1] < floor) continue;
+    if ((s[i + 1] + 1) / (s[i] + 1) >= 2) bestIdx = i;
+  }
+  if (bestIdx >= 0) return s[bestIdx + 1];
+  const t = Math.max(s[0], floor);
+  return t > s[s.length - 1] ? Infinity : t;
+}
+
+function cutIds(ids: number[], c: Components, axis: 'x' | 'y', floorFrac: number, absFloor: number): number[][] | null {
+  const runs = axisRuns(ids, c, axis);
+  if (runs.length < 2) return null;
+  const extent = runs[runs.length - 1].hi - runs[0].lo + 1;
+  const gaps = runs.slice(1).map((r, i) => r.lo - runs[i].hi - 1);
+  const thr = pickGapThreshold(gaps, Math.max(absFloor, extent * floorFrac));
+  if (!Number.isFinite(thr)) return null;
+  const parts: number[][] = [[...runs[0].ids]];
+  for (let i = 1; i < runs.length; i++) {
+    if (gaps[i - 1] >= thr) parts.push([...runs[i].ids]);
+    else parts[parts.length - 1].push(...runs[i].ids);
+  }
+  return parts.length > 1 ? parts : null;
+}
+
+function idsBox(ids: number[], c: Components) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const id of ids) {
+    minX = Math.min(minX, c.minX[id]); minY = Math.min(minY, c.minY[id]);
+    maxX = Math.max(maxX, c.maxX[id]); maxY = Math.max(maxY, c.maxY[id]);
+  }
+  return { minX, minY, maxX, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function sliceAuto(ids: number[], c: Components): number[][] {
+  let cells: number[][];
+  const rows = cutIds(ids, c, 'y', 0.004, 2);
+  if (rows) {
+    cells = rows.flatMap((band) => cutIds(band, c, 'x', 0.012, 3) ?? [band]);
+  } else {
+    const cols = cutIds(ids, c, 'x', 0.012, 3);
+    cells = cols ? cols.flatMap((col) => cutIds(col, c, 'y', 0.004, 2) ?? [col]) : [ids];
+  }
+
+  // Reference icon size → catches layouts that are not perfectly aligned.
+  // Only cells that look like a single icon (not a long merged row / column or
+  // a line of text) vote; if none do, fall back to the shorter side.
+  const boxes = cells.map((cell) => idsBox(cell, c));
+  const single = boxes.filter((b) => Math.max(b.w, b.h) / Math.max(1, Math.min(b.w, b.h)) <= 2);
+  const sizes = (single.length ? single.map((b) => Math.max(b.w, b.h)) : boxes.map((b) => Math.min(b.w, b.h))).sort((a, b) => a - b);
+  const U = sizes[Math.floor(sizes.length / 2)] || 1;
+  const refine = (cell: number[], depth: number): number[][] => {
+    const b = idsBox(cell, c);
+    if (depth > 3 || Math.max(b.w, b.h) <= U * 1.7) return [cell];
+    const longAxis = b.h >= b.w ? 'y' : 'x';
+    const parts = cutIds(cell, c, longAxis, 0, U * 0.18);
+    // A cut that only chips off a speck is a detail inside one icon, not a separator.
+    const sane = parts && parts.every((part) => { const pb = idsBox(part, c); return Math.max(pb.w, pb.h) >= U * 0.3; });
+    return parts && sane ? parts.flatMap((p) => refine(p, depth + 1)) : [cell];
+  };
+  cells = cells.flatMap((cell) => refine(cell, 0));
+
+  // Specks that survived the noise filter are not icons.
+  if (cells.length > 3) {
+    cells = cells.filter((cell) => {
+      const b = idsBox(cell, c);
+      return Math.max(b.w, b.h) >= U * 0.12;
+    });
+  }
+  return cells;
 }
 
 interface Group {
@@ -1198,11 +1311,45 @@ function contoursToPaths(
 /*  8. Main pipeline                                                          */
 /* -------------------------------------------------------------------------- */
 
-export async function vectorizeRaster(
+export interface SlicePiece {
+  index: number;
+  /** In source-image pixels. */
+  bbox: BoundingBox;
+  /** Ink pixels, handy for sorting out specks. */
+  ink: number;
+}
+
+interface SessionState {
+  img: RasterInput;
+  opt: TraceOptions;
+  an: Analysis;
+  ink: Float32Array;
+  comps: Components;
+  groups: Group[];
+  groupOf: Int32Array;
+  palette: Palette | null;
+  level: number;
+  minArea: number;
+  sigmaSrc: number;
+  errSrc: number;
+  thetaRad: number;
+}
+
+/** Result of stage 1 (slicing). Pass it to `traceSession` for stage 2. */
+export interface TraceSession {
+  width: number;
+  height: number;
+  pieces: SlicePiece[];
+  info: TraceResult['info'];
+  /** @internal */
+  state: SessionState;
+}
+
+export async function prepareSlices(
   img: RasterInput,
   options: Partial<TraceOptions> = {},
   onProgress?: TraceProgress
-): Promise<TraceResult> {
+): Promise<TraceSession> {
   const opt: TraceOptions = { ...DEFAULT_TRACE_OPTIONS, ...options };
   const { width: w, height: h } = img;
   if (w < 8 || h < 8) throw new Error('This image is too small to trace.');
@@ -1257,24 +1404,34 @@ export async function vectorizeRaster(
   if (!ids.length) throw new Error('No artwork was found on this image. Try a different threshold or background.');
 
   ids.sort((a, b) => comps.minX[a] - comps.minX[b]);
-  onProgress?.('Grouping pieces into icons…', 18);
-  const gap = opt.grouping == null ? autoGap(ids, comps, w, h) : Math.max(0, Math.round(opt.grouping));
-  const roots = groupComponents(ids, comps, gap);
-  const byRoot = new Map<number, Group>();
-  ids.forEach((id, i) => {
-    const r = roots[i];
-    let g = byRoot.get(r);
-    if (!g) { g = { ids: [], minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }; byRoot.set(r, g); }
-    g.ids.push(id);
-    g.minX = Math.min(g.minX, comps.minX[id]);
-    g.minY = Math.min(g.minY, comps.minY[id]);
-    g.maxX = Math.max(g.maxX, comps.maxX[id]);
-    g.maxY = Math.max(g.maxY, comps.maxY[id]);
-  });
-  const groups = orderGroups([...byRoot.values()]);
+  onProgress?.('Slicing the sheet into icons…', 18);
+  let gap = 0;
+  const groups: Group[] = [];
+  if (opt.grouping == null) {
+    for (const cell of sliceAuto(ids, comps)) {
+      const b = idsBox(cell, comps);
+      groups.push({ ids: cell, minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY });
+    }
+  } else {
+    gap = Math.max(0, Math.round(opt.grouping));
+    const roots = groupComponents(ids, comps, gap);
+    const byRoot = new Map<number, Group>();
+    ids.forEach((id, i) => {
+      const r = roots[i];
+      let g = byRoot.get(r);
+      if (!g) { g = { ids: [], minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }; byRoot.set(r, g); }
+      g.ids.push(id);
+      g.minX = Math.min(g.minX, comps.minX[id]);
+      g.minY = Math.min(g.minY, comps.minY[id]);
+      g.maxX = Math.max(g.maxX, comps.maxX[id]);
+      g.maxY = Math.max(g.maxY, comps.maxY[id]);
+    });
+    groups.push(...byRoot.values());
+  }
+  const ordered = orderGroups(groups);
 
   const groupOf = new Int32Array(comps.count + 1);
-  groups.forEach((g, gi) => g.ids.forEach((id) => { groupOf[id] = gi + 1; }));
+  ordered.forEach((g, gi) => g.ids.forEach((id) => { groupOf[id] = gi + 1; }));
 
   // Tuning derived from the sliders.
   const sm = clamp(opt.smoothness, 0, 100) / 100;
@@ -1283,10 +1440,47 @@ export async function vectorizeRaster(
   const errSrc = lerp(0.07, 0.6, sm);
   const thetaRad = (lerp(75, 30, cn) * Math.PI) / 180;
 
+  const pieces: SlicePiece[] = ordered.map((g, gi) => {
+    let inkPx = 0;
+    for (const id of g.ids) inkPx += comps.area[id];
+    return {
+      index: gi,
+      bbox: { x: g.minX, y: g.minY, width: g.maxX - g.minX + 1, height: g.maxY - g.minY + 1 },
+      ink: inkPx,
+    };
+  });
+  onProgress?.(`${pieces.length} icons found`, 100);
+
+  return {
+    width: w,
+    height: h,
+    pieces,
+    info: { background: toHex(an.bg[0], an.bg[1], an.bg[2]), groupingGap: gap, detail: 0, rawPieces },
+    state: { img, opt, an, ink, comps, groups: ordered, groupOf, palette, level, minArea, sigmaSrc, errSrc, thetaRad },
+  };
+}
+
+/**
+ * Stage 2: trace the chosen pieces (default: all). Pieces are traced one by
+ * one so the caller can show progress and stop at any time.
+ */
+export async function traceSession(
+  session: TraceSession,
+  pieceIndexes?: number[],
+  onProgress?: TraceProgress,
+  signal?: AbortSignal,
+  range: [number, number] = [0, 100]
+): Promise<TraceResult> {
+  const { img, opt, ink, comps, groups, groupOf, palette, level, minArea, sigmaSrc, errSrc, thetaRad } = session.state;
+  const { width: w, height: h } = img;
+  const targets = (pieceIndexes ?? groups.map((_, i) => i)).filter((i) => i >= 0 && i < groups.length);
+  if (!targets.length) throw new Error('Select at least one icon to vectorize.');
+
   const icons: TracedIcon[] = [];
   let usedDetail = 1;
 
-  for (let gi = 0; gi < groups.length; gi++) {
+  for (let t = 0; t < targets.length; t++) {
+    const gi = targets[t];
     const g = groups[gi];
     const pad = 4;
     const x0 = Math.max(0, g.minX - pad), y0 = Math.max(0, g.minY - pad);
@@ -1391,21 +1585,152 @@ export async function vectorizeRaster(
       });
     }
 
-    if (gi % 3 === 2) {
-      onProgress?.(`Tracing icon ${gi + 1} of ${groups.length}…`, 20 + Math.round(((gi + 1) / groups.length) * 76));
-      await yieldToUI();
-    }
+    if (signal?.aborted) throw new DOMException('Vectorizing was stopped.', 'AbortError');
+    const frac = (t + 1) / targets.length;
+    onProgress?.(`Tracing icon ${t + 1} of ${targets.length}…`, Math.round(range[0] + frac * (range[1] - range[0])), { done: t + 1, total: targets.length });
+    await yieldToUI();
   }
 
   if (!icons.length) throw new Error('Nothing could be traced. Try lowering the noise filter or changing the threshold.');
-  onProgress?.(`${icons.length} icons traced`, 100);
+  onProgress?.(`${icons.length} icons traced`, range[1], { done: icons.length, total: targets.length });
 
   return {
     width: w,
     height: h,
     icons,
-    info: { background: toHex(an.bg[0], an.bg[1], an.bg[2]), groupingGap: gap, detail: usedDetail, rawPieces },
+    info: { ...session.info, detail: usedDetail },
   };
+}
+
+
+export async function vectorizeRaster(
+  img: RasterInput,
+  options: Partial<TraceOptions> = {},
+  onProgress?: TraceProgress
+): Promise<TraceResult> {
+  const session = await prepareSlices(img, options, (m, p) => onProgress?.(m, Math.round(p * 0.2)));
+  return traceSession(session, undefined, onProgress, undefined, [20, 100]);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Slice helpers: thumbnails, text-like pieces, duplicates                    */
+/* -------------------------------------------------------------------------- */
+
+/** Pieces much bigger than the typical icon are almost always a title or caption. */
+export function findTextLikePieces(session: TraceSession): number[] {
+  const sizes = session.pieces.map((p) => Math.max(p.bbox.width, p.bbox.height)).sort((a, b) => a - b);
+  if (sizes.length < 4) return [];
+  const median = sizes[Math.floor(sizes.length / 2)];
+  return session.pieces
+    .filter((p) => {
+      const longest = Math.max(p.bbox.width, p.bbox.height);
+      const aspect = p.bbox.width / Math.max(1, p.bbox.height);
+      return longest > median * 2 || aspect > 3 || aspect < 1 / 3;
+    })
+    .map((p) => p.index);
+}
+
+function pieceMask(session: TraceSession, index: number, size: number): Uint8Array {
+  const { comps, groupOf, ink } = session.state;
+  const { width: w } = session.state.img;
+  const b = session.pieces[index].bbox;
+  const x0 = Math.floor(b.x), y0 = Math.floor(b.y);
+  const bw = Math.ceil(b.width), bh = Math.ceil(b.height);
+  const side = Math.max(bw, bh);
+  const out = new Uint8Array(size * size);
+  const hit = new Float32Array(size * size);
+  const ox = (side - bw) / 2, oy = (side - bh) / 2;
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const i = (y0 + y) * w + x0 + x;
+      const lb = comps.labels[i];
+      if (!lb || groupOf[lb] !== index + 1) continue;
+      const cx = Math.min(size - 1, Math.floor(((x + ox) / side) * size));
+      const cy = Math.min(size - 1, Math.floor(((y + oy) / side) * size));
+      hit[cy * size + cx] += ink[i];
+    }
+  }
+  const cellArea = (side / size) * (side / size);
+  for (let i = 0; i < out.length; i++) out[i] = hit[i] / cellArea > 0.3 ? 1 : 0;
+  return out;
+}
+
+/** Groups of piece indexes that look identical (same shape, any size). */
+export function findDuplicatePieces(session: TraceSession): number[][] {
+  const size = 24;
+  const masks = session.pieces.map((p) => pieceMask(session, p.index, size));
+  const seen = new Set<number>();
+  const groups: number[][] = [];
+  for (let i = 0; i < masks.length; i++) {
+    if (seen.has(i)) continue;
+    const group = [i];
+    for (let j = i + 1; j < masks.length; j++) {
+      if (seen.has(j)) continue;
+      const a = session.pieces[i].bbox, b = session.pieces[j].bbox;
+      const ra = a.width / a.height, rb = b.width / b.height;
+      if (Math.abs(Math.log(ra / rb)) > 0.15) continue;
+      let inter = 0, union = 0;
+      for (let k = 0; k < masks[i].length; k++) {
+        const x = masks[i][k], y = masks[j][k];
+        if (x && y) inter++;
+        if (x || y) union++;
+      }
+      if (union > 0 && inter / union >= 0.9) group.push(j);
+    }
+    if (group.length > 1) { group.forEach((g) => seen.add(g)); groups.push(group); }
+  }
+  return groups;
+}
+
+/** Small PNG crops of each piece (artwork only, on the sheet background). Browser only. */
+export function renderPieceThumbnails(session: TraceSession, maxSize = 160): string[] {
+  const { img, an, comps, groupOf } = session.state;
+  const { width: w } = img;
+  const [br, bg, bb] = an.bg;
+  return session.pieces.map((piece) => {
+    const b = piece.bbox;
+    const pad = 6;
+    const x0 = Math.max(0, Math.floor(b.x) - pad), y0 = Math.max(0, Math.floor(b.y) - pad);
+    const x1 = Math.min(img.width, Math.ceil(b.x + b.width) + pad), y1 = Math.min(img.height, Math.ceil(b.y + b.height) + pad);
+    const cw = x1 - x0, ch = y1 - y0;
+    const full = document.createElement('canvas');
+    full.width = cw; full.height = ch;
+    const fctx = full.getContext('2d');
+    if (!fctx) return '';
+    const data = fctx.createImageData(cw, ch);
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        const gi = (y0 + y) * w + x0 + x;
+        const o = (y * cw + x) * 4;
+        // keep anti-aliased fringe: show original pixel next to this piece's ink, background elsewhere
+        let mine = false;
+        for (let dy = -2; dy <= 2 && !mine; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const yy = y0 + y + dy, xx = x0 + x + dx;
+            if (yy < 0 || xx < 0 || yy >= img.height || xx >= w) continue;
+            const lb = comps.labels[yy * w + xx];
+            if (lb && groupOf[lb] === piece.index + 1) { mine = true; break; }
+          }
+        }
+        if (mine) {
+          data.data[o] = img.data[gi * 4]; data.data[o + 1] = img.data[gi * 4 + 1]; data.data[o + 2] = img.data[gi * 4 + 2];
+        } else {
+          data.data[o] = br; data.data[o + 1] = bg; data.data[o + 2] = bb;
+        }
+        data.data[o + 3] = 255;
+      }
+    }
+    fctx.putImageData(data, 0, 0);
+    const k = Math.min(1, maxSize / Math.max(cw, ch));
+    if (k >= 1) return full.toDataURL('image/png');
+    const small = document.createElement('canvas');
+    small.width = Math.max(1, Math.round(cw * k)); small.height = Math.max(1, Math.round(ch * k));
+    const sctx = small.getContext('2d');
+    if (!sctx) return full.toDataURL('image/png');
+    sctx.imageSmoothingQuality = 'high';
+    sctx.drawImage(full, 0, 0, small.width, small.height);
+    return small.toDataURL('image/png');
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1505,6 +1830,16 @@ export async function loadRasterFromFile(file: Blob): Promise<RasterInput> {
   } finally {
     bitmap.close?.();
   }
+}
+
+export async function sliceImageFile(
+  file: File,
+  options: Partial<TraceOptions> = {},
+  onProgress?: TraceProgress
+): Promise<TraceSession> {
+  onProgress?.('Reading image…', 1);
+  const raster = await loadRasterFromFile(file);
+  return prepareSlices(raster, options, onProgress);
 }
 
 export async function traceImageFile(

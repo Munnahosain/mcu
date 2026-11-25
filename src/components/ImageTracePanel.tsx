@@ -133,7 +133,7 @@ export function ImageTracePanel({ options, onChange, disabled }: ImageTracePanel
           <Slider label="Corner sharpness" value={options.corners} min={0} max={100} disabled={disabled} onChange={(v) => set("corners", v)} />
         </Row>
 
-        <Row label="Icon grouping" hint="Largest gap that still counts as ONE icon (a dot above a frame, a badge + glyph)." right={<AutoToggle auto={options.grouping == null} disabled={disabled} onChange={(auto) => set("grouping", auto ? null : 24)} />}>
+        <Row label="Icon slicing" hint="Auto cuts along the blank bands between rows and columns. Turn Auto off to merge every piece closer than this gap (px) into one icon." right={<AutoToggle auto={options.grouping == null} disabled={disabled} onChange={(auto) => set("grouping", auto ? null : 24)} />}>
           <Slider label="Icon grouping gap in pixels" value={options.grouping ?? 24} min={0} max={200} disabled={disabled || options.grouping == null} onChange={(v) => set("grouping", v)} />
         </Row>
 

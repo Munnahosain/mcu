@@ -24,12 +24,20 @@ async function rasterizeSvgForUpload(file: File): Promise<File> {
     image.src = objectUrl;
     await image.decode();
 
-    const scale = Math.min(1, MAX_DIMENSION / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+    // SVGs with only a viewBox can report a 0 size, and icon SVGs are often 24px:
+    // render at a fixed, legible size so the vision model can actually see them.
+    const naturalWidth = image.naturalWidth || 512;
+    const naturalHeight = image.naturalHeight || 512;
+    const scale = MAX_DIMENSION / Math.max(naturalWidth, naturalHeight);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round((image.naturalWidth || 1) * scale));
-    canvas.height = Math.max(1, Math.round((image.naturalHeight || 1) * scale));
+    canvas.width = Math.max(1, Math.round(naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(naturalHeight * scale));
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Could not prepare the SVG preview.');
+    // JPEG has no alpha: without a white backdrop transparent SVGs turn black and
+    // black icons disappear completely.
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
     const blob = await canvasToBlob(canvas, 0.82, 'image/jpeg');
