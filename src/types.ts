@@ -9,6 +9,8 @@ export interface ExtractedIcon {
   id: string;
   name: string;
   index: number;
+  /** Slice piece an image-traced icon came from (used for before/after previews). */
+  sourcePiece?: number;
   bbox: BoundingBox;
   originalBbox: [number, number, number, number]; // [llx, lly, urx, ury] in PostScript coordinates
   svgContent: string;

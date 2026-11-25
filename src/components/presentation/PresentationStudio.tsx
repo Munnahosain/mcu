@@ -576,27 +576,18 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
   const layerIcon = (type: Layer["type"]) => ({ rect: Square, ellipse: Circle, triangle: Triangle, line: Minus, text: Type, grid: LayoutGrid, featured: Star }[type]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-compact-ui>
       {/* toolbar */}
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2.5">
         <div className="flex items-center gap-1">
           <button type="button" className={btnCls} onClick={undo} disabled={!hist.past.length} title="Undo (Ctrl+Z)"><Undo2 className="h-3.5 w-3.5" /></button>
           <button type="button" className={btnCls} onClick={redo} disabled={!hist.future.length} title="Redo (Ctrl+Y)"><Redo2 className="h-3.5 w-3.5" /></button>
         </div>
-        <div className="w-44"><Field label="Sheet title"><input className={inputCls} value={doc.title} onChange={(event) => updateDoc({ title: event.target.value }, "title")} /></Field></div>
-        <div className="w-40">
-          <Field label="Featured icon">
-            <select className={inputCls} value={featuredId ?? ""} onChange={(event) => setFeaturedId(event.target.value)}>
-              {icons.map((icon) => <option key={icon.id} value={icon.id}>{icon.name}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="w-32"><ColorField label="Icon fill" value={doc.iconFill} onChange={(v) => updateDoc({ iconFill: v }, "iconFill")} /></div>
-        <div className="w-32"><ColorField label="Label colour" value={doc.labelColor} onChange={(v) => updateDoc({ labelColor: v }, "labelColor")} /></div>
+        <span className="mx-1 hidden h-5 w-px bg-[var(--card-border)] sm:block" aria-hidden />
         <button type="button" className={btnCls} onClick={() => setNamesOpen(true)}><Pencil className="h-3.5 w-3.5" />Edit names</button>
         <button type="button" className={btnCls} onClick={shuffle} title="Randomise icon order"><Shuffle className="h-3.5 w-3.5" />Shuffle</button>
-        <div className="ml-auto flex items-end gap-1.5">
-          <select aria-label="Download format" className={`${inputCls} !w-16`} value={format} onChange={(event) => setFormat(event.target.value as "svg" | "png" | "jpg")}>
+        <div className="ml-auto flex items-center gap-1.5">
+          <select aria-label="Download format" className={`${inputCls} !w-[4.5rem]`} value={format} onChange={(event) => setFormat(event.target.value as "svg" | "png" | "jpg")}>
             <option value="svg">SVG</option><option value="png">PNG</option><option value="jpg">JPG</option>
           </select>
           <button type="button" className={btnPrimaryCls} disabled={busy || !icons.length} onClick={() => void downloadSheet()}><Download className="h-3.5 w-3.5" />Download</button>
@@ -623,6 +614,18 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
               <div className="flex gap-1.5">
                 <input className={inputCls} placeholder="Save current look as preset" value={presetName} onChange={(event) => setPresetName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") savePreset(); }} />
                 <button type="button" className={btnPrimaryCls} onClick={savePreset} disabled={!presetName.trim()}>Save</button>
+              </div>
+              <div className="space-y-2 border-t border-[var(--card-border)] pt-2">
+                <Field label="Sheet title"><input className={inputCls} value={doc.title} onChange={(event) => updateDoc({ title: event.target.value }, "title")} /></Field>
+                <Field label="Featured icon">
+                  <select className={inputCls} value={featuredId ?? ""} onChange={(event) => setFeaturedId(event.target.value)}>
+                    {icons.map((icon) => <option key={icon.id} value={icon.id}>{icon.name}</option>)}
+                  </select>
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <ColorField label="Icon fill" value={doc.iconFill} onChange={(v) => updateDoc({ iconFill: v }, "iconFill")} />
+                  <ColorField label="Label colour" value={doc.labelColor} onChange={(v) => updateDoc({ labelColor: v }, "labelColor")} />
+                </div>
               </div>
             </div>
           </Panel>
@@ -721,7 +724,7 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
             <span className="px-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">Zoom</span>
             <button type="button" className={btnCls} onClick={() => setZoomMode(Math.max(10, Math.round(scale * 100) - 10))} aria-label="Zoom out"><Minus className="h-3.5 w-3.5" /></button>
-            <select aria-label="Zoom level" className={`${inputCls} !w-20`} value={zoomMode === "fit" ? "fit" : String(zoomMode)} onChange={(event) => setZoomMode(event.target.value === "fit" ? "fit" : Number(event.target.value))}>
+            <select aria-label="Zoom level" className={`${inputCls} !w-28`} value={zoomMode === "fit" ? "fit" : String(zoomMode)} onChange={(event) => setZoomMode(event.target.value === "fit" ? "fit" : Number(event.target.value))}>
               <option value="fit">Fit ({Math.round(fitScale * 100)}%)</option>
               {[25, 50, 75, 100, 150, 200].map((z) => <option key={z} value={z}>{z}%</option>)}
               {typeof zoomMode === "number" && ![25, 50, 75, 100, 150, 200].includes(zoomMode) && <option value={zoomMode}>{zoomMode}%</option>}

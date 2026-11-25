@@ -15,7 +15,7 @@ const PRESETS = [0.5, 1, 2, 3, 4, 6];
 
 export function StrokeControls({ value, onChange }: { value: StrokeSettings; onChange: (next: StrokeSettings) => void }) {
   return (
-    <div className="space-y-3 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-3">
+    <div data-compact-ui className="space-y-3 rounded-xl border border-[var(--card-border)] bg-[var(--input-bg)] p-3">
       <div className="flex items-center justify-between gap-2">
         <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-extrabold text-foreground">
           <input type="checkbox" checked={value.enabled} onChange={(event) => onChange({ ...value, enabled: event.target.checked })} className="h-3.5 w-3.5 accent-[var(--primary,#16c784)]" />

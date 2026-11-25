@@ -64,12 +64,9 @@ export function ImageTracePanel({ options, onChange, disabled }: ImageTracePanel
   const multicolor = options.mode === "multicolor";
 
   return (
-    <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl">
+    <div data-compact-ui className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-black text-foreground">
-          <SlidersHorizontal className="h-4 w-4 text-primary" />
-          Icon trace settings
-        </div>
+        <div className="text-sm font-black text-foreground">Icon trace settings</div>
         <button
           type="button"
           disabled={disabled}

@@ -7501,3 +7501,49 @@ html body :focus-visible {
   outline: 2px solid var(--primary) !important;
   outline-offset: 2px !important;
 }
+/* ---- Compact tool controls (splitter, presentation studio) ----
+   The global input/select rules above add 12px 16px padding, which leaves no
+   room for text in fixed-height (h-7) controls and hides select values. Scoped
+   by attribute so every other form in the app keeps its normal look. */
+[data-compact-ui] select,
+[data-compact-ui] textarea,
+[data-compact-ui] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+  padding: 0 0.5rem;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.25rem;
+  box-shadow: none;
+}
+
+[data-compact-ui] select {
+  background-color: var(--input-bg);
+  color: var(--foreground);
+  color-scheme: dark light;
+  padding-right: 1.25rem;
+  text-overflow: ellipsis;
+}
+
+[data-compact-ui] select option,
+[data-compact-ui] select optgroup {
+  background: var(--card-bg, #0a1915);
+  color: var(--foreground);
+}
+
+[data-compact-ui] input[type="color"] {
+  padding: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+[data-compact-ui] input[type="checkbox"],
+[data-compact-ui] input[type="radio"],
+[data-compact-ui] input[type="range"] {
+  padding: 0;
+  box-shadow: none;
+}
+
+[data-compact-ui] input:hover,
+[data-compact-ui] select:hover,
+[data-compact-ui] textarea:hover {
+  box-shadow: none;
+}
