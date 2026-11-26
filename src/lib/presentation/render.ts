@@ -1,6 +1,12 @@
-import type { IconStyle, Layer, PresentationIcon, RenderContext, SheetDoc } from "./types";
+import type { FontFamily, IconStyle, Layer, PresentationIcon, RenderContext, SheetDoc } from "./types";
 
-const FONT = "'Plus Jakarta Sans', 'Outfit', 'Segoe UI', Arial, sans-serif";
+const SANS = "'Plus Jakarta Sans', 'Outfit', 'Segoe UI', Arial, sans-serif";
+const FONTS: Record<FontFamily, string> = {
+  sans: SANS,
+  serif: "'Playfair Display', 'Cormorant Garamond', Georgia, 'Times New Roman', serif",
+  mono: "'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace",
+};
+const fontOf = (layer: Layer) => FONTS[layer.font ?? "sans"];
 
 const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const num = (value: number) => (Math.round(value * 100) / 100).toString();
@@ -58,7 +64,8 @@ export function styledIconSvg(icon: PresentationIcon, style: IconStyle): string 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${num(p.vw)} ${num(p.vh)}" width="${Math.round(p.vw)}" height="${Math.round(p.vh)}">\n${inner}</svg>`;
 }
 
-function nestedIcon(icon: PresentationIcon, x: number, y: number, w: number, h: number, style: IconStyle): string {
+/** Markup for one icon placed in a box (used by the sheet and by the drag ghost). */
+export function renderIconAt(icon: PresentationIcon, x: number, y: number, w: number, h: number, style: IconStyle): string {
   const p = parseIconSvg(icon.svg);
   const inner = styleInner(p.inner, Math.max(p.vw, p.vh) / 512, style, icon.singleTone);
   return `<svg x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}" viewBox="0 0 ${num(p.vw)} ${num(p.vh)}" preserveAspectRatio="xMidYMid meet" overflow="visible">${inner}</svg>`;
@@ -101,10 +108,35 @@ export function gridLayout(layer: Layer, count: number): GridLayout {
   return { cols, rows, size, capacity: cols * rows, cells };
 }
 
-/* ----------------------------------------------------------------- layers */
+/* ------------------------------------------------- paint, shadow, gradient */
 
 function fillOrNone(value: string) {
   return value ? esc(value) : "none";
+}
+
+/** Gradient running across a box at `angle` degrees (0 = left→right, 90 = top→bottom). */
+function gradientDef(id: string, from: string, to: string, angle: number, x: number, y: number, w: number, h: number) {
+  const a = (angle * Math.PI) / 180;
+  const dx = Math.cos(a), dy = Math.sin(a);
+  const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+  const cx = x + w / 2, cy = y + h / 2;
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(cx - dx * half)}" y1="${num(cy - dy * half)}" x2="${num(cx + dx * half)}" y2="${num(cy + dy * half)}"><stop offset="0" stop-color="${esc(from)}"/><stop offset="1" stop-color="${esc(to)}"/></linearGradient>`;
+}
+
+function shadowFilter(id: string, strength: number, color: string, region: string) {
+  const blur = strength * 0.6;
+  return `<filter id="${id}" ${region} color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="${num(blur)}"/><feOffset dx="0" dy="${num(strength * 0.5)}" result="o"/><feFlood flood-color="${esc(color)}" flood-opacity="0.32"/><feComposite in2="o" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+}
+
+interface Paint { defs: string; fill: string }
+
+/** Resolves a layer's fill into a flat colour or a gradient reference. */
+function paintOf(layer: Layer): Paint {
+  if (layer.fill && layer.fill2) {
+    const id = `gr-${layer.id}`;
+    return { defs: gradientDef(id, layer.fill, layer.fill2, layer.gradAngle ?? 90, layer.x, layer.y, layer.w, layer.h), fill: `url(#${id})` };
+  }
+  return { defs: "", fill: fillOrNone(layer.fill) };
 }
 
 function fitText(text: string, maxChars: number) {
@@ -115,35 +147,88 @@ function resolveText(text: string, doc: SheetDoc, ctx: RenderContext) {
   return text.replace(/\{n\}/g, String(ctx.icons.length)).replace(/\{title\}/g, doc.title);
 }
 
-function layerBody(layer: Layer, doc: SheetDoc, ctx: RenderContext): string {
-  const stroke = layer.stroke && layer.strokeWidth > 0 ? ` stroke="${esc(layer.stroke)}" stroke-width="${num(layer.strokeWidth)}" stroke-linejoin="round"` : "";
+function patternMarkup(layer: Layer): { defs: string; body: string } {
+  const gap = Math.max(8, layer.patternGap ?? 60);
+  const t = layer.strokeWidth > 0 ? layer.strokeWidth : 4;
+  const color = esc(layer.fill || "#000000");
+  const id = `pt-${layer.id}`;
+  let inner = "";
+  let extra = "";
+  switch (layer.pattern ?? "dots") {
+    case "grid":
+      inner = `<path d="M ${num(gap)} 0 L 0 0 0 ${num(gap)}" fill="none" stroke="${color}" stroke-width="${num(t)}"/>`;
+      break;
+    case "lines":
+      inner = `<line x1="0" y1="0" x2="0" y2="${num(gap)}" stroke="${color}" stroke-width="${num(t)}"/>`;
+      extra = ` patternTransform="rotate(45)"`;
+      break;
+    case "cross": {
+      const c = gap / 2, r = Math.min(gap * 0.18, 18);
+      inner = `<path d="M ${num(c - r)} ${num(c)} H ${num(c + r)} M ${num(c)} ${num(c - r)} V ${num(c + r)}" fill="none" stroke="${color}" stroke-width="${num(Math.max(2, t * 0.6))}" stroke-linecap="round"/>`;
+      break;
+    }
+    default:
+      inner = `<circle cx="${num(gap / 2)}" cy="${num(gap / 2)}" r="${num(t / 2)}" fill="${color}"/>`;
+  }
+  return {
+    defs: `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${num(layer.x)}" y="${num(layer.y)}" width="${num(gap)}" height="${num(gap)}"${extra}>${inner}</pattern>`,
+    body: `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" rx="${num(Math.min(layer.radius, layer.w / 2, layer.h / 2))}" fill="url(#${id})"/>`,
+  };
+}
+
+/* ----------------------------------------------------------------- layers */
+
+function layerBody(layer: Layer, doc: SheetDoc, ctx: RenderContext): { defs: string; body: string } {
+  const dash = layer.dash && layer.dash > 0 ? ` stroke-dasharray="${num(layer.dash)} ${num(layer.dash * 0.7)}"` : "";
+  const stroke = layer.stroke && layer.strokeWidth > 0 ? ` stroke="${esc(layer.stroke)}" stroke-width="${num(layer.strokeWidth)}" stroke-linejoin="round"${dash}` : "";
+  const fo = layer.fillOpacity != null && layer.fillOpacity < 1 ? ` fill-opacity="${num(layer.fillOpacity)}"` : "";
   switch (layer.type) {
-    case "rect":
-      return `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" rx="${num(Math.min(layer.radius, layer.w / 2, layer.h / 2))}" fill="${fillOrNone(layer.fill)}"${stroke}/>`;
-    case "ellipse":
-      return `<ellipse cx="${num(layer.x + layer.w / 2)}" cy="${num(layer.y + layer.h / 2)}" rx="${num(layer.w / 2)}" ry="${num(layer.h / 2)}" fill="${fillOrNone(layer.fill)}"${stroke}/>`;
-    case "triangle":
-      return `<polygon points="${num(layer.x + layer.w / 2)},${num(layer.y)} ${num(layer.x + layer.w)},${num(layer.y + layer.h)} ${num(layer.x)},${num(layer.y + layer.h)}" fill="${fillOrNone(layer.fill)}"${stroke}/>`;
+    case "rect": {
+      const p = paintOf(layer);
+      return { defs: p.defs, body: `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" rx="${num(Math.min(layer.radius, layer.w / 2, layer.h / 2))}" fill="${p.fill}"${fo}${stroke}/>` };
+    }
+    case "ellipse": {
+      const p = paintOf(layer);
+      return { defs: p.defs, body: `<ellipse cx="${num(layer.x + layer.w / 2)}" cy="${num(layer.y + layer.h / 2)}" rx="${num(layer.w / 2)}" ry="${num(layer.h / 2)}" fill="${p.fill}"${fo}${stroke}/>` };
+    }
+    case "triangle": {
+      const p = paintOf(layer);
+      return { defs: p.defs, body: `<polygon points="${num(layer.x + layer.w / 2)},${num(layer.y)} ${num(layer.x + layer.w)},${num(layer.y + layer.h)} ${num(layer.x)},${num(layer.y + layer.h)}" fill="${p.fill}"${fo}${stroke}/>` };
+    }
     case "line": {
       const color = layer.stroke || layer.fill || "#000000";
       const width = layer.strokeWidth > 0 ? layer.strokeWidth : 6;
       const cy = layer.y + layer.h / 2;
-      return `<line x1="${num(layer.x)}" y1="${num(cy)}" x2="${num(layer.x + layer.w)}" y2="${num(cy)}" stroke="${esc(color)}" stroke-width="${num(width)}" stroke-linecap="round"/>`;
+      return { defs: "", body: `<line x1="${num(layer.x)}" y1="${num(cy)}" x2="${num(layer.x + layer.w)}" y2="${num(cy)}" stroke="${esc(color)}" stroke-width="${num(width)}" stroke-linecap="round"${dash}/>` };
     }
     case "text": {
       const size = layer.fontSize ?? 120;
       const align = layer.align ?? "left";
       const x = align === "center" ? layer.x + layer.w / 2 : align === "right" ? layer.x + layer.w : layer.x;
       const anchor = align === "center" ? "middle" : align === "right" ? "end" : "start";
-      return `<text x="${num(x)}" y="${num(layer.y + layer.h / 2)}" font-family="${FONT}" font-size="${num(size)}" font-weight="${layer.fontWeight ?? 700}" letter-spacing="${num(layer.letterSpacing ?? 0)}" text-anchor="${anchor}" dominant-baseline="central" fill="${fillOrNone(layer.fill)}">${esc(resolveText(layer.text ?? "", doc, ctx))}</text>`;
+      const lines = resolveText(layer.text ?? "", doc, ctx).split("\n");
+      const lh = size * ((layer.lineHeight ?? 115) / 100);
+      const cy = layer.y + layer.h / 2;
+      const attrs = `font-family="${esc(fontOf(layer))}" font-size="${num(size)}" font-weight="${layer.fontWeight ?? 700}" letter-spacing="${num(layer.letterSpacing ?? 0)}" text-anchor="${anchor}" dominant-baseline="central" fill="${fillOrNone(layer.fill)}"`;
+      if (lines.length === 1) return { defs: "", body: `<text x="${num(x)}" y="${num(cy)}" ${attrs}>${esc(lines[0])}</text>` };
+      const top = cy - (lh * (lines.length - 1)) / 2;
+      const spans = lines.map((line, i) => `<tspan x="${num(x)}" y="${num(top + i * lh)}">${esc(line) || " "}</tspan>`).join("");
+      return { defs: "", body: `<text ${attrs} xml:space="preserve">${spans}</text>` };
     }
     case "featured": {
       const icon = ctx.icons.find((i) => i.id === ctx.featuredId) ?? ctx.icons[0];
       const pad = (layer.cellPad ?? 14) / 100;
-      const bg = `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" rx="${num(Math.min(layer.radius, layer.w / 2, layer.h / 2))}" fill="${fillOrNone(layer.fill)}"${stroke}/>`;
-      if (!icon) return bg;
+      const p = paintOf(layer);
+      const bg = `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" rx="${num(Math.min(layer.radius, layer.w / 2, layer.h / 2))}" fill="${p.fill}"${fo}${stroke}/>`;
+      if (!icon) return { defs: p.defs, body: bg };
       const px = layer.w * pad, py = layer.h * pad;
-      return bg + nestedIcon(icon, layer.x + px, layer.y + py, layer.w - px * 2, layer.h - py * 2, ctx.style);
+      return { defs: p.defs, body: bg + renderIconAt(icon, layer.x + px, layer.y + py, layer.w - px * 2, layer.h - py * 2, ctx.style) };
+    }
+    case "pattern":
+      return patternMarkup(layer);
+    case "image": {
+      if (!layer.href) return { defs: "", body: `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" fill="none" stroke="#9CA3AF" stroke-width="4" stroke-dasharray="20 14"/>` };
+      return { defs: "", body: `<image href="${esc(layer.href)}" x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" preserveAspectRatio="xMidYMid meet"/>` };
     }
     case "grid": {
       const byId = new Map(ctx.icons.map((i) => [i.id, i]));
@@ -151,41 +236,67 @@ function layerBody(layer: Layer, doc: SheetDoc, ctx: RenderContext): string {
       const lay = gridLayout(layer, shown.length);
       const pad = (layer.cellPad ?? 18) / 100;
       const labelH = layer.showLabels ? 0.2 : 0;
+      const cellStrokeOn = !!layer.cellStroke && (layer.cellStrokeWidth ?? 0) > 0;
+      const cellFo = layer.cellFillOpacity != null && layer.cellFillOpacity < 1 ? ` fill-opacity="${num(layer.cellFillOpacity)}"` : "";
+      const cellDash = layer.cellDash && layer.cellDash > 0 ? ` stroke-dasharray="${num(layer.cellDash)} ${num(layer.cellDash * 0.7)}"` : "";
+      const shadowId = `cs-${layer.id}`;
+      const defs = layer.cellShadow && layer.cellShadow > 0 ? shadowFilter(shadowId, layer.cellShadow, "#000000", `x="-25%" y="-25%" width="150%" height="160%"`) : "";
+      const filterAttr = defs ? ` filter="url(#${shadowId})"` : "";
       let out = "";
       shown.slice(0, lay.capacity).forEach((icon, i) => {
         const cell = lay.cells[i];
         if (!cell) return;
         const s = cell.size;
-        if (layer.cellFill || (layer.cellStroke && (layer.cellStrokeWidth ?? 0) > 0)) {
-          const cs = layer.cellStroke && (layer.cellStrokeWidth ?? 0) > 0 ? ` stroke="${esc(layer.cellStroke)}" stroke-width="${num(layer.cellStrokeWidth ?? 0)}"` : "";
-          out += `<rect x="${num(cell.x)}" y="${num(cell.y)}" width="${num(s)}" height="${num(s)}" rx="${num(layer.cellRadius ?? 0)}" fill="${fillOrNone(layer.cellFill ?? "")}"${cs}/>`;
+        const rx = num(Math.min(layer.cellRadius ?? 0, s / 2));
+        if (layer.cellOffset && layer.cellOffset > 0) {
+          out += `<rect x="${num(cell.x + layer.cellOffset)}" y="${num(cell.y + layer.cellOffset)}" width="${num(s)}" height="${num(s)}" rx="${rx}" fill="${fillOrNone(layer.cellOffsetColor || "#000000")}"/>`;
+        }
+        if (layer.cellFill || cellStrokeOn) {
+          const cs = cellStrokeOn ? ` stroke="${esc(layer.cellStroke ?? "")}" stroke-width="${num(layer.cellStrokeWidth ?? 0)}"${cellDash}` : "";
+          out += `<rect x="${num(cell.x)}" y="${num(cell.y)}" width="${num(s)}" height="${num(s)}" rx="${rx}" fill="${fillOrNone(layer.cellFill ?? "")}"${cellFo}${cs}${filterAttr}/>`;
         }
         const areaH = s * (1 - labelH);
         const p = s * pad;
-        out += nestedIcon(icon, cell.x + p, cell.y + p, s - p * 2, areaH - p * 2 + (labelH ? p * 0.4 : 0), ctx.style);
+        out += renderIconAt(icon, cell.x + p, cell.y + p, s - p * 2, areaH - p * 2 + (labelH ? p * 0.4 : 0), ctx.style);
         if (layer.showLabels || ctx.showNames) {
           const fs = s * 0.085;
-          out += `<text x="${num(cell.x + s / 2)}" y="${num(cell.y + s - s * 0.1)}" font-family="${FONT}" font-size="${num(fs)}" font-weight="600" text-anchor="middle" fill="${esc(doc.labelColor)}">${esc(fitText(icon.name, Math.max(6, Math.floor(s / (fs * 0.62)))))}</text>`;
+          out += `<text x="${num(cell.x + s / 2)}" y="${num(cell.y + s - s * 0.1)}" font-family="${esc(SANS)}" font-size="${num(fs)}" font-weight="600" text-anchor="middle" fill="${esc(doc.labelColor)}">${esc(fitText(icon.name, Math.max(6, Math.floor(s / (fs * 0.62)))))}</text>`;
         }
       });
-      return out;
+      return { defs, body: out };
     }
   }
 }
 
 export function renderLayer(layer: Layer, doc: SheetDoc, ctx: RenderContext): string {
   if (!layer.visible) return "";
-  const body = layerBody(layer, doc, ctx);
+  const { defs, body } = layerBody(layer, doc, ctx);
   if (!body) return "";
+
   const attrs: string[] = [];
+  let extraDefs = defs;
+  const margin = Math.max((layer.blur ?? 0) * 3, (layer.shadow ?? 0) * 3) + 24;
+  const region = `filterUnits="userSpaceOnUse" x="${num(layer.x - margin)}" y="${num(layer.y - margin)}" width="${num(layer.w + margin * 2)}" height="${num(layer.h + margin * 2)}"`;
+  if (layer.blur && layer.blur > 0) {
+    extraDefs += `<filter id="bl-${layer.id}" ${region}><feGaussianBlur stdDeviation="${num(layer.blur)}"/></filter>`;
+    attrs.push(`filter="url(#bl-${layer.id})"`);
+  } else if (layer.shadow && layer.shadow > 0 && layer.type !== "grid") {
+    extraDefs += shadowFilter(`sh-${layer.id}`, layer.shadow, layer.shadowColor || "#000000", region);
+    attrs.push(`filter="url(#sh-${layer.id})"`);
+  }
   if (layer.opacity < 1) attrs.push(`opacity="${num(layer.opacity)}"`);
   if (layer.rotation) attrs.push(`transform="rotate(${num(layer.rotation)} ${num(layer.x + layer.w / 2)} ${num(layer.y + layer.h / 2)})"`);
-  return `<g id="${esc(layer.id)}"${attrs.length ? ` ${attrs.join(" ")}` : ""}>${body}</g>`;
+  return `<g id="${esc(layer.id)}"${attrs.length ? ` ${attrs.join(" ")}` : ""}>${extraDefs ? `<defs>${extraDefs}</defs>` : ""}${body}</g>`;
 }
 
 export function renderPageBackground(doc: SheetDoc): string {
   if (!doc.background) return "";
-  return `<rect width="${num(doc.width)}" height="${num(doc.height)}" rx="${num(doc.backgroundRadius)}" fill="${esc(doc.background)}"/>`;
+  const radius = num(doc.backgroundRadius);
+  if (doc.backgroundTo) {
+    const def = gradientDef("bg-grad", doc.background, doc.backgroundTo, doc.backgroundAngle ?? 90, 0, 0, doc.width, doc.height);
+    return `<defs>${def}</defs><rect width="${num(doc.width)}" height="${num(doc.height)}" rx="${radius}" fill="url(#bg-grad)"/>`;
+  }
+  return `<rect width="${num(doc.width)}" height="${num(doc.height)}" rx="${radius}" fill="${esc(doc.background)}"/>`;
 }
 
 export function renderSheetSvg(doc: SheetDoc, ctx: RenderContext): string {

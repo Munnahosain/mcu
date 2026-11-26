@@ -1,4 +1,7 @@
-export type LayerType = "rect" | "ellipse" | "triangle" | "line" | "text" | "grid" | "featured";
+export type LayerType = "rect" | "ellipse" | "triangle" | "line" | "text" | "grid" | "featured" | "pattern" | "image";
+
+export type FontFamily = "sans" | "serif" | "mono";
+export type PatternKind = "dots" | "grid" | "lines" | "cross";
 
 export interface Layer {
   id: string;
@@ -18,12 +21,36 @@ export interface Layer {
   locked: boolean;
   groupId?: string;
 
-  /** text — `{n}` = icon count, `{title}` = sheet title */
+  /** Second gradient colour (with `fill` as the first). Empty = flat fill. */
+  fill2?: string;
+  /** Gradient direction in degrees: 0 = left→right, 90 = top→bottom. */
+  gradAngle?: number;
+  /** Opacity of the fill only (stroke stays solid), 0–1. */
+  fillOpacity?: number;
+  /** Dash length of the stroke in px, 0 = solid. */
+  dash?: number;
+  /** Soft drop shadow strength, 0 = none. */
+  shadow?: number;
+  shadowColor?: string;
+  /** Gaussian blur radius, 0 = none (used for glow blobs). */
+  blur?: number;
+
+  /** text — `{n}` = icon count, `{title}` = sheet title, new lines allowed */
   text?: string;
   fontSize?: number;
   fontWeight?: number;
   letterSpacing?: number;
   align?: "left" | "center" | "right";
+  font?: FontFamily;
+  /** Line height in %, default 115. */
+  lineHeight?: number;
+
+  /** pattern — colour is `fill`, thickness is `strokeWidth` */
+  pattern?: PatternKind;
+  patternGap?: number;
+
+  /** image — data URL */
+  href?: string;
 
   /** grid — 0 = automatic */
   cols?: number;
@@ -32,9 +59,15 @@ export interface Layer {
   /** Icon padding inside a tile, % of the tile. */
   cellPad?: number;
   cellFill?: string;
+  cellFillOpacity?: number;
   cellStroke?: string;
   cellStrokeWidth?: number;
+  cellDash?: number;
   cellRadius?: number;
+  cellShadow?: number;
+  /** Hard "offset" shadow behind every tile, in px. */
+  cellOffset?: number;
+  cellOffsetColor?: string;
   showLabels?: boolean;
 }
 
@@ -42,6 +75,9 @@ export interface SheetDoc {
   width: number;
   height: number;
   background: string;
+  /** Second background colour for a gradient; empty = flat. */
+  backgroundTo?: string;
+  backgroundAngle?: number;
   backgroundRadius: number;
   title: string;
   iconFill: string;
@@ -79,6 +115,8 @@ export interface Template {
   id: string;
   name: string;
   builtin: boolean;
+  /** Gallery section for built-ins. */
+  group?: string;
   doc: SheetDoc;
   compact: SheetDoc;
 }
