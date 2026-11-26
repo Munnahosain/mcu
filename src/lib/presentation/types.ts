@@ -87,12 +87,30 @@ export interface SheetDoc {
 
 export type StrokeStyle = "fill" | "stroke-fill" | "stroke";
 
+/** Rule-based two-tone look: the main colour is the icon fill, this is the accent. */
+export interface TwoToneStyle {
+  enabled: boolean;
+  /** Accent colour. */
+  secondary: string;
+  /** Tint areas enclosed by a shape (outline → duotone, panels, battery cells). */
+  fillEnclosed: boolean;
+  /** Tint strength in %. */
+  tint: number;
+  /** Give small separate shapes the accent colour. */
+  accentSmall: boolean;
+  /** A shape smaller than this % of the largest one counts as small. */
+  smallRatio: number;
+}
+
+export const DEFAULT_TWO_TONE: TwoToneStyle = { enabled: false, secondary: "#34D399", fillEnclosed: true, tint: 35, accentSmall: true, smallRatio: 25 };
+
 export interface IconStyle {
   /** Applied to single-tone icons; `null` keeps the traced colour. */
   fill: string | null;
   strokeStyle: StrokeStyle;
   /** Stroke width in px on a 512 px icon. */
   strokeWidth: number;
+  twoTone?: TwoToneStyle;
 }
 
 export interface PresentationIcon {

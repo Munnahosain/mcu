@@ -12,7 +12,7 @@ import type { ExtractedIcon } from "@/types";
 import { triggerDownload } from "@/services/exportEngine";
 import { gridLayout, renderIconAt, renderLayer, renderPageBackground, renderSheetSvg, styledIconSvg } from "@/lib/presentation/render";
 import { builtinTemplates, cloneDoc, compactOf, makeLayer, parseTemplateFile, serializeTemplate, uid, withFreshIds } from "@/lib/presentation/templates";
-import type { IconStyle, Layer, PresentationIcon, RenderContext, SheetDoc, StrokeStyle, Template } from "@/lib/presentation/types";
+import { DEFAULT_TWO_TONE, type IconStyle, type Layer, type PresentationIcon, type RenderContext, type SheetDoc, type StrokeStyle, type Template, type TwoToneStyle } from "@/lib/presentation/types";
 import { btnCls, btnPrimaryCls, ColorField, Field, inputCls, NumberField, Panel, Segmented, SliderField } from "./StudioControls";
 import { TemplateGallery } from "./TemplateGallery";
 
@@ -149,6 +149,7 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
   const [spaceDown, setSpaceDown] = useState(false);
   const [armed, setArmed] = useState<Armed>(null);
   const [namesOpen, setNamesOpen] = useState(false);
+  const [twoTone, setTwoTone] = useState<TwoToneStyle>(DEFAULT_TWO_TONE);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryMessage, setGalleryMessage] = useState("");
   const [snapOn, setSnapOn] = useState(true);
@@ -196,7 +197,8 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
   useEffect(() => {
     const savedPresets = readJson<Template[]>(PRESETS_KEY);
     if (Array.isArray(savedPresets)) setCustoms(savedPresets);
-    const saved = readJson<{ doc: SheetDoc; templateId: string; layoutMode: "branded" | "compact" }>(STATE_KEY);
+    const saved = readJson<{ doc: SheetDoc; templateId: string; layoutMode: "branded" | "compact"; twoTone?: Partial<TwoToneStyle> }>(STATE_KEY);
+    if (saved?.twoTone) setTwoTone({ ...DEFAULT_TWO_TONE, ...saved.twoTone });
     if (saved?.doc && Array.isArray(saved.doc.layers)) {
       setHist({ past: [], present: saved.doc, future: [] });
       setTemplateId(saved.templateId || builtins[0].id);
@@ -207,9 +209,9 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
 
   useEffect(() => {
     if (!hydrated) return;
-    const timer = window.setTimeout(() => writeJson(STATE_KEY, { doc, templateId, layoutMode }), 400);
+    const timer = window.setTimeout(() => writeJson(STATE_KEY, { doc, templateId, layoutMode, twoTone }), 400);
     return () => window.clearTimeout(timer);
-  }, [doc, templateId, layoutMode, hydrated]);
+  }, [doc, templateId, layoutMode, twoTone, hydrated]);
 
   useEffect(() => {
     setOrder((prev) => {
@@ -223,10 +225,10 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
 
   /* ------------------------------------------------------------ context */
   const presIcons = useMemo<PresentationIcon[]>(() => icons.map((i) => ({ id: i.id, name: i.name, svg: i.svgContent, singleTone: !!i.color })), [icons]);
-  const style = useMemo<IconStyle>(() => ({ fill: doc.iconFill || null, strokeStyle, strokeWidth }), [doc.iconFill, strokeStyle, strokeWidth]);
+  const style = useMemo<IconStyle>(() => ({ fill: doc.iconFill || null, strokeStyle, strokeWidth, twoTone }), [doc.iconFill, strokeStyle, strokeWidth, twoTone]);
   const ctx = useMemo<RenderContext>(() => ({ icons: presIcons, order, featuredId, style, showNames: false }), [presIcons, order, featuredId, style]);
 
-  const envKey = [doc.title, doc.labelColor, order.join(","), featuredId, style.fill, style.strokeStyle, style.strokeWidth, presIcons.map((i) => `${i.id}:${i.name}`).join(",")].join("|");
+  const envKey = [doc.title, doc.labelColor, order.join(","), featuredId, style.fill, style.strokeStyle, style.strokeWidth, JSON.stringify(twoTone), presIcons.map((i) => `${i.id}:${i.name}`).join(",")].join("|");
   const markups = useMemo(() => {
     const cache = markupCache;
     const alive = new Set<string>();
@@ -849,6 +851,31 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
                   <ColorField label="Label colour" value={doc.labelColor} onChange={(v) => updateDoc({ labelColor: v }, "labelColor")} />
                 </div>
               </div>
+            </div>
+          </Panel>
+
+          <Panel title="Two-tone icons">
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-foreground">
+                <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--primary,#16c784)]" checked={twoTone.enabled} onChange={(event) => setTwoTone((t) => ({ ...t, enabled: event.target.checked }))} />
+                Use two colours
+              </label>
+              {twoTone.enabled && (
+                <>
+                  <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Main colour is the Icon fill above. The accent is applied by shape rules, no AI.</p>
+                  <ColorField label="Accent colour" value={twoTone.secondary} onChange={(v) => setTwoTone((t) => ({ ...t, secondary: v }))} />
+                  <label className="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-foreground">
+                    <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--primary,#16c784)]" checked={twoTone.fillEnclosed} onChange={(event) => setTwoTone((t) => ({ ...t, fillEnclosed: event.target.checked }))} />
+                    Tint enclosed areas
+                  </label>
+                  {twoTone.fillEnclosed && <SliderField label="Tint strength" value={twoTone.tint} min={5} max={100} suffix="%" onChange={(v) => setTwoTone((t) => ({ ...t, tint: v }))} />}
+                  <label className="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-foreground">
+                    <input type="checkbox" className="h-3.5 w-3.5 accent-[var(--primary,#16c784)]" checked={twoTone.accentSmall} onChange={(event) => setTwoTone((t) => ({ ...t, accentSmall: event.target.checked }))} />
+                    Accent small parts
+                  </label>
+                  {twoTone.accentSmall && <SliderField label="Small part size" value={twoTone.smallRatio} min={2} max={80} suffix="%" onChange={(v) => setTwoTone((t) => ({ ...t, smallRatio: v }))} />}
+                </>
+              )}
             </div>
           </Panel>
 

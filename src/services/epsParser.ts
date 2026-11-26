@@ -1336,7 +1336,8 @@ export function buildIconSvg(
   const finalW = Math.round(viewW);
   const finalH = Math.round(viewH);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${finalW} ${finalH}" width="${finalW}" height="${finalH}">\n${pathData}</svg>`;
+  // One group per icon so Illustrator / Figma / Inkscape open it as a single object.
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${finalW} ${finalH}" width="${finalW}" height="${finalH}">\n<g>\n${pathData}</g>\n</svg>`;
 }
 
 /**
