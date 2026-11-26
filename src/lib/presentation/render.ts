@@ -1,3 +1,4 @@
+import { luminance, splitTwoTone } from "./twotone";
 import type { FontFamily, IconStyle, Layer, PresentationIcon, RenderContext, SheetDoc } from "./types";
 
 const SANS = "'Plus Jakarta Sans', 'Outfit', 'Segoe UI', Arial, sans-serif";
@@ -34,26 +35,53 @@ export function parseIconSvg(svg: string): ParsedIcon {
 
 function styleInner(inner: string, unitsPerPx: number, style: IconStyle, singleTone: boolean): string {
   const recolor = singleTone && style.fill;
-  if (style.strokeStyle === "fill" && !recolor) return inner;
+  const tt = style.twoTone?.enabled ? style.twoTone : null;
+  if (style.strokeStyle === "fill" && !recolor && !tt) return inner;
+
+  // Multi-colour artwork: darkest colour becomes the main colour, every other colour the accent.
+  let darkest = "";
+  if (tt && !singleTone) {
+    let best = Infinity;
+    for (const m of inner.matchAll(/<path\b[^>]*?\sfill="(#[0-9a-fA-F]{3,6})"/g)) {
+      const lum = luminance(m[1]);
+      if (lum < best) { best = lum; darkest = m[1].toLowerCase(); }
+    }
+  }
+  const width = num(Math.max(0, style.strokeWidth) * unitsPerPx);
+
+  const draw = (attrs: string, d: string | null, paint: string, extra = "") => {
+    const withD = d == null ? attrs : attrs.replace(/\sd="[^"]*"/, ` d="${d}"`);
+    if (style.strokeStyle === "stroke") return `<path${withD}${extra} fill="none" stroke="${paint}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" />`;
+    if (style.strokeStyle === "stroke-fill") return `<path${withD}${extra} fill="${paint}" stroke="${paint}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" />`;
+    return `<path${withD}${extra} fill="${paint}" />`;
+  };
+
   return inner.replace(/<path\b([^>]*?)\/?>/g, (_m, attrs: string) => {
     const originalFill = /\sfill="([^"]*)"/.exec(attrs)?.[1] ?? "none";
     const originalStroke = /\sstroke="([^"]*)"/.exec(attrs)?.[1];
     const strokeOnlyArtwork = originalFill === "none" && !!originalStroke && originalStroke !== "none";
-    const paint = recolor ? (style.fill as string) : originalFill !== "none" ? originalFill : originalStroke || "#000000";
+    const original = originalFill !== "none" ? originalFill : originalStroke || "#000000";
+    let paint = recolor ? (style.fill as string) : original;
+    if (tt && !singleTone && darkest) paint = original.toLowerCase() === darkest ? style.fill || original : tt.secondary;
 
     if (strokeOnlyArtwork) {
       // Original line art: only recolour, never touch its own stroke weight.
       return `<path${attrs.replace(/\sstroke="[^"]*"/, ` stroke="${paint}"`)} />`;
     }
     const cleaned = attrs.replace(/\s(fill|stroke|stroke-width|stroke-linecap|stroke-linejoin)="[^"]*"/g, "");
-    const width = num(Math.max(0, style.strokeWidth) * unitsPerPx);
-    if (style.strokeStyle === "stroke") {
-      return `<path${cleaned} fill="none" stroke="${paint}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" />`;
+
+    if (tt && singleTone) {
+      const d = /\sd="([^"]*)"/.exec(cleaned)?.[1];
+      const split = d ? splitTwoTone(d, tt) : null;
+      if (split) {
+        const tint = ` fill-opacity="${num(Math.min(100, Math.max(0, tt.tint)) / 100)}"`;
+        const under = split.under.map((u) => `<path d="${u}" fill="${tt.secondary}"${tint} />`).join("");
+        const main = split.main ? draw(cleaned, split.main, paint) : "";
+        const accent = split.accent ? draw(cleaned, split.accent, tt.secondary) : "";
+        return under + main + accent;
+      }
     }
-    if (style.strokeStyle === "stroke-fill") {
-      return `<path${cleaned} fill="${paint}" stroke="${paint}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" />`;
-    }
-    return `<path${cleaned} fill="${paint}" />`;
+    return draw(cleaned, null, paint);
   });
 }
 
