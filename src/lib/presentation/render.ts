@@ -23,10 +23,14 @@ export function parseIconSvg(svg: string): ParsedIcon {
   const box = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(svg);
   const open = svg.indexOf(">", svg.indexOf("<svg"));
   const close = svg.lastIndexOf("</svg>");
+  let inner = open >= 0 && close > open ? svg.slice(open + 1, close) : "";
+  // Our own single wrapper group is dropped here; the sheet / icon writers add a named one back.
+  const wrapped = /^\s*<g>([\s\S]*)<\/g>\s*$/.exec(inner);
+  if (wrapped && !wrapped[1].includes("<g")) inner = wrapped[1];
   const parsed: ParsedIcon = {
     vw: box ? Number(box[1]) || 100 : 100,
     vh: box ? Number(box[2]) || 100 : 100,
-    inner: open >= 0 && close > open ? svg.slice(open + 1, close) : "",
+    inner,
   };
   if (parseCache.size > 800) parseCache.clear();
   parseCache.set(svg, parsed);
@@ -85,18 +89,28 @@ function styleInner(inner: string, unitsPerPx: number, style: IconStyle, singleT
   });
 }
 
-/** A standalone SVG for one icon with the fill / stroke style applied. */
+/** A safe, readable id / layer name for an icon group. */
+function groupId(name: string) {
+  const id = name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return /^[a-z_]/.test(id) ? id : `icon-${id || "x"}`;
+}
+
+/** A standalone SVG for one icon with the fill / stroke style applied, all shapes in one named group. */
 export function styledIconSvg(icon: PresentationIcon, style: IconStyle): string {
   const p = parseIconSvg(icon.svg);
   const inner = styleInner(p.inner, Math.max(p.vw, p.vh) / 512, style, icon.singleTone);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${num(p.vw)} ${num(p.vh)}" width="${Math.round(p.vw)}" height="${Math.round(p.vh)}">\n${inner}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${num(p.vw)} ${num(p.vh)}" width="${Math.round(p.vw)}" height="${Math.round(p.vh)}">\n<g id="${groupId(icon.name)}">\n${inner}</g>\n</svg>`;
 }
 
-/** Markup for one icon placed in a box (used by the sheet and by the drag ghost). */
-export function renderIconAt(icon: PresentationIcon, x: number, y: number, w: number, h: number, style: IconStyle): string {
+/** Markup for one icon placed in a box: a single group holding every shape of that icon. */
+export function renderIconAt(icon: PresentationIcon, x: number, y: number, w: number, h: number, style: IconStyle, idPrefix?: string): string {
   const p = parseIconSvg(icon.svg);
   const inner = styleInner(p.inner, Math.max(p.vw, p.vh) / 512, style, icon.singleTone);
-  return `<svg x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}" viewBox="0 0 ${num(p.vw)} ${num(p.vh)}" preserveAspectRatio="xMidYMid meet" overflow="visible">${inner}</svg>`;
+  const k = Math.min(w / p.vw, h / p.vh);
+  const tx = x + (w - p.vw * k) / 2;
+  const ty = y + (h - p.vh * k) / 2;
+  const id = idPrefix === undefined ? "" : ` id="${groupId(`${idPrefix}${icon.name}`)}"`;
+  return `<g${id} transform="translate(${num(tx)} ${num(ty)}) scale(${Math.round(k * 100000) / 100000})">${inner}</g>`;
 }
 
 /* ------------------------------------------------------------------- grid */
@@ -250,7 +264,7 @@ function layerBody(layer: Layer, doc: SheetDoc, ctx: RenderContext): { defs: str
       const bg = `<rect x="${num(layer.x)}" y="${num(layer.y)}" width="${num(layer.w)}" height="${num(layer.h)}" rx="${num(Math.min(layer.radius, layer.w / 2, layer.h / 2))}" fill="${p.fill}"${fo}${stroke}/>`;
       if (!icon) return { defs: p.defs, body: bg };
       const px = layer.w * pad, py = layer.h * pad;
-      return { defs: p.defs, body: bg + renderIconAt(icon, layer.x + px, layer.y + py, layer.w - px * 2, layer.h - py * 2, ctx.style) };
+      return { defs: p.defs, body: bg + renderIconAt(icon, layer.x + px, layer.y + py, layer.w - px * 2, layer.h - py * 2, ctx.style, "featured-") };
     }
     case "pattern":
       return patternMarkup(layer);
@@ -285,7 +299,7 @@ function layerBody(layer: Layer, doc: SheetDoc, ctx: RenderContext): { defs: str
         }
         const areaH = s * (1 - labelH);
         const p = s * pad;
-        out += renderIconAt(icon, cell.x + p, cell.y + p, s - p * 2, areaH - p * 2 + (labelH ? p * 0.4 : 0), ctx.style);
+        out += renderIconAt(icon, cell.x + p, cell.y + p, s - p * 2, areaH - p * 2 + (labelH ? p * 0.4 : 0), ctx.style, "");
         if (layer.showLabels || ctx.showNames) {
           const fs = s * 0.085;
           out += `<text x="${num(cell.x + s / 2)}" y="${num(cell.y + s - s * 0.1)}" font-family="${esc(SANS)}" font-size="${num(fs)}" font-weight="600" text-anchor="middle" fill="${esc(doc.labelColor)}">${esc(fitText(icon.name, Math.max(6, Math.floor(s / (fs * 0.62)))))}</text>`;
