@@ -2,16 +2,16 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 import { enforceRateLimit } from '@/server/auth/rate-limit';
 import {
-  callVisionProvider,
-  detectProvider,
+  AllKeysExhaustedError,
+  generateWithFailover,
   getFriendlyProviderMessage,
   getStatusCode,
+  NoApiKeyError,
   prepareImage,
-  resolveUserApiKey,
 } from '@/server/services/vision-service';
 import { incrementUsage } from '@/server/services/usage-service';
 import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
-import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
+import { getFirstFeatureFlagDenial } from '@/server/services/feature-flag-service';
 import { getVectorFormat, prepareVectorPreview, VectorPreviewError } from '@/server/services/vector-preview';
 
 export const maxDuration = 60;
@@ -51,7 +51,50 @@ ${negativeKeywords ? `7. Do not use these keywords: ${negativeKeywords}.` : ''}
 8. Return ONLY the raw JSON object — no backticks, no markdown, no explanation.`;
 }
 
+/** Parses model output, recovering what it can when the JSON was cut off. */
+function parseMetadataResponse(responseText: string): Record<string, unknown> {
+  const clean = responseText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    return JSON.parse(clean);
+  } catch {
+    // fall through
+  }
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch {
+      // fall through
+    }
+  }
+
+  const readString = (field: string) => {
+    const m = clean.match(new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"?`));
+    if (!m) return undefined;
+    try {
+      return JSON.parse(`"${m[1].replace(/\\$/, '')}"`) as string;
+    } catch {
+      return m[1];
+    }
+  };
+  const title = readString('title');
+  if (!title) throw new Error(`AI returned non-JSON output: ${responseText.slice(0, 180)}`);
+
+  let keywords: string[] = [];
+  const kwBlock = clean.match(/"keywords"\s*:\s*\[([\s\S]*)/);
+  if (kwBlock) {
+    keywords = [...kwBlock[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+  }
+  return {
+    title,
+    description: readString('description') || '',
+    keywords,
+    category: readString('category') || 'General',
+  };
+}
+
 export async function POST(req: Request) {
+  const deadlineAt = Date.now() + 52_000;
   let creditReserved = false;
   let authenticatedUserId: string | null = null;
   try {
@@ -60,15 +103,14 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Authentication required to generate metadata.' }, { status: 401 });
     }
-    const [featureDenial, operationDenial] = await Promise.all([
-      getFeatureFlagDenial(userId, 'ai_tools', 'AI generation'),
-      getFeatureFlagDenial(userId, 'metadata_generation', 'Metadata generation'),
+    const denial = await getFirstFeatureFlagDenial(userId, [
+      { key: 'ai_tools', label: 'AI generation' },
+      { key: 'metadata_generation', label: 'Metadata generation' },
     ]);
-    if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
-    if (operationDenial) return NextResponse.json({ success: false, error: operationDenial }, { status: 403 });
+    if (denial) return NextResponse.json({ success: false, error: denial.error }, { status: 403 });
 
     const rateLimitError = enforceRateLimit(req, userId, {
-      limit: 20,
+      limit: 120,
       windowMs: 60 * 1000,
       keyPrefix: 'generate',
     });
@@ -76,9 +118,9 @@ export async function POST(req: Request) {
 
     const formData = await req.formData();
     const image = formData.get('image') as File | null;
-    let apiKey = (formData.get('apiKey') as string | null)?.trim() || '';
-    let providerHint = (formData.get('provider') as string) || 'Groq';
-    let modelHint = (formData.get('model') as string) || '';
+    const clientKey = (formData.get('apiKey') as string | null)?.trim() || '';
+    const providerHint = (formData.get('provider') as string) || 'Groq';
+    const modelHint = (formData.get('model') as string) || '';
 
     const titleLength = Math.min(Math.max(parseInt((formData.get('titleLength') as string) || '200', 10), 10), 500);
     const descriptionLength = Math.min(Math.max(parseInt((formData.get('descriptionLength') as string) || '150', 10), 50), 500);
@@ -93,37 +135,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'No image provided.' }, { status: 400 });
     }
 
-    // Resolve API key server-side from stored credentials if not provided directly
-    if (!apiKey && userId) {
-      const serverKey = await resolveUserApiKey(userId, providerHint);
-      if (serverKey) {
-        apiKey = serverKey.apiKey;
-        providerHint = serverKey.provider;
-        if (!modelHint && serverKey.model) {
-          modelHint = serverKey.model;
-        }
-      }
-    }
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: `No API key found for ${providerHint}. Please add your API key in Settings.` },
-        { status: 400 }
-      );
-    }
-
     const buffer = Buffer.from(await image.arrayBuffer());
     const vectorFormat = getVectorFormat(image.name);
     const imageBuffer = vectorFormat
       ? (await prepareVectorPreview(buffer, image.name)).buffer
       : buffer;
     const { base64, dataUrl } = await prepareImage(imageBuffer, 512, 65);
-    const provider = detectProvider(apiKey, providerHint);
-
     await consumeCredits(userId, 1, 'AI metadata generation', 'metadata_generation', { usesOwnApiKey: true });
     creditReserved = true;
 
-    console.log(`[generate] provider=${provider}, model=${modelHint}, title=${titleLength}, description=${descriptionLength}, kw=${keywordsCount}, platform=${platform}`);
+    console.log(`[generate] provider=${providerHint}, model=${modelHint}, title=${titleLength}, description=${descriptionLength}, kw=${keywordsCount}, platform=${platform}`);
 
     const prompt = buildPrompt(
       titleLength,
@@ -136,28 +157,27 @@ export async function POST(req: Request) {
       isVideo
     );
 
-    const responseText = await callVisionProvider({
-      provider,
-      model: modelHint,
-      apiKey,
+    // Room for the whole JSON: title + description + keywords (+ overhead). Too small a budget cut answers off.
+    const maxTokens = Math.min(
+      Math.max(Math.round(300 + keywordsCount * 6 + titleLength / 3 + descriptionLength / 3), 600),
+      1200
+    );
+
+    const result = await generateWithFailover({
+      userId,
+      preferredProvider: providerHint,
+      preferredModel: modelHint,
+      clientKey: clientKey || undefined,
+      deadlineAt,
       prompt,
       base64,
       dataUrl,
       jsonMode: true,
-      maxTokens: 600,
+      maxTokens,
       temperature: 0.1,
     });
 
-    // Parse JSON response safely
-    let metadata: Record<string, unknown>;
-    try {
-      const clean = responseText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-      metadata = JSON.parse(clean);
-    } catch {
-      const match = responseText.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error(`AI returned non-JSON output: ${responseText.slice(0, 180)}`);
-      metadata = JSON.parse(match[0]);
-    }
+    const metadata = parseMetadataResponse(result.text);
 
     // Normalize keywords
     if (typeof metadata.keywords === 'string') {
@@ -196,13 +216,24 @@ export async function POST(req: Request) {
       incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate] usage credits error:', usageError)),
     ]);
 
-    return NextResponse.json({ success: true, metadata, previewDataUrl: vectorFormat ? dataUrl : undefined });
+    return NextResponse.json({
+      success: true,
+      metadata,
+      provider: result.provider,
+      previewDataUrl: vectorFormat ? dataUrl : undefined,
+    });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
       await refundCredits(authenticatedUserId, 1, 'Failed AI metadata generation refund', 'metadata_generation', { usesOwnApiKey: true }).catch((refundError) => console.error('[generate] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
+    if (error instanceof AllKeysExhaustedError) {
+      return NextResponse.json({ success: false, error: error.message, code: error.code, retryAt: error.retryAt }, { status: 429 });
+    }
+    if (error instanceof NoApiKeyError) {
+      return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 400 });
     }
     if (error instanceof VectorPreviewError) {
       return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 422 });

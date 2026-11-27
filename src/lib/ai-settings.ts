@@ -7,6 +7,8 @@ export type StoredProviderKey = {
   provider: string;
   lastFour?: string;
   model?: string;
+  disabled?: boolean;
+  cooldownUntil?: string;
 };
 
 const KEYS_STORAGE = "mcustock_provider_keys";

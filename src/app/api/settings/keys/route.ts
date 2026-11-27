@@ -38,6 +38,10 @@ export async function GET(req: Request) {
       provider: item.provider,
       model: item.model,
       lastFour: item.lastFour,
+      disabled: Boolean(item.disabled),
+      cooldownUntil: item.cooldownUntil && new Date(item.cooldownUntil).getTime() > Date.now()
+        ? new Date(item.cooldownUntil).toISOString()
+        : undefined,
     })),
   });
 }
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
     const fingerprint = crypto.createHash('sha256').update(key).digest('hex');
     const saved = await ProviderKey.findOneAndUpdate(
       { userId, provider, fingerprint },
-      { userId, provider, encryptedKey, fingerprint, lastFour: key.slice(-4), model: body.model || '' },
+      { userId, provider, encryptedKey, fingerprint, lastFour: key.slice(-4), model: body.model || '', disabled: false, cooldownUntil: null, lastError: '' },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     ).lean();
     return NextResponse.json({ success: true, key: { id: String(saved._id), provider: saved.provider, lastFour: saved.lastFour, model: saved.model } });

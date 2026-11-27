@@ -2,21 +2,22 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 import { enforceRateLimit } from '@/server/auth/rate-limit';
 import {
-  callVisionProvider,
-  detectProvider,
+  AllKeysExhaustedError,
+  generateWithFailover,
   getFriendlyProviderMessage,
   getStatusCode,
+  NoApiKeyError,
   prepareImage,
-  resolveUserApiKey,
 } from '@/server/services/vision-service';
 import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
-import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
+import { getFirstFeatureFlagDenial } from '@/server/services/feature-flag-service';
 import { incrementUsage } from '@/server/services/usage-service';
 import { getVectorFormat, prepareVectorPreview, VectorPreviewError } from '@/server/services/vector-preview';
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  const deadlineAt = Date.now() + 52_000;
   let creditReserved = false;
   let authenticatedUserId: string | null = null;
   try {
@@ -25,15 +26,14 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Authentication required to generate prompts.' }, { status: 401 });
     }
-    const [featureDenial, operationDenial] = await Promise.all([
-      getFeatureFlagDenial(userId, 'ai_tools', 'AI generation'),
-      getFeatureFlagDenial(userId, 'prompt_generation', 'Prompt generation'),
+    const denial = await getFirstFeatureFlagDenial(userId, [
+      { key: 'ai_tools', label: 'AI generation' },
+      { key: 'prompt_generation', label: 'Prompt generation' },
     ]);
-    if (featureDenial) return NextResponse.json({ success: false, error: featureDenial }, { status: 403 });
-    if (operationDenial) return NextResponse.json({ success: false, error: operationDenial }, { status: 403 });
+    if (denial) return NextResponse.json({ success: false, error: denial.error }, { status: 403 });
 
     const rateLimitError = enforceRateLimit(req, userId, {
-      limit: 20,
+      limit: 120,
       windowMs: 60 * 1000,
       keyPrefix: 'generate-prompt',
     });
@@ -41,9 +41,9 @@ export async function POST(req: Request) {
 
     const formData = await req.formData();
     const image = formData.get('image') as File | null;
-    let apiKey = (formData.get('apiKey') as string | null)?.trim() || '';
-    let providerHint = (formData.get('provider') as string) || 'Groq';
-    let modelHint = (formData.get('model') as string) || '';
+    const clientKey = (formData.get('apiKey') as string | null)?.trim() || '';
+    const providerHint = (formData.get('provider') as string) || 'Groq';
+    const modelHint = (formData.get('model') as string) || '';
     const promptLength = Math.min(Math.max(parseInt((formData.get('promptLength') as string) || '600', 10), 100), 1500);
 
     const usePrefix = formData.get('usePrefix') === 'true';
@@ -58,37 +58,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'No image provided.' }, { status: 400 });
     }
 
-    // Resolve API key server-side from stored credentials if not provided directly
-    if (!apiKey && userId) {
-      const serverKey = await resolveUserApiKey(userId, providerHint);
-      if (serverKey) {
-        apiKey = serverKey.apiKey;
-        providerHint = serverKey.provider;
-        if (!modelHint && serverKey.model) {
-          modelHint = serverKey.model;
-        }
-      }
-    }
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: `No API key found for ${providerHint}. Please add your API key in Settings.` },
-        { status: 400 }
-      );
-    }
-
     const buffer = Buffer.from(await image.arrayBuffer());
     const vectorFormat = getVectorFormat(image.name);
     const imageBuffer = vectorFormat
       ? (await prepareVectorPreview(buffer, image.name)).buffer
       : buffer;
     const { base64, dataUrl } = await prepareImage(imageBuffer, 768, 75);
-    const provider = detectProvider(apiKey, providerHint);
-
     await consumeCredits(userId, 1, 'AI prompt generation', 'prompt_generation', { usesOwnApiKey: true });
     creditReserved = true;
 
-    console.log(`[generate-prompt] provider=${provider}, model=${modelHint}, length=${promptLength}`);
+    console.log(`[generate-prompt] provider=${providerHint}, model=${modelHint}, length=${promptLength}`);
 
     // Build instruction modifiers cleanly
     const extras: string[] = [];
@@ -117,10 +96,12 @@ OUTPUT RULES:
 - Be specific and evocative — write like a professional art director
 - Ensure total character count is close to ${promptLength}`;
 
-    const responseText = await callVisionProvider({
-      provider,
-      model: modelHint,
-      apiKey,
+    const { text: responseText } = await generateWithFailover({
+      userId,
+      preferredProvider: providerHint,
+      preferredModel: modelHint,
+      clientKey: clientKey || undefined,
+      deadlineAt,
       prompt: systemPrompt,
       base64,
       dataUrl,
@@ -141,6 +122,12 @@ OUTPUT RULES:
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });
+    }
+    if (error instanceof AllKeysExhaustedError) {
+      return NextResponse.json({ success: false, error: error.message, code: error.code, retryAt: error.retryAt }, { status: 429 });
+    }
+    if (error instanceof NoApiKeyError) {
+      return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 400 });
     }
     if (error instanceof VectorPreviewError) {
       return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 422 });
