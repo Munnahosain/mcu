@@ -40,11 +40,11 @@ export function compactOf(doc: SheetDoc): SheetDoc {
 
 const LAYER_TYPES: LayerType[] = ["rect", "ellipse", "triangle", "line", "text", "grid", "featured", "pattern", "image"];
 const NUMERIC_KEYS = [
-  "x", "y", "w", "h", "rotation", "opacity", "strokeWidth", "radius", "gradAngle", "fillOpacity", "dash", "shadow", "blur",
+  "x", "y", "w", "h", "rotation", "opacity", "strokeWidth", "radius", "gradAngle", "fillOpacity", "dash",
   "fontSize", "fontWeight", "letterSpacing", "lineHeight", "patternGap", "cols", "rows", "gap", "cellPad", "cellFillOpacity",
-  "cellStrokeWidth", "cellDash", "cellRadius", "cellShadow", "cellOffset",
+  "cellStrokeWidth", "cellDash", "cellRadius", "cellOffset",
 ] as const;
-const COLOR_KEYS = ["fill", "stroke", "fill2", "shadowColor", "cellFill", "cellStroke", "cellOffsetColor"] as const;
+const COLOR_KEYS = ["fill", "stroke", "fill2", "cellFill", "cellStroke", "cellOffsetColor"] as const;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const num = (v: unknown, fallback: number, min = -1e6, max = 1e6) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback);

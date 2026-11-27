@@ -51,7 +51,7 @@ function gridLayer(p: Palette, x: number, y: number, w: number, h: number): Laye
   return makeLayer({
     type: "grid", name: "Icons Grid Area", x, y, w, h,
     cols: 0, rows: 0, gap: 40, cellPad: 22,
-    cellFill: p.tile, cellStroke: p.tileStroke, cellStrokeWidth: 3, cellRadius: 36, cellShadow: isLightColor(p.card) ? 16 : 0,
+    cellFill: p.tile, cellStroke: p.tileStroke, cellStrokeWidth: 3, cellRadius: 36,
     showLabels: false, fill: "",
   });
 }
@@ -61,16 +61,16 @@ function sideLayers(p: Palette): Layer[] {
   const featSize = cardW - 220;
   const featFill = isLightColor(p.icon) ? p.tile : "#FFFFFF";
   return [
-    makeLayer({ type: "rect", name: "Brand Card", x: cardX, y: cardY, w: cardW, h: cardH, fill: p.dark, fill2: mix(p.dark, p.accent, 0.22), gradAngle: 150, radius: p.radius, shadow: 28 }),
+    makeLayer({ type: "rect", name: "Brand Card", x: cardX, y: cardY, w: cardW, h: cardH, fill: p.dark, fill2: mix(p.dark, p.accent, 0.22), gradAngle: 150, radius: p.radius }),
     makeLayer({ type: "pattern", name: "Card Texture", x: cardX, y: cardY, w: cardW, h: cardH, fill: p.onDark, pattern: "dots", patternGap: 52, strokeWidth: 5, radius: p.radius, opacity: 0.08 }),
     makeLayer({ type: "rect", name: "Featured Frame", x: cardX + 134, y: cardY + 134, w: featSize, h: featSize, fill: "", stroke: p.accent, strokeWidth: 8, radius: 70, rotation: 5 }),
-    makeLayer({ type: "featured", name: "Featured Icon", x: cardX + 110, y: cardY + 110, w: featSize, h: featSize, fill: featFill, radius: 70, cellPad: 14, shadow: 46 }),
+    makeLayer({ type: "featured", name: "Featured Icon", x: cardX + 110, y: cardY + 110, w: featSize, h: featSize, fill: featFill, radius: 70, cellPad: 14 }),
     makeLayer({ type: "text", name: "Title Text", text: "{title}", x: cardX + 60, y: cardY + cardW - 20, w: cardW - 120, h: 160, fontSize: 112, fontWeight: 800, letterSpacing: 2, align: "center", fill: p.onDark }),
     makeLayer({ type: "text", name: "Subtitle", text: "PREMIUM ICON PACK", x: cardX + 60, y: cardY + cardW + 130, w: cardW - 120, h: 80, fontSize: 38, fontWeight: 600, letterSpacing: 14, align: "center", fill: mix(p.onDark, p.accent, 0.55) }),
     makeLayer({ type: "line", name: "Accent Line", x: cardX + cardW / 2 - 200, y: cardY + cardW + 270, w: 400, h: 20, stroke: p.accent, strokeWidth: 8 }),
-    makeLayer({ type: "rect", name: "Count Badge", x: cardX + 150, y: cardY + cardH - 260, w: cardW - 300, h: 150, fill: p.accent, radius: 75, shadow: 30, shadowColor: p.accent }),
+    makeLayer({ type: "rect", name: "Count Badge", x: cardX + 150, y: cardY + cardH - 260, w: cardW - 300, h: 150, fill: p.accent, radius: 75}),
     makeLayer({ type: "text", name: "Badge Text", text: "{n} VECTOR ICONS", x: cardX + 150, y: cardY + cardH - 260, w: cardW - 300, h: 150, fontSize: 60, fontWeight: 800, letterSpacing: 3, align: "center", fill: isLightColor(p.accent) ? p.dark : "#FFFFFF" }),
-    makeLayer({ type: "rect", name: "Grid Card", x: 1450, y: cardY, w: SHEET_W - 1450 - 100, h: cardH, fill: p.card, stroke: p.cardStroke, strokeWidth: 4, radius: p.radius, shadow: 22 }),
+    makeLayer({ type: "rect", name: "Grid Card", x: 1450, y: cardY, w: SHEET_W - 1450 - 100, h: cardH, fill: p.card, stroke: p.cardStroke, strokeWidth: 4, radius: p.radius }),
     gridLayer(p, 1450 + 110, cardY + 110, SHEET_W - 1450 - 100 - 220, cardH - 220),
   ];
 }
@@ -81,14 +81,14 @@ function topLayers(p: Palette): Layer[] {
   const gridY = m + headH + 100;
   const gridH = SHEET_H - m * 2 - headH - 100;
   return [
-    makeLayer({ type: "rect", name: "Header Card", x: m, y: m, w: SHEET_W - m * 2, h: headH, fill: p.dark, fill2: mix(p.dark, p.accent, 0.25), gradAngle: 0, radius: p.radius, shadow: 24 }),
+    makeLayer({ type: "rect", name: "Header Card", x: m, y: m, w: SHEET_W - m * 2, h: headH, fill: p.dark, fill2: mix(p.dark, p.accent, 0.25), gradAngle: 0, radius: p.radius }),
     makeLayer({ type: "pattern", name: "Header Texture", x: m, y: m, w: SHEET_W - m * 2, h: headH, fill: p.onDark, pattern: "dots", patternGap: 52, strokeWidth: 5, radius: p.radius, opacity: 0.08 }),
-    makeLayer({ type: "featured", name: "Featured Icon", x: m + 70, y: m + 50, w: 320, h: 320, fill: isLightColor(p.icon) ? p.tile : "#FFFFFF", radius: 60, cellPad: 14, shadow: 36 }),
+    makeLayer({ type: "featured", name: "Featured Icon", x: m + 70, y: m + 50, w: 320, h: 320, fill: isLightColor(p.icon) ? p.tile : "#FFFFFF", radius: 60, cellPad: 14 }),
     makeLayer({ type: "text", name: "Title Text", text: "{title}", x: m + 500, y: m + 60, w: 2800, h: 200, fontSize: 150, fontWeight: 800, letterSpacing: 2, align: "left", fill: p.onDark }),
     makeLayer({ type: "text", name: "Subtitle", text: "PREMIUM ICON PACK", x: m + 500, y: m + 250, w: 2800, h: 90, fontSize: 42, fontWeight: 600, letterSpacing: 14, align: "left", fill: mix(p.onDark, p.accent, 0.55) }),
-    makeLayer({ type: "rect", name: "Count Badge", x: SHEET_W - m - 160 - 760, y: m + headH / 2 - 85, w: 760, h: 170, fill: p.accent, radius: 85, shadow: 30, shadowColor: p.accent }),
+    makeLayer({ type: "rect", name: "Count Badge", x: SHEET_W - m - 160 - 760, y: m + headH / 2 - 85, w: 760, h: 170, fill: p.accent, radius: 85}),
     makeLayer({ type: "text", name: "Badge Text", text: "{n} VECTOR ICONS", x: SHEET_W - m - 160 - 760, y: m + headH / 2 - 85, w: 760, h: 170, fontSize: 58, fontWeight: 800, letterSpacing: 3, align: "center", fill: isLightColor(p.accent) ? p.dark : "#FFFFFF" }),
-    makeLayer({ type: "rect", name: "Grid Card", x: m, y: gridY, w: SHEET_W - m * 2, h: gridH, fill: p.card, stroke: p.cardStroke, strokeWidth: 4, radius: p.radius, shadow: 22 }),
+    makeLayer({ type: "rect", name: "Grid Card", x: m, y: gridY, w: SHEET_W - m * 2, h: gridH, fill: p.card, stroke: p.cardStroke, strokeWidth: 4, radius: p.radius }),
     gridLayer(p, m + 110, gridY + 100, SHEET_W - m * 2 - 220, gridH - 200),
   ];
 }

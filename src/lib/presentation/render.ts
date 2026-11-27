@@ -150,7 +150,7 @@ export function gridLayout(layer: Layer, count: number): GridLayout {
   return { cols, rows, size, capacity: cols * rows, cells };
 }
 
-/* ------------------------------------------------- paint, shadow, gradient */
+/* ------------------------------------------------------- paint, gradient */
 
 function fillOrNone(value: string) {
   return value ? esc(value) : "none";
@@ -163,11 +163,6 @@ function gradientDef(id: string, from: string, to: string, angle: number, x: num
   const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
   const cx = x + w / 2, cy = y + h / 2;
   return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(cx - dx * half)}" y1="${num(cy - dy * half)}" x2="${num(cx + dx * half)}" y2="${num(cy + dy * half)}"><stop offset="0" stop-color="${esc(from)}"/><stop offset="1" stop-color="${esc(to)}"/></linearGradient>`;
-}
-
-function shadowFilter(id: string, strength: number, color: string, region: string) {
-  const blur = strength * 0.6;
-  return `<filter id="${id}" ${region} color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="${num(blur)}"/><feOffset dx="0" dy="${num(strength * 0.5)}" result="o"/><feFlood flood-color="${esc(color)}" flood-opacity="0.32"/><feComposite in2="o" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
 }
 
 interface Paint { defs: string; fill: string }
@@ -281,9 +276,8 @@ function layerBody(layer: Layer, doc: SheetDoc, ctx: RenderContext): { defs: str
       const cellStrokeOn = !!layer.cellStroke && (layer.cellStrokeWidth ?? 0) > 0;
       const cellFo = layer.cellFillOpacity != null && layer.cellFillOpacity < 1 ? ` fill-opacity="${num(layer.cellFillOpacity)}"` : "";
       const cellDash = layer.cellDash && layer.cellDash > 0 ? ` stroke-dasharray="${num(layer.cellDash)} ${num(layer.cellDash * 0.7)}"` : "";
-      const shadowId = `cs-${layer.id}`;
-      const defs = layer.cellShadow && layer.cellShadow > 0 ? shadowFilter(shadowId, layer.cellShadow, "#000000", `x="-25%" y="-25%" width="150%" height="160%"`) : "";
-      const filterAttr = defs ? ` filter="url(#${shadowId})"` : "";
+      const defs = "";
+      const filterAttr = "";
       let out = "";
       shown.slice(0, lay.capacity).forEach((icon, i) => {
         const cell = lay.cells[i];
@@ -316,16 +310,7 @@ export function renderLayer(layer: Layer, doc: SheetDoc, ctx: RenderContext): st
   if (!body) return "";
 
   const attrs: string[] = [];
-  let extraDefs = defs;
-  const margin = Math.max((layer.blur ?? 0) * 3, (layer.shadow ?? 0) * 3) + 24;
-  const region = `filterUnits="userSpaceOnUse" x="${num(layer.x - margin)}" y="${num(layer.y - margin)}" width="${num(layer.w + margin * 2)}" height="${num(layer.h + margin * 2)}"`;
-  if (layer.blur && layer.blur > 0) {
-    extraDefs += `<filter id="bl-${layer.id}" ${region}><feGaussianBlur stdDeviation="${num(layer.blur)}"/></filter>`;
-    attrs.push(`filter="url(#bl-${layer.id})"`);
-  } else if (layer.shadow && layer.shadow > 0 && layer.type !== "grid") {
-    extraDefs += shadowFilter(`sh-${layer.id}`, layer.shadow, layer.shadowColor || "#000000", region);
-    attrs.push(`filter="url(#sh-${layer.id})"`);
-  }
+  const extraDefs = defs;
   if (layer.opacity < 1) attrs.push(`opacity="${num(layer.opacity)}"`);
   if (layer.rotation) attrs.push(`transform="rotate(${num(layer.rotation)} ${num(layer.x + layer.w / 2)} ${num(layer.y + layer.h / 2)})"`);
   return `<g id="${esc(layer.id)}"${attrs.length ? ` ${attrs.join(" ")}` : ""}>${extraDefs ? `<defs>${extraDefs}</defs>` : ""}${body}</g>`;

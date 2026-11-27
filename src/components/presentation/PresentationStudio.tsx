@@ -998,18 +998,10 @@ export function PresentationStudio({ icons, sheetName, strokeStyle, strokeWidth,
                     <SliderField label="Tile border width" value={single.cellStrokeWidth ?? 0} min={0} max={20} onChange={(v) => updateSelected({ cellStrokeWidth: v }, "csw")} suffix="px" />
                     <SliderField label="Tile fill opacity" value={Math.round((single.cellFillOpacity ?? 1) * 100)} min={0} max={100} onChange={(v) => updateSelected({ cellFillOpacity: v / 100 }, "cfo")} suffix="%" />
                     <SliderField label="Tile dashed border" value={single.cellDash ?? 0} min={0} max={60} onChange={(v) => updateSelected({ cellDash: v }, "cd")} suffix="px" />
-                    <SliderField label="Tile shadow" value={single.cellShadow ?? 0} min={0} max={60} onChange={(v) => updateSelected({ cellShadow: v }, "csh")} />
                     <SliderField label="Tile hard offset" value={single.cellOffset ?? 0} min={0} max={60} onChange={(v) => updateSelected({ cellOffset: v }, "co")} suffix="px" />
                     {(single.cellOffset ?? 0) > 0 && <ColorField label="Offset colour" value={single.cellOffsetColor ?? "#000000"} onChange={(v) => updateSelected({ cellOffsetColor: v }, "coc")} />}
                     <SliderField label="Tile corner radius" value={single.cellRadius ?? 0} min={0} max={200} onChange={(v) => updateSelected({ cellRadius: v }, "cr")} />
                     <label className="flex items-center gap-2 text-[11px] font-bold text-foreground"><input type="checkbox" className="h-3.5 w-3.5 accent-[var(--primary,#16c784)]" checked={!!single.showLabels} onChange={(event) => updateSelected({ showLabels: event.target.checked }, "sl")} />Show icon names</label>
-                  </>
-                )}
-                {single.type !== "grid" && (
-                  <>
-                    <SliderField label="Shadow" value={single.shadow ?? 0} min={0} max={100} onChange={(v) => updateSelected({ shadow: v }, "shd")} />
-                    {(single.shadow ?? 0) > 0 && <ColorField label="Shadow colour" value={single.shadowColor ?? "#000000"} onChange={(v) => updateSelected({ shadowColor: v }, "shc")} />}
-                    <SliderField label="Blur (glow)" value={single.blur ?? 0} min={0} max={400} onChange={(v) => updateSelected({ blur: v }, "blr")} suffix="px" />
                   </>
                 )}
                 <SliderField label="Rotation" value={single.rotation} min={-180} max={180} onChange={(v) => updateSelected({ rotation: v }, "rot")} suffix="°" />

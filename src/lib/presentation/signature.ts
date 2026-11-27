@@ -24,16 +24,13 @@ function template(id: string, name: string, d: SheetDoc): Template {
 
 function aurora(): Template {
   const layers: Layer[] = [
-    makeLayer({ type: "ellipse", name: "Glow Violet", x: -400, y: -500, w: 2400, h: 2300, fill: "#7C3AED", opacity: 0.6, blur: 300 }),
-    makeLayer({ type: "ellipse", name: "Glow Cyan", x: 3300, y: 1200, w: 2600, h: 2300, fill: "#06B6D4", opacity: 0.45, blur: 320 }),
-    makeLayer({ type: "ellipse", name: "Glow Pink", x: 1900, y: -800, w: 1800, h: 1500, fill: "#EC4899", opacity: 0.32, blur: 280 }),
     makeLayer({ type: "pattern", name: "Dot Texture", x: 0, y: 0, w: W, h: H, fill: "#FFFFFF", pattern: "dots", patternGap: 56, strokeWidth: 5, opacity: 0.07 }),
     makeLayer({ type: "rect", name: "Brand Glass", x: 100, y: 100, w: 1250, h: 2400, fill: "#FFFFFF", fillOpacity: 0.07, stroke: "#4B4585", strokeWidth: 4, radius: 100 }),
-    makeLayer({ type: "featured", name: "Featured Icon", x: 215, y: 215, w: 1020, h: 1020, fill: "#7C3AED", fill2: "#EC4899", gradAngle: 135, radius: 150, cellPad: 16, shadow: 70, shadowColor: "#7C3AED" }),
+    makeLayer({ type: "featured", name: "Featured Icon", x: 215, y: 215, w: 1020, h: 1020, fill: "#7C3AED", fill2: "#EC4899", gradAngle: 135, radius: 150, cellPad: 16 }),
     makeLayer({ type: "text", name: "Title Text", text: "{title}", x: 140, y: 1330, w: 1170, h: 200, fontSize: 120, fontWeight: 800, letterSpacing: 2, align: "center", fill: "#FFFFFF" }),
     makeLayer({ type: "text", name: "Subtitle", text: "PREMIUM ICON PACK", x: 140, y: 1500, w: 1170, h: 100, fontSize: 40, fontWeight: 600, letterSpacing: 14, align: "center", fill: "#A5B4FC" }),
     makeLayer({ type: "line", name: "Accent Line", x: 475, y: 1640, w: 400, h: 20, stroke: "#22D3EE", strokeWidth: 8 }),
-    makeLayer({ type: "rect", name: "Count Badge", x: 250, y: 2180, w: 950, h: 160, fill: "#06B6D4", fill2: "#7C3AED", gradAngle: 0, radius: 80, shadow: 40, shadowColor: "#06B6D4" }),
+    makeLayer({ type: "rect", name: "Count Badge", x: 250, y: 2180, w: 950, h: 160, fill: "#06B6D4", fill2: "#7C3AED", gradAngle: 0, radius: 80 }),
     makeLayer({ type: "text", name: "Badge Text", text: "{n} VECTOR ICONS", x: 250, y: 2180, w: 950, h: 160, fontSize: 56, fontWeight: 800, letterSpacing: 4, align: "center", fill: "#FFFFFF" }),
     makeLayer({ type: "rect", name: "Grid Glass", x: 1450, y: 100, w: 3450, h: 2400, fill: "#FFFFFF", fillOpacity: 0.06, stroke: "#4B4585", strokeWidth: 4, radius: 100 }),
     gridLayer({ x: 1560, y: 210, w: 3230, h: 2180, cellFill: "#FFFFFF", cellFillOpacity: 0.07, cellStroke: "#5B54A0", cellStrokeWidth: 3, cellRadius: 44 }),
@@ -47,15 +44,15 @@ function neoBrutal(): Template {
   const ink = "#111111";
   const layers: Layer[] = [
     makeLayer({ type: "pattern", name: "Grid Paper", x: 0, y: 0, w: W, h: H, fill: ink, pattern: "grid", patternGap: 100, strokeWidth: 2, opacity: 0.07 }),
-    makeLayer({ type: "rect", name: "Header Shadow", x: 126, y: 126, w: 4800, h: 520, fill: ink, radius: 44 }),
+    makeLayer({ type: "rect", name: "Header Offset", x: 126, y: 126, w: 4800, h: 520, fill: ink, radius: 44 }),
     makeLayer({ type: "rect", name: "Header Block", x: 100, y: 100, w: 4800, h: 520, fill: "#FFE14D", stroke: ink, strokeWidth: 12, radius: 44 }),
     makeLayer({ type: "text", name: "Title Text", text: "{title}", x: 220, y: 100, w: 2800, h: 520, fontSize: 230, fontWeight: 900, letterSpacing: -4, align: "left", fill: ink }),
-    makeLayer({ type: "rect", name: "Featured Shadow", x: 3126, y: 186, w: 440, h: 440, fill: ink, radius: 64 }),
+    makeLayer({ type: "rect", name: "Featured Offset", x: 3126, y: 186, w: 440, h: 440, fill: ink, radius: 64 }),
     makeLayer({ type: "featured", name: "Featured Icon", x: 3100, y: 160, w: 440, h: 440, fill: "#FFFFFF", stroke: ink, strokeWidth: 12, radius: 64, cellPad: 12 }),
-    makeLayer({ type: "rect", name: "Sticker Shadow", x: 3786, y: 236, w: 1080, h: 320, fill: ink, radius: 160, rotation: -4 }),
+    makeLayer({ type: "rect", name: "Sticker Offset", x: 3786, y: 236, w: 1080, h: 320, fill: ink, radius: 160, rotation: -4 }),
     makeLayer({ type: "rect", name: "Sticker", x: 3770, y: 220, w: 1080, h: 320, fill: "#FF6B9D", stroke: ink, strokeWidth: 12, radius: 160, rotation: -4 }),
     makeLayer({ type: "text", name: "Sticker Text", text: "{n} VECTOR\nICONS", x: 3770, y: 220, w: 1080, h: 320, fontSize: 82, fontWeight: 900, letterSpacing: 2, lineHeight: 105, align: "center", fill: ink, rotation: -4 }),
-    makeLayer({ type: "rect", name: "Grid Shadow", x: 126, y: 746, w: 4800, h: 1730, fill: ink, radius: 44 }),
+    makeLayer({ type: "rect", name: "Grid Offset", x: 126, y: 746, w: 4800, h: 1730, fill: ink, radius: 44 }),
     makeLayer({ type: "rect", name: "Grid Card", x: 100, y: 720, w: 4800, h: 1730, fill: "#FFFFFF", stroke: ink, strokeWidth: 12, radius: 44 }),
     gridLayer({ x: 200, y: 820, w: 4600, h: 1530, gap: 44, cellFill: "#FFFFFF", cellStroke: ink, cellStrokeWidth: 10, cellRadius: 34, cellOffset: 14, cellOffsetColor: ink, cellPad: 20 }),
   ];
@@ -114,11 +111,11 @@ function pastelPop(): Template {
     makeLayer({ type: "ellipse", name: "Blob Sky", x: 3150, y: -750, w: 1600, h: 1500, fill: "#BAE6FD" }),
     makeLayer({ type: "ellipse", name: "Blob Yellow", x: 3750, y: 1650, w: 1900, h: 1700, fill: "#FEF08A" }),
     makeLayer({ type: "ellipse", name: "Blob Mint", x: -350, y: 1950, w: 1500, h: 1300, fill: "#BBF7D0" }),
-    makeLayer({ type: "rect", name: "Main Card", x: 200, y: 200, w: 4600, h: 2200, fill: "#FFFFFF", radius: 170, shadow: 46, shadowColor: "#8B5CF6" }),
+    makeLayer({ type: "rect", name: "Main Card", x: 200, y: 200, w: 4600, h: 2200, fill: "#FFFFFF", radius: 170 }),
     makeLayer({ type: "text", name: "Title Text", text: "{title}", x: 200, y: 290, w: 4600, h: 300, fontSize: 190, fontWeight: 900, letterSpacing: 0, align: "center", fill: ink }),
     makeLayer({ type: "rect", name: "Count Badge", x: 1950, y: 640, w: 1100, h: 140, fill: "#8B5CF6", fill2: "#EC4899", gradAngle: 0, radius: 70 }),
     makeLayer({ type: "text", name: "Badge Text", text: "{n} VECTOR ICONS", x: 1950, y: 640, w: 1100, h: 140, fontSize: 52, fontWeight: 800, letterSpacing: 4, align: "center", fill: "#FFFFFF" }),
-    makeLayer({ type: "featured", name: "Featured Icon", x: 330, y: 270, w: 520, h: 520, fill: "#FDE68A", stroke: "#FFFFFF", strokeWidth: 22, radius: 9999, cellPad: 20, rotation: -8, shadow: 30, shadowColor: "#F59E0B" }),
+    makeLayer({ type: "featured", name: "Featured Icon", x: 330, y: 270, w: 520, h: 520, fill: "#FDE68A", stroke: "#FFFFFF", strokeWidth: 22, radius: 9999, cellPad: 20, rotation: -8 }),
     gridLayer({ x: 340, y: 880, w: 4320, h: 1400, gap: 36, cellFill: "#F5F3FF", cellStroke: "", cellStrokeWidth: 0, cellRadius: 999, cellPad: 26 }),
   ];
   return template("sig-pastel-pop", "Pastel Pop", doc({ background: "#F5F0FF", iconFill: ink, labelColor: ink, layers }));
