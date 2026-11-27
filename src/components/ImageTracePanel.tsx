@@ -28,7 +28,7 @@ function Segmented<T extends string | number>({ value, options, onChange, disabl
   );
 }
 
-function Row({ label, hint, right, children }: { label: string; hint?: string; right?: ReactNode; children: ReactNode }) {
+function Row({ label, right, children }: { label: string; right?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -36,7 +36,6 @@ function Row({ label, hint, right, children }: { label: string; hint?: string; r
         {right}
       </div>
       {children}
-      {hint && <p className="text-[11px] leading-4 text-[var(--text-secondary)] opacity-80">{hint}</p>}
     </div>
   );
 }
@@ -79,7 +78,7 @@ export function ImageTracePanel({ options, onChange, disabled }: ImageTracePanel
       </div>
 
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-        <Row label="Vector mode" hint={multicolor ? "Each colour becomes its own clean layer." : "One solid colour per icon — best for line / glyph icons."}>
+        <Row label="Vector mode">
           <Segmented<TraceMode>
             value={options.mode}
             disabled={disabled}
@@ -89,7 +88,7 @@ export function ImageTracePanel({ options, onChange, disabled }: ImageTracePanel
         </Row>
 
         {multicolor ? (
-          <Row label="Colours" hint="Maximum colours to extract per sheet.">
+          <Row label="Colours">
             <Slider label="Number of colours" value={options.colors} min={2} max={12} disabled={disabled} onChange={(v) => set("colors", v)} />
           </Row>
         ) : (
@@ -109,7 +108,7 @@ export function ImageTracePanel({ options, onChange, disabled }: ImageTracePanel
           </Row>
         )}
 
-        <Row label="Sheet background" hint="Auto reads the border. Pick Dark for white icons on a dark sheet.">
+        <Row label="Sheet background">
           <Segmented<TraceBackground>
             value={options.background}
             disabled={disabled}
@@ -118,27 +117,27 @@ export function ImageTracePanel({ options, onChange, disabled }: ImageTracePanel
           />
         </Row>
 
-        <Row label="Edge position" hint="Lower = bolder shapes, higher = thinner. Auto finds the exact half-coverage edge." right={<AutoToggle auto={options.threshold == null} disabled={disabled} onChange={(auto) => set("threshold", auto ? null : 50)} />}>
+        <Row label="Edge position" right={<AutoToggle auto={options.threshold == null} disabled={disabled} onChange={(auto) => set("threshold", auto ? null : 50)} />}>
           <Slider label="Edge position" value={options.threshold ?? 50} min={5} max={95} disabled={disabled || options.threshold == null} onChange={(v) => set("threshold", v)} />
         </Row>
 
-        <Row label="Smoothness" hint="Low follows every pixel, high gives fewer, silkier curves.">
+        <Row label="Smoothness">
           <Slider label="Smoothness" value={options.smoothness} min={0} max={100} disabled={disabled} onChange={(v) => set("smoothness", v)} />
         </Row>
 
-        <Row label="Sharp corners" hint="Keeps real corners crisp (squares, arrows, stars) while circles stay round.">
+        <Row label="Sharp corners">
           <Slider label="Corner sharpness" value={options.corners} min={0} max={100} disabled={disabled} onChange={(v) => set("corners", v)} />
         </Row>
 
-        <Row label="Icon slicing" hint="Auto cuts along the blank bands between rows and columns. Turn Auto off to merge every piece closer than this gap (px) into one icon." right={<AutoToggle auto={options.grouping == null} disabled={disabled} onChange={(auto) => set("grouping", auto ? null : 24)} />}>
+        <Row label="Icon slicing" right={<AutoToggle auto={options.grouping == null} disabled={disabled} onChange={(auto) => set("grouping", auto ? null : 24)} />}>
           <Slider label="Icon grouping gap in pixels" value={options.grouping ?? 24} min={0} max={200} disabled={disabled || options.grouping == null} onChange={(v) => set("grouping", v)} />
         </Row>
 
-        <Row label="Noise filter" hint="Removes dust and JPEG specks smaller than this many pixels." right={<AutoToggle auto={options.noise == null} disabled={disabled} onChange={(auto) => set("noise", auto ? null : 8)} />}>
+        <Row label="Noise filter" right={<AutoToggle auto={options.noise == null} disabled={disabled} onChange={(auto) => set("noise", auto ? null : 8)} />}>
           <Slider label="Noise filter in pixels" value={options.noise ?? 8} min={1} max={200} disabled={disabled || options.noise == null} onChange={(v) => set("noise", v)} />
         </Row>
 
-        <Row label="Precision" hint="Sub-pixel up-sampling. Auto picks the best level for each icon's size.">
+        <Row label="Precision">
           <Segmented<number>
             value={options.detail}
             disabled={disabled}

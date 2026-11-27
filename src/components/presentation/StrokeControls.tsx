@@ -38,7 +38,6 @@ export function StrokeControls({ value, onChange }: { value: StrokeSettings; onC
               <option value="stroke">Outline only</option>
             </select>
           </label>
-          <p className="text-[10px] leading-4 text-[var(--text-secondary)]">Width is measured on a 512 px icon. It is added around the traced shape, so it thickens or outlines it; it does not rebuild a centre-line.</p>
         </>
       )}
     </div>

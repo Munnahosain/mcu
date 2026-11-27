@@ -29,11 +29,6 @@ export interface Layer {
   fillOpacity?: number;
   /** Dash length of the stroke in px, 0 = solid. */
   dash?: number;
-  /** Soft drop shadow strength, 0 = none. */
-  shadow?: number;
-  shadowColor?: string;
-  /** Gaussian blur radius, 0 = none (used for glow blobs). */
-  blur?: number;
 
   /** text — `{n}` = icon count, `{title}` = sheet title, new lines allowed */
   text?: string;
@@ -64,7 +59,6 @@ export interface Layer {
   cellStrokeWidth?: number;
   cellDash?: number;
   cellRadius?: number;
-  cellShadow?: number;
   /** Hard "offset" shadow behind every tile, in px. */
   cellOffset?: number;
   cellOffsetColor?: string;

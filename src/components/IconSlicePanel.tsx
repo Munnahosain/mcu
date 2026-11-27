@@ -58,8 +58,8 @@ export function IconSlicePanel(props: IconSlicePanelProps) {
       <div className="space-y-3 rounded-[24px] border border-[var(--card-border)] bg-[var(--card-bg)] p-4 shadow-xl">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-black text-foreground">{pieces.length} icons found in {props.fileName}</p>
-            <p className="text-xs text-[var(--text-secondary)]">Remove anything that is not an icon (titles, captions, stray marks), then vectorize. {kept} of {pieces.length} will be vectorized.</p>
+            <p className="text-sm font-black text-foreground">{props.fileName}</p>
+            <p className="text-xs text-[var(--text-secondary)]">{kept} of {pieces.length} pieces will be vectorized</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={props.onOpenSettings} className="rounded-xl border border-[var(--card-border)] px-3 py-2 text-xs font-bold text-foreground hover:border-primary">Slice &amp; trace settings</button>
