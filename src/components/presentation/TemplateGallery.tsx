@@ -88,7 +88,6 @@ export function TemplateGallery(props: TemplateGalleryProps) {
         <div className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
           <div>
             <h2 className="text-sm font-black">Templates</h2>
-            <p className="text-xs text-[var(--text-secondary)]">Pick a look. It keeps your icons and sheet title.</p>
           </div>
           <button type="button" autoFocus className={btnCls} onClick={props.onClose} aria-label="Close"><X className="h-3.5 w-3.5" /></button>
         </div>
@@ -105,9 +104,7 @@ export function TemplateGallery(props: TemplateGalleryProps) {
             {customs.length ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{customs.map(card)}</div>
             ) : (
-              <p className="rounded-xl border border-dashed border-[var(--card-border)] p-4 text-xs text-[var(--text-secondary)]">
-                Nothing here yet. Design a sheet in the editor, then save it below. You can also import a template file.
-              </p>
+              <p className="rounded-xl border border-dashed border-[var(--card-border)] p-4 text-xs text-[var(--text-secondary)]">No saved templates yet.</p>
             )}
           </section>
         </div>
@@ -119,9 +116,9 @@ export function TemplateGallery(props: TemplateGalleryProps) {
             <button type="button" className={btnCls} onClick={() => fileRef.current?.click()}>Import template file</button>
             <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) props.onImport(file); event.target.value = ""; }} />
           </div>
-          <p className={`text-[11px] ${message ? "text-primary" : "text-[var(--text-secondary)]"}`}>
-            {message || "Saving keeps every layer, colour and image on the sheet. Export a template to share it or reuse it elsewhere."}
-          </p>
+          {message && <p className="text-[11px] text-primary">
+            {message}
+          </p>}
         </div>
       </div>
     </div>
