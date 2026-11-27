@@ -110,6 +110,10 @@ export default function GeneratorPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [batchMode, setBatchMode] = useState(false);
   const keyCursorRef = useRef(0);
+  const keysSyncRef = useRef<Promise<StoredProviderKey[]> | null>(null);
+  const [keysLoaded, setKeysLoaded] = useState(false);
+  const [limitNotice, setLimitNotice] = useState<string | null>(null);
+  const resumeTimerRef = useRef<number | null>(null);
 
   const platforms = ["General", "Adobe Stock", "Shutterstock", "FreePik", "Vecteezy", "Pond5"];
   const [selectedModels, setSelectedModels] = useState<Record<string, string>>(AI_DEFAULT_MODELS);
@@ -130,9 +134,12 @@ export default function GeneratorPage() {
     setApiKeys(getProviderKeys());
     setSelectedModels(getProviderModels());
     setActiveProvider(getActiveProvider());
-    void syncProviderKeys().then((syncedKeys) => {
-      setApiKeys(syncedKeys);
-    });
+    keysSyncRef.current = syncProviderKeys()
+      .then((syncedKeys) => {
+        setApiKeys(syncedKeys);
+        return syncedKeys;
+      })
+      .finally(() => setKeysLoaded(true));
   }, [setImages]);
 
   useEffect(() => {
@@ -288,11 +295,13 @@ export default function GeneratorPage() {
     });
   };
 
-  const generateSingle = async (img: ImageFile, attemptedKeyIds = new Set<string>()) => {
-    const providerKeys = apiKeys.filter(key => key.provider === activeProvider);
-    const availableKeys = providerKeys.filter(key => !attemptedKeyIds.has(key.id));
-    const keyIndex = availableKeys.length ? keyCursorRef.current++ % availableKeys.length : 0;
-    const keyObject = availableKeys[keyIndex];
+  type GenerateOutcome = { status: 'done' | 'error' } | { status: 'exhausted'; retryAt: number | null };
+
+  const generateSingle = async (img: ImageFile, ownRateLimitRetried = false): Promise<GenerateOutcome> => {
+    // The browser round-robins its own keys; the server tries every other saved key
+    // (and other providers) automatically when this one is rate limited or invalid.
+    const providerKeys = apiKeys.filter(key => key.provider === activeProvider && key.key);
+    const keyObject = providerKeys.length ? providerKeys[keyCursorRef.current++ % providerKeys.length] : undefined;
     const keyToUse = keyObject?.key || '';
 
     setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'generating', error: undefined } : i));
@@ -344,7 +353,7 @@ export default function GeneratorPage() {
       const controller = new AbortController();
       const requestTimeout = window.setTimeout(
         () => controller.abort(new DOMException('Generation timed out. Try again or switch providers.', 'TimeoutError')),
-        58000
+        62000
       );
       const res = await fetch(endpoint, { method: 'POST', headers, body: fd, signal: controller.signal }).finally(() => {
         window.clearTimeout(requestTimeout);
@@ -353,17 +362,30 @@ export default function GeneratorPage() {
         success: false,
         error: res.status === 413
           ? 'Upload payload is too large (HTTP 413). Please export this asset as SVG/JPG or save with "Create PDF Compatible File" in Illustrator.'
-          : `Generation service returned HTTP ${res.status}`,
+          : res.status === 504
+            ? 'The server took too long to answer. Please retry this file.'
+            : `Generation service returned HTTP ${res.status}`,
       }));
+
+      // Every saved key is rate limited or invalid: put the file back in the queue instead of failing it.
+      if (res.status === 429 && data.code === 'ALL_KEYS_EXHAUSTED') {
+        setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'pending', error: undefined } : i));
+        return { status: 'exhausted', retryAt: typeof data.retryAt === 'number' ? data.retryAt : null };
+      }
+
+      // Our own server's request limit (not the AI provider): wait and retry once.
+      if (res.status === 429 && !ownRateLimitRetried) {
+        const retryAfterSec = Number(res.headers.get('Retry-After')) || 5;
+        await new Promise(resolve => window.setTimeout(resolve, Math.min(retryAfterSec, 30) * 1000));
+        return generateSingle(img, true);
+      }
 
       if (!res.ok || !data.success) {
         let errorMsg = data.error || 'Generation failed';
         if (res.status === 413) {
           errorMsg = 'Upload payload is too large (HTTP 413). Please export this asset as SVG/JPG or save with "Create PDF Compatible File" in Illustrator.';
         }
-        const requestError = new Error(errorMsg) as Error & { status: number };
-        requestError.status = res.status;
-        throw requestError;
+        throw new Error(errorMsg);
       }
 
       if (activeTab === 'Metadata' && data.metadata) {
@@ -402,58 +424,99 @@ export default function GeneratorPage() {
           preview: data.previewDataUrl || i.preview,
           previewDataUrl: data.previewDataUrl,
         } : i));
+      } else {
+        throw new Error('The AI returned an empty result. Please retry this file.');
       }
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('mcustock:credits-updated'));
       }
+      return { status: 'done' };
     } catch (err: unknown) {
       console.error(err);
-      const errorMessage = err instanceof Error ? err.message : 'Generation failed';
-      const normalizedError = errorMessage.toLowerCase();
-      const errorStatus = typeof err === 'object' && err !== null && 'status' in err
-        ? Number(err.status)
-        : undefined;
-      const isKeyFailure = errorStatus === 401 || errorStatus === 403 || errorStatus === 429 ||
-        normalizedError.includes('rate limit') || normalizedError.includes('quota') ||
-        (normalizedError.includes('api key') && /(invalid|expired|unauthorized|not valid|no api key)/.test(normalizedError));
-      const hasAnotherProviderKey = providerKeys.some(key => key.id !== keyObject?.id && !attemptedKeyIds.has(key.id));
-      if (isKeyFailure && hasAnotherProviderKey) {
-        const nextAttempts = new Set(attemptedKeyIds);
-        if (keyObject?.id) nextAttempts.add(keyObject.id);
-        await generateSingle(img, nextAttempts);
-        return;
-      }
       const message = err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError')
-        ? 'Generation timed out after 58 seconds. Check the provider and model, then retry.'
+        ? 'Generation timed out. Please retry this file.'
         : err instanceof Error ? err.message : 'Generation failed';
       setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'error', error: message } : i));
+      return { status: 'error' };
     }
   };
 
   const generateAll = async () => {
-    if (!activeProviderKeyObj) {
+    if (resumeTimerRef.current) {
+      window.clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+    setLimitNotice(null);
+
+    // Wait for keys saved on the server before deciding there are none.
+    let knownKeys = apiKeys;
+    if (!keysLoaded && keysSyncRef.current) {
+      setIsGenerating(true);
+      knownKeys = await keysSyncRef.current.catch(() => apiKeys);
+      setIsGenerating(false);
+    }
+    if (knownKeys.length === 0) {
       setApiKeyModalOpen(true);
       return;
     }
+
     pauseRef.current = false;
     setIsPaused(false);
     setIsGenerating(true);
     const targets = images.filter(i => i.status !== 'done').slice(0, 500);
-    const providerKeyCount = apiKeys.filter(key => key.provider === activeProvider).length;
+    const providerKeyCount = knownKeys.filter(key => key.provider === activeProvider).length;
     const concurrency = activeProvider === 'Google Gemini'
-      ? (batchMode ? 3 : 1)
+      ? (batchMode ? 3 : 2)
       : Math.min(Math.max(providerKeyCount, 1) * (batchMode ? 3 : 1), batchMode ? 8 : 3);
-    for (let i = 0; i < targets.length; i += concurrency) {
-      if (pauseRef.current) break;
-      const batch = targets.slice(i, i + concurrency);
-      await Promise.all(batch.map(img => generateSingle(img)));
-    }
+
+    // Worker pool: a slow file no longer holds back the rest of the queue.
+    let nextIndex = 0;
+    let exhaustedAt: number | null | undefined;
+    const worker = async () => {
+      while (!pauseRef.current && exhaustedAt === undefined) {
+        const img = targets[nextIndex++];
+        if (!img) return;
+        const outcome = await generateSingle(img);
+        if (outcome.status === 'exhausted' && exhaustedAt === undefined) {
+          exhaustedAt = outcome.retryAt;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, worker));
     setIsGenerating(false);
+
+    if (exhaustedAt !== undefined) {
+      if (exhaustedAt && exhaustedAt - Date.now() <= 30 * 60 * 1000) {
+        const waitMs = Math.max(exhaustedAt - Date.now(), 1000) + 1500;
+        const resumeAt = new Date(Date.now() + waitMs);
+        setLimitNotice(`All API keys hit their limit. Resuming automatically at ${resumeAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
+        resumeTimerRef.current = window.setTimeout(() => {
+          resumeTimerRef.current = null;
+          generateAllRef.current?.();
+        }, waitMs);
+      } else {
+        setLimitNotice(exhaustedAt
+          ? `All API keys hit their limit. They become available again at ${new Date(exhaustedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Add another key to continue now.`
+          : 'All API keys are invalid or out of quota. Add or replace a key to continue.');
+      }
+      return;
+    }
+
     const completedMetadataRun = !pauseRef.current && activeTab === 'Metadata' && targets.length > 0;
     autoExportRef.current = completedMetadataRun && autoCsvDownload;
     csvPromptRef.current = completedMetadataRun && !autoCsvDownload;
   };
+
+  // Always call the latest generateAll (with fresh state) from the auto-resume timer.
+  const generateAllRef = useRef<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    generateAllRef.current = generateAll;
+  });
+
+  useEffect(() => () => {
+    if (resumeTimerRef.current) window.clearTimeout(resumeTimerRef.current);
+  }, []);
 
   const togglePause = () => {
     pauseRef.current = !pauseRef.current;
@@ -566,6 +629,9 @@ export default function GeneratorPage() {
               <span className="truncate">{isPaused ? 'Resume' : 'Pause'}</span>
             </button>
           </div>
+          {limitNotice && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">{limitNotice}</p>
+          )}
         </div>
       </section>
 
@@ -1077,7 +1143,13 @@ export default function GeneratorPage() {
                     <p className="text-[10px] font-bold text-primary/60 uppercase">Configured Keys:</p>
                     {apiKeys.filter(key => key.provider === activeProvider).map((k, index) => (
                       <div key={k.id} className="flex items-center justify-between text-xs border border-primary/10 rounded-xl p-2 bg-primary/5">
-                        <span className="font-bold text-primary">{k.provider} key {index + 1}</span>
+                        <span className="font-bold text-primary">
+                          {k.provider} key {index + 1}
+                          {k.disabled && <span className="ml-1.5 font-normal text-red-600 dark:text-red-300">invalid, replace it</span>}
+                          {!k.disabled && k.cooldownUntil && new Date(k.cooldownUntil).getTime() > Date.now() && (
+                            <span className="ml-1.5 font-normal text-amber-700 dark:text-amber-300">limit reached</span>
+                          )}
+                        </span>
                         <button onClick={() => removeKey(k.id)} className="text-[10px] font-bold text-primary hover:underline">Remove</button>
                       </div>
                     ))}

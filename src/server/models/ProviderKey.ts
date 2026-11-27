@@ -7,6 +7,9 @@ const ProviderKeySchema = new Schema({
   fingerprint: { type: String, required: true },
   lastFour: { type: String, required: true },
   model: { type: String, default: '' },
+  disabled: { type: Boolean, default: false },
+  cooldownUntil: { type: Date, default: null },
+  lastError: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
