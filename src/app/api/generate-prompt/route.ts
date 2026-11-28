@@ -55,7 +55,8 @@ export async function POST(req: Request) {
     const instructionsStr = ((formData.get('instructions') as string) || '').trim().toLowerCase();
 
     const uploadError = validateImageUpload(image);
-    if (uploadError || !image) return uploadError;
+    if (uploadError) return uploadError;
+    if (!image) return NextResponse.json({ success: false, error: 'No image provided.' }, { status: 400 });
 
     const buffer = Buffer.from(await image.arrayBuffer());
     const vectorFormat = getVectorFormat(image.name);
