@@ -258,6 +258,24 @@ export default function GeneratorPage() {
     if (newImages.length < supportedFiles.length) alert('The queue is full. Only 500 assets can be queued at once.');
   }, [images.length, setImages]);
 
+  // Files dropped anywhere on the page are queued instead of the browser opening them.
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
+    const onDragOver = (event: DragEvent) => { if (hasFiles(event)) event.preventDefault(); };
+    const onDrop = (event: DragEvent) => {
+      if (!hasFiles(event) || event.defaultPrevented) return;
+      event.preventDefault();
+      setIsDragging(false);
+      handleFiles(event.dataTransfer?.files ?? null);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [handleFiles]);
+
   const removeImage = (id: string) => {
     setImages(prev => {
       const img = prev.find(i => i.id === id);
@@ -874,11 +892,11 @@ export default function GeneratorPage() {
            <div
              className={`min-h-48 border border-dashed rounded-xl px-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${isDragging ? 'border-primary bg-primary/10' : 'border-[var(--input-border)] bg-[var(--input-bg)] hover:border-primary/50 hover:bg-primary/5'}`}
              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-             onDragLeave={() => setIsDragging(false)}
+             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsDragging(false); }}
              onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
              onClick={() => fileInputRef.current?.click()}
           >
-            <input ref={fileInputRef} type="file" className="hidden" multiple accept="image/*,video/*,.ai,.eps,.epsf,.svg,.pdf" onChange={(e) => handleFiles(e.target.files)} />
+            <input ref={fileInputRef} type="file" className="hidden" multiple accept="image/*,video/*,.ai,.eps,.epsf,.svg,.pdf" onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-primary/25 text-primary"><UploadCloud className="h-5 w-5" /></div>
             <p className="text-sm font-bold text-foreground mb-1">Drop your assets here</p>
             <p className="text-xs text-[var(--text-secondary)]">or browse · PNG · JPG · SVG · EPS · AI · PDF · MP4 · MOV · WebM</p>

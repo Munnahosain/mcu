@@ -358,7 +358,7 @@ export default function ColorPalettePage() {
                onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
                onClick={() => fileInputRef.current?.click()}
              >
-               <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={(e) => handleFiles(e.target.files)} />
+               <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-primary/20">
                    <Upload className="w-7 h-7 text-primary stroke-[2]" />
                </div>
