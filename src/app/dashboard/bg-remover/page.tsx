@@ -169,7 +169,7 @@ export default function BackgroundRemoverPage() {
               className="hidden"
               multiple
               accept="image/*"
-              onChange={(e) => handleFiles(e.target.files)}
+              onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
             />
             
             <div className="w-16 h-16 bg-primary/5 rounded-2xl shadow-sm border border-primary/10 flex items-center justify-center mb-6 group-hover:-translate-y-1 transition-transform duration-300 text-primary">

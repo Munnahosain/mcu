@@ -251,7 +251,7 @@ export default function PromptsPage() {
             className="hidden" 
             multiple 
             accept="image/*" 
-            onChange={(e) => handleFiles(e.target.files)}
+            onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
           />
            <div className="p-5 bg-primary/10 rounded-full mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:bg-primary/20 border border-primary/20">
             <Wand2 className="w-10 h-10 text-primary transition-colors" />
@@ -353,7 +353,7 @@ export default function PromptsPage() {
                 onClick={() => document.getElementById('file-upload-add')?.click()}
                 className="border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center p-8 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all text-gray-500 hover:text-primary min-h-[160px]"
               >
-                <input type="file" id="file-upload-add" className="hidden" multiple accept="image/*" onChange={(e) => handleFiles(e.target.files)} />
+                <input type="file" id="file-upload-add" className="hidden" multiple accept="image/*" onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
                 <Plus className="w-8 h-8 mb-2" />
                 <span className="text-sm font-medium">Add more images</span>
               </motion.div>
