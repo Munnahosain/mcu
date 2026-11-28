@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { NextResponse } from 'next/server';
 import { requireAdmin, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
@@ -24,7 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     await connectToDatabase();
-    const payment = await Payment.findOne({ $or: [{ _id: id }, { paymentId: id }], status: 'pending' });
+    const payment = await Payment.findOne({ ...(Types.ObjectId.isValid(id) ? { $or: [{ _id: id }, { paymentId: id }] } : { paymentId: id }), status: 'pending' });
     if (!payment) return NextResponse.json({ success: false, error: 'Payment is not pending or was not found.' }, { status: 409 });
     const now = new Date();
     payment.status = 'rejected'; payment.rejectionReason = reason; payment.reviewedAt = now; payment.reviewedBy = admin._id;

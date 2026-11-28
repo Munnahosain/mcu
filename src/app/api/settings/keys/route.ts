@@ -6,6 +6,7 @@ import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 import { hasMongoDbConfig } from '@/server/db/database-config';
 import { inMemoryStore } from '@/server/db/in-memory-store';
 import crypto from 'node:crypto';
+import { Types } from 'mongoose';
 
 import { enforceRateLimit } from '@/server/auth/rate-limit';
 
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-  const rateLimitError = enforceRateLimit(req, userId, { limit: 30, windowMs: 60 * 1000, keyPrefix: 'settings-keys-get' });
+  const rateLimitError = await enforceRateLimit(req, userId, { limit: 30, windowMs: 60 * 1000, keyPrefix: 'settings-keys-get' });
   if (rateLimitError) return rateLimitError;
 
   if (!hasMongoDbConfig()) {
@@ -56,6 +57,11 @@ export async function POST(req: Request) {
     if (!provider || !key) return NextResponse.json({ success: false, error: 'Provider and API key are required.' }, { status: 400 });
 
     if (!hasMongoDbConfig()) {
+      const fingerprint = crypto.createHash('sha256').update(key).digest('hex');
+      const existing = inMemoryStore.providerKeys.find(k => k.userId === userId && k.provider === provider && k.fingerprint === fingerprint);
+      if (existing) {
+        return NextResponse.json({ success: true, key: { id: existing.id, provider, lastFour: existing.lastFour, model: existing.model } });
+      }
       const id = crypto.randomUUID();
       const newKey = {
         id,
@@ -63,6 +69,8 @@ export async function POST(req: Request) {
         provider,
         model: body.model || '',
         lastFour: key.slice(-4),
+        encryptedKey: encryptSecret(key),
+        fingerprint,
         createdAt: new Date().toISOString(),
       };
       inMemoryStore.providerKeys.push(newKey);
@@ -90,6 +98,9 @@ export async function DELETE(req: Request) {
     if (!userId) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     const body = await req.json().catch(() => ({})) as { id?: string };
     if (!body.id) return NextResponse.json({ success: false, error: 'Key id is required.' }, { status: 400 });
+    if (hasMongoDbConfig() && !Types.ObjectId.isValid(body.id)) {
+      return NextResponse.json({ success: false, error: 'Invalid key id.' }, { status: 400 });
+    }
 
     if (!hasMongoDbConfig()) {
       inMemoryStore.providerKeys = inMemoryStore.providerKeys.filter(k => k.id !== body.id || k.userId !== userId);

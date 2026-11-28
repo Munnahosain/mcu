@@ -6,6 +6,7 @@ import { ProjectState, BoundingBox } from './types';
 import { computeParentedStylesAtTime, computeElementStylesAtTime, applyComputedStylesToElement } from './animationEngine';
 import { flattenElementTree } from './svgParser';
 import { MotionTool } from './WorkspaceChrome';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 
 interface CanvasViewportProps {
   project: ProjectState;
@@ -52,6 +53,9 @@ const SvgMarkup = React.memo(function SvgMarkup({
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   renderScale: number;
 }) {
+  // Project SVG can come from uploads or saved projects: sanitize before it goes into innerHTML.
+  const safeSvg = useMemo(() => sanitizeSvg(svgRaw), [svgRaw]);
+
   useLayoutEffect(() => {
     const svg = wrapperRef.current?.querySelector('svg');
     if (!svg) return;
@@ -67,7 +71,7 @@ const SvgMarkup = React.memo(function SvgMarkup({
     <div
       ref={wrapperRef}
       className="absolute inset-0 w-full h-full select-none"
-      dangerouslySetInnerHTML={{ __html: svgRaw }}
+      dangerouslySetInnerHTML={{ __html: safeSvg }}
     />
   );
 });

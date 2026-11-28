@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { findUserById, hasMongoDbConfig } from '@/server/db/database';
 import { getAuthenticatedUserId } from './request-auth';
 import { USER_ROLES, type UserRole } from '@/server/models/User';
+import { isDevAuthAllowed } from './secrets';
 
 export type { UserRole };
 
@@ -16,6 +17,9 @@ export class AuthorizationError extends Error {
 }
 
 export async function requireAuthenticatedUser(req: Request) {
+  if (!hasMongoDbConfig() && !isDevAuthAllowed()) {
+    throw new AuthorizationError(503, 'Database not configured.');
+  }
   const userId = await getAuthenticatedUserId(req);
   if (!userId) {
     throw new AuthorizationError(401, 'Authentication required.');
@@ -34,6 +38,15 @@ export async function requireAuthenticatedUser(req: Request) {
   return { ...user, _id: id, id };
 }
 
+/**
+ * ADMIN_EMAIL promotion only applies to accounts whose email ownership was verified (Google sign-in).
+ * A password signup with the same address must never become super_admin.
+ */
+export function isVerifiedDesignatedAdmin(user: { email?: unknown; emailVerified?: unknown } | null | undefined): boolean {
+  if (!user || user.emailVerified !== true) return false;
+  return isDesignatedAdminEmail(typeof user.email === 'string' ? user.email : null);
+}
+
 export function isDesignatedAdminEmail(email?: string | null): boolean {
   const configured = process.env.ADMIN_EMAIL?.trim();
   if (!configured || !email) return false;
@@ -43,8 +56,8 @@ export function isDesignatedAdminEmail(email?: string | null): boolean {
 
 export async function requireRole(req: Request, allowedRoles: readonly UserRole[]) {
   const user = await requireAuthenticatedUser(req);
-  let userRole = (user.role as UserRole) || (!hasMongoDbConfig() ? 'super_admin' : 'user');
-  if (isDesignatedAdminEmail(user.email)) {
+  let userRole = (user.role as UserRole) || 'user';
+  if (isVerifiedDesignatedAdmin(user as { email?: unknown; emailVerified?: unknown })) {
     userRole = 'super_admin';
   }
   const role = USER_ROLES.includes(userRole) ? userRole : 'user';

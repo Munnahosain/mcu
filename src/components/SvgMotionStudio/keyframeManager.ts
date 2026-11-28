@@ -1,4 +1,4 @@
-import { AnimProperty, AnimationTrack, EasingType, Keyframe } from './types';
+import { AnimProperty, AnimationTrack, EasingType } from './types';
 
 export interface EasingPreset {
   id: EasingType;

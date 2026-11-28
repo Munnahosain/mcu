@@ -8,8 +8,6 @@ import {
 } from '../types';
 import {
   Sliders,
-  Move,
-  RotateCw,
   FlipHorizontal,
   FlipVertical,
   Copy,
@@ -18,9 +16,6 @@ import {
   ChevronsDown,
   ChevronUp,
   ChevronDown,
-  Sparkles,
-  Layers,
-  Scissors,
   CheckCircle2,
   Lock,
   Blend,
@@ -85,7 +80,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onReorderElement,
   settings,
   setSettings,
-  elementsCount,
 }) => {
   const crossing = selectedElement
     ? isElementCrossingEdge(selectedElement, settings.artboardSize)

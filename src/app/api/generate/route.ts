@@ -4,15 +4,14 @@ import { enforceRateLimit } from '@/server/auth/rate-limit';
 import {
   AllKeysExhaustedError,
   generateWithFailover,
-  getFriendlyProviderMessage,
-  getStatusCode,
   NoApiKeyError,
   prepareImage,
 } from '@/server/services/vision-service';
 import { incrementUsage } from '@/server/services/usage-service';
-import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits, type CreditReceipt } from '@/server/services/credit-service';
 import { getFirstFeatureFlagDenial } from '@/server/services/feature-flag-service';
 import { getVectorFormat, prepareVectorPreview, VectorPreviewError } from '@/server/services/vector-preview';
+import { providerErrorResponse, validateImageUpload, withImageDecode } from '@/server/services/route-helpers';
 
 export const maxDuration = 60;
 
@@ -94,6 +93,7 @@ function parseMetadataResponse(responseText: string): Record<string, unknown> {
 }
 
 export async function POST(req: Request) {
+  let creditReceipt: CreditReceipt | null = null;
   const deadlineAt = Date.now() + 52_000;
   let creditReserved = false;
   let authenticatedUserId: string | null = null;
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
     ]);
     if (denial) return NextResponse.json({ success: false, error: denial.error }, { status: 403 });
 
-    const rateLimitError = enforceRateLimit(req, userId, {
+    const rateLimitError = await enforceRateLimit(req, userId, {
       limit: 120,
       windowMs: 60 * 1000,
       keyPrefix: 'generate',
@@ -131,17 +131,16 @@ export async function POST(req: Request) {
     const negativeKeywords = ((formData.get('negativeKeywords') as string) || '').trim();
     const isVideo = formData.get('contentType') === 'video';
 
-    if (!image) {
-      return NextResponse.json({ success: false, error: 'No image provided.' }, { status: 400 });
-    }
+    const uploadError = validateImageUpload(image);
+    if (uploadError || !image) return uploadError;
 
     const buffer = Buffer.from(await image.arrayBuffer());
     const vectorFormat = getVectorFormat(image.name);
     const imageBuffer = vectorFormat
       ? (await prepareVectorPreview(buffer, image.name)).buffer
       : buffer;
-    const { base64, dataUrl } = await prepareImage(imageBuffer, 512, 65);
-    await consumeCredits(userId, 1, 'AI metadata generation', 'metadata_generation', { usesOwnApiKey: true });
+    const { base64, dataUrl } = await withImageDecode(() => prepareImage(imageBuffer, 512, 65));
+    creditReceipt = (await consumeCredits(userId, 1, 'AI metadata generation', 'metadata_generation', { usesOwnApiKey: true })).receipt;
     creditReserved = true;
 
     console.log(`[generate] provider=${providerHint}, model=${modelHint}, title=${titleLength}, description=${descriptionLength}, kw=${keywordsCount}, platform=${platform}`);
@@ -157,27 +156,34 @@ export async function POST(req: Request) {
       isVideo
     );
 
-    // Room for the whole JSON: title + description + keywords (+ overhead). Too small a budget cut answers off.
-    const maxTokens = Math.min(
-      Math.max(Math.round(300 + keywordsCount * 6 + titleLength / 3 + descriptionLength / 3), 600),
-      1200
-    );
-
-    const result = await generateWithFailover({
+    // Room for the whole JSON: title + description + keywords (+ overhead). Too small a budget cuts answers off.
+    const maxTokens = Math.min(2048, 300 + keywordsCount * 12 + descriptionLength + titleLength);
+    const request = {
       userId,
       preferredProvider: providerHint,
       preferredModel: modelHint,
       clientKey: clientKey || undefined,
       deadlineAt,
-      prompt,
       base64,
       dataUrl,
       jsonMode: true,
-      maxTokens,
       temperature: 0.1,
-    });
+    };
 
-    const metadata = parseMetadataResponse(result.text);
+    let result = await generateWithFailover({ ...request, prompt, maxTokens });
+    let metadata: Record<string, unknown>;
+    try {
+      metadata = parseMetadataResponse(result.text);
+    } catch (parseError) {
+      // Unusable answer: ask once more for a shorter JSON if there is still time.
+      if (deadlineAt - Date.now() < 12_000) throw parseError;
+      result = await generateWithFailover({
+        ...request,
+        prompt: `${prompt}\n\nIMPORTANT: Your previous answer was not valid JSON. Return a SHORTER, complete JSON object only.`,
+        maxTokens: 2048,
+      });
+      metadata = parseMetadataResponse(result.text);
+    }
 
     // Normalize keywords
     if (typeof metadata.keywords === 'string') {
@@ -220,11 +226,12 @@ export async function POST(req: Request) {
       success: true,
       metadata,
       provider: result.provider,
+      usedFallbackProvider: result.usedFallbackProvider,
       previewDataUrl: vectorFormat ? dataUrl : undefined,
     });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
-      await refundCredits(authenticatedUserId, 1, 'Failed AI metadata generation refund', 'metadata_generation', { usesOwnApiKey: true }).catch((refundError) => console.error('[generate] credit refund error:', refundError));
+      await refundCredits(authenticatedUserId, creditReceipt ?? 1, 'Failed AI metadata generation refund', 'metadata_generation', { usesOwnApiKey: true }).catch((refundError) => console.error('[generate] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });
@@ -238,11 +245,7 @@ export async function POST(req: Request) {
     if (error instanceof VectorPreviewError) {
       return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 422 });
     }
-    const status = getStatusCode(error) || 500;
     console.error('[generate] error:', error instanceof Error ? error.message : error);
-    return NextResponse.json(
-      { success: false, error: getFriendlyProviderMessage(error) },
-      { status }
-    );
+    return providerErrorResponse(error);
   }
 }

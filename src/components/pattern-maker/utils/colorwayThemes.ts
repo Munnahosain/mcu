@@ -1,4 +1,4 @@
-import { DesignElement, PatternSettings } from '../types';
+import { DesignElement } from '../types';
 
 export interface ColorwayTheme {
   id: string;
@@ -108,7 +108,6 @@ export function autoScatterMotifs(
 
   const basePool = elements.slice(0, Math.min(6, elements.length));
   const S = artboardSize;
-  const count = Math.max(8, basePool.length * 2);
   const result: DesignElement[] = [];
 
   // Distribution points: grid jitter + edge straddlers for seamless wrapping

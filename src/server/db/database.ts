@@ -4,6 +4,7 @@ import { Plan } from '../models/Plan';
 import { Subscription } from '../models/Subscription';
 import { MetadataHistory } from '../models/MetadataHistory';
 import { createDevUser, findDevUser, findDevUserById } from '../auth/dev-auth';
+import { isDevAuthAllowed } from '../auth/secrets';
 import { verifyPassword } from '../auth/hash';
 import { hasMongoDbConfig } from './database-config';
 
@@ -40,7 +41,7 @@ export async function resolveUserActivePlan(user: { _id?: unknown; id?: unknown;
 }
 
 export async function tryDevLogin(email: string, password: string) {
-  if (hasMongoDbConfig()) {
+  if (hasMongoDbConfig() || !isDevAuthAllowed()) {
     return null;
   }
 
@@ -53,7 +54,7 @@ export async function tryDevLogin(email: string, password: string) {
 }
 
 export async function tryDevSignup(name: string, email: string, password: string) {
-  if (hasMongoDbConfig()) {
+  if (hasMongoDbConfig() || !isDevAuthAllowed()) {
     return null;
   }
 
@@ -62,19 +63,20 @@ export async function tryDevSignup(name: string, email: string, password: string
 }
 
 export async function findUserByEmail(email: string) {
-  if (!hasMongoDbConfig()) return findDevUser(email);
+  if (!hasMongoDbConfig()) return isDevAuthAllowed() ? findDevUser(email) : null;
   await connectToDatabase();
   return await User.findOne({ email }).lean();
 }
 
 export async function findUserById(id: string) {
-  if (!hasMongoDbConfig()) return findDevUserById(id);
+  if (!hasMongoDbConfig()) return isDevAuthAllowed() ? findDevUserById(id) : null;
   await connectToDatabase();
   return await User.findById(id).lean();
 }
 
 export async function createUser({ name, email, password }: { name: string; email: string; password: string }) {
   if (!hasMongoDbConfig()) {
+    if (!isDevAuthAllowed()) return null;
     const created = createDevUser(name, email, password);
     return created ? { _id: created.id, name: created.name, email: created.email, password: created.password } : null;
   }

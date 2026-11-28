@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DesignElement, PatternSettings } from '../types';
 import { drawTileToCanvas } from '../utils/exportUtils';
 import { Shirt, ShoppingBag, Bed, Sparkles, Layers, Sliders } from 'lucide-react';

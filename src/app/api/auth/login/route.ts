@@ -4,10 +4,12 @@ import { verifyPassword } from '@/server/auth/hash';
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/server/auth/jwt';
 
 import { enforceRateLimit } from '@/server/auth/rate-limit';
+import { isDevAuthAllowed } from '@/server/auth/secrets';
+import { isVerifiedDesignatedAdmin } from '@/server/auth/authorization';
 
 export async function POST(req: Request) {
   try {
-    const rateLimitError = enforceRateLimit(req, null, {
+    const rateLimitError = await enforceRateLimit(req, null, {
       limit: 15,
       windowMs: 60 * 1000,
       keyPrefix: 'auth-login',
@@ -25,6 +27,9 @@ export async function POST(req: Request) {
 
     const emailLower = email.toLowerCase().trim();
     if (!hasMongoDbConfig()) {
+      if (!isDevAuthAllowed()) {
+        return NextResponse.json({ success: false, error: 'Database not configured.' }, { status: 503 });
+      }
       const devUser = await tryDevLogin(emailLower, password);
       if (!devUser) {
         return NextResponse.json({ success: false, error: 'Invalid email or password' }, { status: 401 });
@@ -53,12 +58,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const userEmail = String(user.email || emailLower).toLowerCase().trim();
-    const configuredAdmin = process.env.ADMIN_EMAIL?.trim();
-    const isConfiguredAdmin = Boolean(
-      configuredAdmin &&
-      configuredAdmin.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
-    );
+    if (user.status && user.status !== 'active') {
+      return NextResponse.json({ success: false, error: 'This account is not active.' }, { status: 403 });
+    }
+
+    const isConfiguredAdmin = isVerifiedDesignatedAdmin(user);
     const userRole = isConfiguredAdmin ? 'super_admin' : ((user.role as string) || 'user');
     const userPlan = await resolveUserActivePlan(user);
 
@@ -78,9 +82,8 @@ export async function POST(req: Request) {
     return response;
   } catch (error: unknown) {
     console.error('Login error:', error);
-    const message = error instanceof Error ? error.message : 'Something went wrong during login';
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'Something went wrong during login' },
       { status: 500 }
     );
   }

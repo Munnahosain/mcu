@@ -226,7 +226,7 @@ export default function ColorPalettePage() {
         setPickedColor({
             r, g, b, hex, hsl: rgbToHsl(r, g, b)
         });
-      } catch (e) {
+      } catch {
         console.log("EyeDropper canceled");
       }
     } else {

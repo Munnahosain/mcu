@@ -522,7 +522,7 @@ function autoGap(ids: number[], c: Components, w: number, h: number): number {
 /*  Grid-aware slicing (XY-cut)                                               */
 /*                                                                            */
 /*  Icon sheets are laid out in rows and columns, so instead of guessing one  */
-/*  global "closeness" for every piece we cut the sheet along the blank       */
+/*  overall "closeness" for every piece we cut the sheet along the blank      */
 /*  bands that separate rows, then the blank bands that separate columns.     */
 /*  A blank band only counts when it clears every piece on the sheet, which   */
 /*  is why a dot above a frame (or the bars of a pause icon) never splits.    */

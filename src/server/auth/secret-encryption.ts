@@ -1,11 +1,9 @@
 import crypto from 'node:crypto';
+import { getSecret } from './secrets';
 
 const ALGORITHM = 'aes-256-gcm';
-const DEFAULT_ENCRYPTION_KEY = 'mcustock-dev-secret-encryption-fallback-key-32chars';
-
 function encryptionKey() {
-  const source = process.env.ENCRYPTION_KEY || DEFAULT_ENCRYPTION_KEY;
-  return crypto.createHash('sha256').update(source.trim()).digest();
+  return crypto.createHash('sha256').update(getSecret('ENCRYPTION_KEY')).digest();
 }
 
 export function encryptSecret(value: string) {

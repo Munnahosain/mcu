@@ -165,11 +165,28 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
 
   await connectToDatabase();
 
+  // Accept either the Mongo id or the human payment id; never pass an invalid ObjectId to a query (CastError → 500).
+  if (!mongoose.Types.ObjectId.isValid(paymentObjectId)) {
+    const byPaymentId = await Payment.findOne({ paymentId: paymentObjectId }).select('_id').lean() as { _id: unknown } | null;
+    if (!byPaymentId) throw new Error('PAYMENT_NOT_FOUND');
+    paymentObjectId = String(byPaymentId._id);
+  }
+
   const executeApproval = async (sess?: mongoose.ClientSession) => {
-    const paymentQuery = Payment.findById(paymentObjectId);
-    const payment = sess ? await paymentQuery.session(sess) : await paymentQuery;
-    if (!payment) throw new Error('PAYMENT_NOT_FOUND');
-    if (payment.status !== 'pending') throw new Error(payment.status === 'approved' ? 'PAYMENT_ALREADY_APPROVED' : 'PAYMENT_ALREADY_PROCESSED');
+    const now = new Date();
+    // Claim the payment atomically: only one approver can move it out of 'pending',
+    // so two admins clicking at once can never grant credits twice.
+    const payment = await Payment.findOneAndUpdate(
+      { _id: paymentObjectId, status: 'pending' },
+      { $set: { status: 'approved', reviewedAt: now, reviewedBy: adminId, approvedAt: now } },
+      { new: true, ...(sess ? { session: sess } : {}) },
+    );
+    if (!payment) {
+      const existingQuery = Payment.findById(paymentObjectId).select('status');
+      const existingPayment = sess ? await existingQuery.session(sess) : await existingQuery;
+      if (!existingPayment) throw new Error('PAYMENT_NOT_FOUND');
+      throw new Error(existingPayment.status === 'approved' ? 'PAYMENT_ALREADY_APPROVED' : 'PAYMENT_ALREADY_PROCESSED');
+    }
     const userQuery = User.findById(payment.userId);
     const planQuery = Plan.findById(payment.planId);
     const [user, plan] = await Promise.all([
@@ -179,12 +196,6 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
     if (!user) throw new Error('USER_NOT_FOUND');
     if (!plan) throw new Error('PLAN_NOT_FOUND');
 
-    const now = new Date();
-    payment.status = 'approved';
-    payment.reviewedAt = now;
-    payment.reviewedBy = adminId;
-    payment.approvedAt = now;
-    await payment.save(sess ? { session: sess } : undefined);
 
     const subQuery = Subscription.findOne({ userId: user._id, status: { $in: ['active', 'trial'] } });
     const existing = sess ? await subQuery.session(sess) : await subQuery;
@@ -202,7 +213,8 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
     await Subscription.create([{
       userId: user._id, planId: payment.planId, status: 'active', billingInterval: payment.planSnapshot.billingInterval,
       amount: payment.amount, currency: payment.currency, startedAt: now, currentPeriodStart: now,
-      currentPeriodEnd: end, expiresAt: end, provider: 'bkash', providerPaymentId: payment.paymentId, autoRenew: false,
+      currentPeriodEnd: end, expiresAt: end, provider: payment.provider || 'manual', providerPaymentId: payment.paymentId, autoRenew: false,
+      monthlyCredits: payment.planSnapshot.credits, lastCreditRefillAt: now,
     }], sess ? { session: sess } : undefined);
     await User.updateOne({ _id: user._id }, { $set: { planId: payment.planId, 'credits.monthly': payment.planSnapshot.credits, 'credits.bonus': rollover, 'credits.used': 0, updatedAt: now } }, sess ? { session: sess } : undefined);
     await CreditLedger.create([{
@@ -232,7 +244,19 @@ export async function approvePayment(paymentObjectId: string, adminId: string, r
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('replica set') || msg.includes('Transaction numbers')) {
-      return await executeApproval();
+      try {
+        return await executeApproval();
+      } catch (fallbackError) {
+        // Without a transaction, undo our claim if a later step failed so the payment can be approved again.
+        const code = fallbackError instanceof Error ? fallbackError.message : '';
+        if (!code.startsWith('PAYMENT_')) {
+          await Payment.updateOne(
+            { _id: paymentObjectId, status: 'approved', reviewedBy: adminId },
+            { $set: { status: 'pending' }, $unset: { reviewedAt: '', reviewedBy: '', approvedAt: '' } },
+          ).catch((revertError) => console.error('[payments] could not revert approval claim:', revertError));
+        }
+        throw fallbackError;
+      }
     }
     throw err;
   }

@@ -2,7 +2,7 @@ import { Schema, model, models } from 'mongoose';
 
 const CreditLedgerSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  type: { type: String, enum: ['add', 'deduct', 'refund', 'bonus', 'monthly_grant', 'rollover', 'subscription_purchase'], required: true },
+  type: { type: String, enum: ['add', 'deduct', 'refund', 'bonus', 'monthly_grant', 'rollover', 'subscription_purchase', 'monthly_refill'], required: true },
   amount: { type: Number, required: true, min: 0 },
   reason: { type: String, required: true, maxlength: 500 },
   adminId: { type: Schema.Types.ObjectId, ref: 'User', default: null },

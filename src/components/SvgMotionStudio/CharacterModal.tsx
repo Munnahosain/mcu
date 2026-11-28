@@ -6,18 +6,12 @@ import {
   UserCheck,
   Wand2,
   Sparkles,
-  Smile,
-  Eye,
-  MessageCircle,
-  Shirt,
-  Footprints,
-  Hand,
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
 import { CharacterSlot, SvgElementNode } from './types';
 import { CHARACTER_SLOT_LABELS } from './constants';
-import { CHARACTER_PRESETS, autoDetectCharacterSlots } from './characterMode';
+import { CHARACTER_PRESETS } from './characterMode';
 import { flattenElementTree, findElementById } from './svgParser';
 
 interface CharacterModalProps {

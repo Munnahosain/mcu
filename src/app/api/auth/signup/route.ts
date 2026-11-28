@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createUser, findUserByEmail, hasMongoDbConfig, tryDevSignup } from '@/server/db/database';
+import { isDevAuthAllowed } from '@/server/auth/secrets';
 import { hashPassword } from '@/server/auth/hash';
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from '@/server/auth/jwt';
 import { enforceRateLimit } from '@/server/auth/rate-limit';
@@ -8,7 +9,7 @@ const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 export async function POST(req: Request) {
   try {
-    const rateLimitError = enforceRateLimit(req, null, {
+    const rateLimitError = await enforceRateLimit(req, null, {
       limit: 10,
       windowMs: 60 * 1000,
       keyPrefix: 'auth-signup',
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
     const hashedPassword = hashPassword(password);
 
     if (!hasMongoDbConfig()) {
+      if (!isDevAuthAllowed()) {
+        return NextResponse.json({ success: false, error: 'Database not configured.' }, { status: 503 });
+      }
       const devUser = await tryDevSignup(trimmedName, emailLower, hashedPassword);
       if (!devUser) {
         return NextResponse.json({ success: false, error: 'Email already registered' }, { status: 400 });

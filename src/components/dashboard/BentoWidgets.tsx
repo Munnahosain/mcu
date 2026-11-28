@@ -7,15 +7,8 @@ import {
   Image as ImageIcon, 
   Wand2, 
   BarChart, 
-  StickyNote, 
-  Plus,
-  ChevronRight,
-  Sparkles,
-  RefreshCw,
-  Search,
-  Hash
+  StickyNote
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 // --- WIDGET PROPS ---
 interface WidgetProps {

@@ -109,7 +109,7 @@ export class RealMarketDataProvider implements MarketDataProvider {
   disconnect() {}
   subscribe() {}
   unsubscribe() {}
-  async getHistoricalData(_symbol: MarketSymbol, _interval: CandleInterval, _bars?: number): Promise<Candle[]> {
+  async getHistoricalData(): Promise<Candle[]> {
     throw new Error("No realtime provider is configured.");
   }
 }

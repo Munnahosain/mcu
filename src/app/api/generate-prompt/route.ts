@@ -4,19 +4,19 @@ import { enforceRateLimit } from '@/server/auth/rate-limit';
 import {
   AllKeysExhaustedError,
   generateWithFailover,
-  getFriendlyProviderMessage,
-  getStatusCode,
   NoApiKeyError,
   prepareImage,
 } from '@/server/services/vision-service';
-import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits, type CreditReceipt } from '@/server/services/credit-service';
 import { getFirstFeatureFlagDenial } from '@/server/services/feature-flag-service';
 import { incrementUsage } from '@/server/services/usage-service';
 import { getVectorFormat, prepareVectorPreview, VectorPreviewError } from '@/server/services/vector-preview';
+import { providerErrorResponse, validateImageUpload, withImageDecode } from '@/server/services/route-helpers';
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  let creditReceipt: CreditReceipt | null = null;
   const deadlineAt = Date.now() + 52_000;
   let creditReserved = false;
   let authenticatedUserId: string | null = null;
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     ]);
     if (denial) return NextResponse.json({ success: false, error: denial.error }, { status: 403 });
 
-    const rateLimitError = enforceRateLimit(req, userId, {
+    const rateLimitError = await enforceRateLimit(req, userId, {
       limit: 120,
       windowMs: 60 * 1000,
       keyPrefix: 'generate-prompt',
@@ -54,17 +54,16 @@ export async function POST(req: Request) {
     const negativePromptText = ((formData.get('negativePromptText') as string) || '').trim();
     const instructionsStr = ((formData.get('instructions') as string) || '').trim().toLowerCase();
 
-    if (!image) {
-      return NextResponse.json({ success: false, error: 'No image provided.' }, { status: 400 });
-    }
+    const uploadError = validateImageUpload(image);
+    if (uploadError || !image) return uploadError;
 
     const buffer = Buffer.from(await image.arrayBuffer());
     const vectorFormat = getVectorFormat(image.name);
     const imageBuffer = vectorFormat
       ? (await prepareVectorPreview(buffer, image.name)).buffer
       : buffer;
-    const { base64, dataUrl } = await prepareImage(imageBuffer, 768, 75);
-    await consumeCredits(userId, 1, 'AI prompt generation', 'prompt_generation', { usesOwnApiKey: true });
+    const { base64, dataUrl } = await withImageDecode(() => prepareImage(imageBuffer, 768, 75));
+    creditReceipt = (await consumeCredits(userId, 1, 'AI prompt generation', 'prompt_generation', { usesOwnApiKey: true })).receipt;
     creditReserved = true;
 
     console.log(`[generate-prompt] provider=${providerHint}, model=${modelHint}, length=${promptLength}`);
@@ -96,7 +95,7 @@ OUTPUT RULES:
 - Be specific and evocative — write like a professional art director
 - Ensure total character count is close to ${promptLength}`;
 
-    const { text: responseText } = await generateWithFailover({
+    const result = await generateWithFailover({
       userId,
       preferredProvider: providerHint,
       preferredModel: modelHint,
@@ -115,10 +114,15 @@ OUTPUT RULES:
       incrementUsage(userId, 'creditsUsed').catch((usageError) => console.error('[generate-prompt] usage credits error:', usageError)),
     ]);
 
-    return NextResponse.json({ success: true, prompt: responseText.trim(), previewDataUrl: vectorFormat ? dataUrl : undefined });
+    return NextResponse.json({
+      success: true,
+      prompt: result.text.trim(),
+      provider: result.provider,
+      usedFallbackProvider: result.usedFallbackProvider,
+      previewDataUrl: vectorFormat ? dataUrl : undefined });
   } catch (error) {
     if (creditReserved && authenticatedUserId) {
-      await refundCredits(authenticatedUserId, 1, 'Failed AI prompt generation refund', 'prompt_generation', { usesOwnApiKey: true }).catch((refundError) => console.error('[generate-prompt] credit refund error:', refundError));
+      await refundCredits(authenticatedUserId, creditReceipt ?? 1, 'Failed AI prompt generation refund', 'prompt_generation', { usesOwnApiKey: true }).catch((refundError) => console.error('[generate-prompt] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 402 });
@@ -132,11 +136,7 @@ OUTPUT RULES:
     if (error instanceof VectorPreviewError) {
       return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 422 });
     }
-    const status = getStatusCode(error) || 500;
     console.error('[generate-prompt] error:', error instanceof Error ? error.message : error);
-    return NextResponse.json(
-      { success: false, error: getFriendlyProviderMessage(error) },
-      { status }
-    );
+    return providerErrorResponse(error);
   }
 }

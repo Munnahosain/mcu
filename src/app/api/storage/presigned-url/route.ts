@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     const user = await requireAuthenticatedUser(req);
 
     // Rate limit: max 60 presigned URL requests per minute per user
-    const rateLimitError = enforceRateLimit(req, String(user._id), {
+    const rateLimitError = await enforceRateLimit(req, String(user._id), {
       limit: 60,
       windowMs: 60 * 1000,
       keyPrefix: 'storage-presigned-url',

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useRef, useState } from 'react';
-import { AnimationTrack, Keyframe, ProjectState } from './types';
+import { Keyframe, ProjectState } from './types';
 import { evaluateEasing } from './animationEngine';
 
 interface GraphEditorProps {

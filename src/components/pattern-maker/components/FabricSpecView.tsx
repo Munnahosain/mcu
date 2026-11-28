@@ -5,10 +5,7 @@ import { drawTileToCanvas, exportFabricSpecSheet } from '../utils/exportUtils';
 import {
   Scissors,
   Download,
-  CheckCircle2,
-  AlertCircle,
   FileSpreadsheet,
-  Info,
   Ruler,
   Compass,
 } from 'lucide-react';
@@ -22,7 +19,6 @@ interface FabricSpecViewProps {
 export const FabricSpecView: React.FC<FabricSpecViewProps> = ({
   elements,
   settings,
-  setSettings,
 }) => {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 

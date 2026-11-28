@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { clearUserStatusCache } from '@/server/auth/request-auth';
 import { Types } from 'mongoose';
 import { requireAdmin, requireRole, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
@@ -39,7 +40,9 @@ export async function GET(req: Request, context: RouteContext) {
     const user = await User.findById(id).select('-password').populate('planId', 'name slug price billingInterval monthlyCredits').lean();
     if (!user) return NextResponse.json({ success: false, error: 'User not found.' }, { status: 404 });
 
-    return NextResponse.json({ success: true, user: { ...user, _id: String(user._id), planId: user.planId ? String(user.planId) : null } });
+    return NextResponse.json({ success: true, user: { ...user, _id: String(user._id), planId: user.planId && typeof user.planId === 'object' && '_id' in user.planId
+          ? { ...(user.planId as Record<string, unknown>), _id: String((user.planId as { _id: unknown })._id) }
+          : user.planId ? String(user.planId) : null } });
   } catch (error) {
     return authorizationErrorResponse(error);
   }
@@ -91,6 +94,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const updated = await User.findByIdAndUpdate(id, { $set: { ...update, updatedAt: new Date() } }, { new: true })
       .select('-password')
       .lean();
+    clearUserStatusCache(id);
     await AuditLog.create({
       actorId: actor._id,
       actorRole: actor.role,

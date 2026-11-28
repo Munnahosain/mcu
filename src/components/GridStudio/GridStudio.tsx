@@ -4,32 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
-  Check,
-  ChevronDown,
   Code,
   Copy,
   Download,
   Eye,
   EyeOff,
-  Grid3X3,
-  HelpCircle,
   Home,
-  Image as ImageIcon,
-  ImagePlus,
   Layers,
   Lock,
   Unlock,
-  Maximize2,
-  Minimize2,
   Move,
   Palette,
   RefreshCw,
-  RotateCcw,
   Save,
   Search,
   Sliders,
   Sparkles,
-  Trash2,
   Upload,
   ZoomIn,
   ZoomOut,
@@ -38,10 +28,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePersistentState } from "@/lib/usePersistentState";
-import ThemeToggle from "@/components/ThemeToggle";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
-import { GridConfig, GridType, LineStyle, BgMode, CanvasPreset, CompositionScores, LayoutGuideZone, ReferenceAnalysis } from "@/lib/grid/types";
-import { CANVAS_PRESETS, GRID_COLOR_PALETTES } from "@/lib/grid/presets";
+import { GridConfig, GridType, BgMode, CompositionScores, LayoutGuideZone, ReferenceAnalysis } from "@/lib/grid/types";
+import { GRID_COLOR_PALETTES } from "@/lib/grid/presets";
 import { downloadText, downloadBlob } from "@/lib/downloadHelper";
 import { consumeFeatureCredit } from "@/lib/feature-credits";
 import {
@@ -52,7 +41,6 @@ import {
   buildGridSvg,
   analyzeComposition,
   generateCssGridCode,
-  PHI,
 } from "@/lib/grid/engine";
 
 const GRID_TYPE_ITEMS: { id: GridType; label: string; desc: string; icon: string }[] = [
@@ -272,7 +260,7 @@ export default function GridStudio() {
   const [referenceImg, setReferenceImg] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ReferenceAnalysis | null>(null);
   const [refBlendMode, setRefBlendMode] = useState<"screen" | "multiply" | "overlay" | "normal">("screen");
-  const [refGridOpacity, setRefGridOpacity] = useState(0.85);
+  const [refGridOpacity] = useState(0.85);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);

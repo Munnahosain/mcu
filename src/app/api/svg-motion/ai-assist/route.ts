@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/server/auth/request-auth';
 import { enforceRateLimit } from '@/server/auth/rate-limit';
 import { resolveUserApiKey } from '@/server/services/vision-service';
-import { consumeCredits, InsufficientCreditsError, refundCredits } from '@/server/services/credit-service';
+import { consumeCredits, InsufficientCreditsError, refundCredits, type CreditReceipt } from '@/server/services/credit-service';
 import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
 import { AnimationPlanJson, AnimationTarget, planJson, validateAnimationPlan } from '@/components/SvgMotionStudio/animationPlan';
 
@@ -88,6 +88,7 @@ function getProviderError(error: unknown): { message: string; status: number } {
 }
 
 export async function POST(req: NextRequest) {
+  let creditReceipt: CreditReceipt | null = null;
   let userId: string | null = null;
   let creditReserved = false;
   let usesOwnApiKey = false;
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
     if (featureDenial) return errorResponse(featureDenial, 403);
     const operationDenial = await getFeatureFlagDenial(userId, 'svg_motion', 'SVG Motion AI');
     if (operationDenial) return errorResponse(operationDenial, 403);
-    const rateLimitError = enforceRateLimit(req, userId, {
+    const rateLimitError = await enforceRateLimit(req, userId, {
       limit: 12,
       windowMs: 60 * 1000,
       keyPrefix: 'svg-motion-ai',
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
     if (!effectiveApiKey) {
       return errorResponse('Add a Google Gemini API key in Settings or configure GEMINI_API_KEY on the server.', 503);
     }
-    await consumeCredits(userId, 1, 'SVG motion AI plan generation', 'svg_motion', { usesOwnApiKey });
+    creditReceipt = (await consumeCredits(userId, 1, 'SVG motion AI plan generation', 'svg_motion', { usesOwnApiKey })).receipt;
     creditReserved = true;
 
     const stockRules = body.stockMotion
@@ -241,7 +242,7 @@ ${stockRules}`;
     return NextResponse.json({ success: true, plan: planJson(validated) });
   } catch (error) {
     if (creditReserved && userId) {
-      await refundCredits(userId, 1, 'Failed SVG motion AI plan refund', 'svg_motion', { usesOwnApiKey })
+      await refundCredits(userId, creditReceipt ?? 1, 'Failed SVG motion AI plan refund', 'svg_motion', { usesOwnApiKey })
         .catch((refundError) => console.error('[svg-motion-ai] credit refund error:', refundError));
     }
     if (error instanceof InsufficientCreditsError) {

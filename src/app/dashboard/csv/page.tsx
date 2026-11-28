@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { FileSpreadsheet } from "lucide-react";
 
 export default function CSVGeneratorPage() {

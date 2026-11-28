@@ -27,11 +27,6 @@ import {
   Home,
   Move,
   MousePointer,
-  Maximize,
-  Sliders,
-  X,
-  FileImage,
-  ImageIcon,
 } from "lucide-react";
 import { downloadDataUrl, downloadText } from "@/lib/downloadHelper";
 import { consumeFeatureCredit } from "@/lib/feature-credits";

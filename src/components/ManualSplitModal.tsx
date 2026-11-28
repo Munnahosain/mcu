@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { EPSDocument, ExtractedIcon, ManualRegion, BoundingBox } from '../types';
 import { buildIconSvg, buildIconEPS } from '../services/epsParser';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 
 interface ManualSplitModalProps {
   isOpen: boolean;
@@ -268,7 +269,7 @@ export const ManualSplitModal: React.FC<ManualSplitModalProps> = ({
               {/* Full SVG Artwork Behind */}
               <div
                 className="absolute inset-0 w-full h-full text-slate-800 dark:text-slate-200 pointer-events-none p-2"
-                dangerouslySetInnerHTML={{ __html: document.fullSvg }}
+                dangerouslySetInnerHTML={{ __html: sanitizeSvg(document.fullSvg) }}
               />
 
               {/* Existing Bounding Boxes */}

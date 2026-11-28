@@ -5,6 +5,7 @@ import { hasMongoDbConfig } from '@/server/db/database-config';
 import { ProviderKey } from '@/server/models/ProviderKey';
 import { decryptSecret } from '@/server/auth/secret-encryption';
 import { AI_DEFAULT_MODELS } from '@/lib/ai-models';
+import { inMemoryStore } from '@/server/db/in-memory-store';
 
 export const AI_MAX_RETRIES = 2;
 export const AI_RETRY_DELAY_MS = 1000;
@@ -271,7 +272,12 @@ function nextAvailableAt(doc: StoredKeyDoc | null, fingerprint: string): number 
 }
 
 async function loadStoredKeys(userId: string): Promise<StoredKeyDoc[]> {
-  if (!hasMongoDbConfig()) return [];
+  if (!hasMongoDbConfig()) {
+    // Dev / no-database mode: keys saved through /api/settings/keys live in the in-memory store.
+    return inMemoryStore.providerKeys
+      .filter((k) => k.userId === userId && k.encryptedKey)
+      .map((k) => ({ _id: k.id, provider: k.provider, encryptedKey: k.encryptedKey as string, fingerprint: k.fingerprint, model: k.model }));
+  }
   try {
     await connectToDatabase();
     return await ProviderKey.find({ userId }).sort({ createdAt: 1 }).lean() as unknown as StoredKeyDoc[];
@@ -515,12 +521,15 @@ export class AllKeysExhaustedError extends Error {
   status = 429;
   code = 'ALL_KEYS_EXHAUSTED';
   retryAt: number | null;
-  constructor(retryAt: number | null) {
+  keyCount: number;
+  constructor(retryAt: number | null, keyCount = 0) {
     const when = retryAt
       ? ` The earliest key becomes available again at ${new Date(retryAt).toISOString()}.`
       : ' Add another API key or check the keys in Settings.';
-    super(`All your API keys have reached their limit or are invalid.${when}`);
+    const count = keyCount === 1 ? '1 key is' : `${keyCount || 'All'} keys are`;
+    super(`All ${count} rate-limited / invalid.${when}`.replace('All All', 'All'));
     this.retryAt = retryAt;
+    this.keyCount = keyCount;
   }
 }
 
@@ -623,7 +632,7 @@ async function markKey(key: PoolKey, state: { cooldownMs?: number; disabled?: bo
   return cooldownUntil || null;
 }
 
-export interface FailoverOptions extends Omit<CallVisionOptions, 'provider' | 'apiKey' | 'model' | 'timeoutMs' | 'retries'> {
+export interface KeyPoolOptions {
   userId: string;
   preferredProvider: string;
   preferredModel?: string;
@@ -632,26 +641,42 @@ export interface FailoverOptions extends Omit<CallVisionOptions, 'provider' | 'a
   deadlineAt: number;
 }
 
+export interface KeyPoolResult {
+  text: string;
+  provider: string;
+  model: string;
+  keyId?: string;
+  /** True when the requested provider had no usable key and another provider answered. */
+  usedFallbackProvider: boolean;
+}
+
+type InvokeWithKey = (key: { provider: string; apiKey: string; model: string }, timeoutMs: number) => Promise<string>;
+
+function isTimeoutError(error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error || '')).toLowerCase();
+  return message.includes('aborted') || message.includes('timeout') || message.includes('timed out');
+}
+
 /**
  * Tries every usable key — the selected provider first, then the other providers the user has keys for —
- * until one answers. Keys that hit a rate limit are put on cooldown, invalid keys are disabled.
+ * until one answers. Rate-limited keys are put on cooldown and invalid keys are disabled; the next key
+ * is tried immediately (no sleep). Throws AllKeysExhaustedError only after every key has failed.
  */
-export async function generateWithFailover(options: FailoverOptions): Promise<{ text: string; provider: string; model: string; keyId?: string }> {
-  const { userId, preferredProvider, preferredModel = '', clientKey, deadlineAt, ...callOptions } = options;
+export async function runWithKeyPool(options: KeyPoolOptions, invoke: InvokeWithKey): Promise<KeyPoolResult> {
+  const { userId, preferredProvider, preferredModel = '', clientKey, deadlineAt } = options;
   const pool = await buildKeyPool(userId, preferredProvider, clientKey);
 
   if (pool.total === 0) throw new NoApiKeyError(preferredProvider);
-  if (pool.usable.length === 0) throw new AllKeysExhaustedError(pool.earliestRetryAt);
+  if (pool.usable.length === 0) throw new AllKeysExhaustedError(pool.earliestRetryAt, pool.total);
 
   const skippedProviders = new Set<string>();
   const transientKeys: PoolKey[] = [];
   const cooldowns: number[] = pool.earliestRetryAt ? [pool.earliestRetryAt] : [];
   let lastError: unknown = null;
   let onlyKeyProblems = true;
-
   let ranOutOfTime = false;
 
-  const attempt = async (key: PoolKey, isSecondPass: boolean) => {
+  const attempt = async (key: PoolKey, isSecondPass: boolean): Promise<KeyPoolResult | null> => {
     const remaining = deadlineAt - Date.now();
     if (remaining < 5000) {
       ranOutOfTime = true;
@@ -659,18 +684,11 @@ export async function generateWithFailover(options: FailoverOptions): Promise<{ 
     }
     const model = key.provider === preferredProvider ? (preferredModel || key.model) : key.model;
     try {
-      const text = await callVisionProvider({
-        ...callOptions,
-        provider: key.provider,
-        model,
-        apiKey: key.apiKey,
-        retries: 1,
-        timeoutMs: Math.min(AI_PROVIDER_TIMEOUT_MS, remaining - 1500),
-      });
+      const text = await invoke({ provider: key.provider, apiKey: key.apiKey, model }, Math.min(AI_PROVIDER_TIMEOUT_MS, remaining - 1500));
       if (key.provider !== preferredProvider || key !== pool.usable[0]) {
         console.log(`[key-pool] switched to ${key.provider} key …${key.apiKey.slice(-4)}`);
       }
-      return { text, provider: key.provider, model, keyId: key.id };
+      return { text, provider: key.provider, model, keyId: key.id, usedFallbackProvider: key.provider !== preferredProvider };
     } catch (err) {
       lastError = err;
       const kind = classifyProviderError(err);
@@ -693,7 +711,8 @@ export async function generateWithFailover(options: FailoverOptions): Promise<{ 
         skippedProviders.add(key.provider);
       } else if (kind === 'transient') {
         onlyKeyProblems = false;
-        if (!isSecondPass) transientKeys.push(key);
+        // A timed-out key is not retried in this request — the next key/provider gets the time instead.
+        if (!isSecondPass && !isTimeoutError(err)) transientKeys.push(key);
       } else {
         throw err;
       }
@@ -719,7 +738,7 @@ export async function generateWithFailover(options: FailoverOptions): Promise<{ 
     throw e;
   }
 
-  // One more pass over keys that only had a temporary failure (timeout, 5xx), if there is still time.
+  // One more pass over keys that had a temporary server error (5xx), if there is still time.
   for (const key of transientKeys) {
     if (deadlineAt - Date.now() < 8000) break;
     await sleep(500);
@@ -729,7 +748,23 @@ export async function generateWithFailover(options: FailoverOptions): Promise<{ 
 
   if (onlyKeyProblems) {
     const future = cooldowns.filter((t) => t > Date.now());
-    throw new AllKeysExhaustedError(future.length ? Math.min(...future) : null);
+    throw new AllKeysExhaustedError(future.length ? Math.min(...future) : null, pool.total);
   }
   throw lastError || new Error('Generation failed — no response from AI');
+}
+
+export interface FailoverOptions extends KeyPoolOptions, Omit<CallVisionOptions, 'provider' | 'apiKey' | 'model' | 'timeoutMs' | 'retries'> {}
+
+/** Vision request (image + prompt) through the key pool. */
+export async function generateWithFailover(options: FailoverOptions): Promise<KeyPoolResult> {
+  const { userId, preferredProvider, preferredModel, clientKey, deadlineAt, ...callOptions } = options;
+  return runWithKeyPool({ userId, preferredProvider, preferredModel, clientKey, deadlineAt }, (key, timeoutMs) =>
+    callVisionProvider({ ...callOptions, provider: key.provider, model: key.model, apiKey: key.apiKey, retries: 1, timeoutMs })
+  );
+}
+
+/** True for errors caused by the AI provider rejecting the user's key (not our own session). */
+export function isProviderKeyError(error: unknown): boolean {
+  const kind = classifyProviderError(error);
+  return kind === 'auth' || kind === 'forbidden';
 }

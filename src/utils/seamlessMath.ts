@@ -1,4 +1,4 @@
-import { DesignElement, PhysicalUnit, RepeatType } from '../types';
+import { DesignElement, PhysicalUnit } from '../types';
 
 export interface WrappedInstance {
   dx: number; // -1, 0, 1

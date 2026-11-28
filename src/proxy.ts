@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { REFRESH_COOKIE } from '@/server/auth/jwt';
+import { getSecret } from '@/server/auth/secrets';
 
 async function hasValidSession(request: NextRequest) {
   const token = request.cookies.get(REFRESH_COOKIE)?.value;
-  const secret = process.env.JWT_REFRESH_SECRET || 'mcustock-dev-jwt-refresh-secret-32-chars-minimum-key';
-  if (!token || !secret || secret.length < 32) return false;
+  if (!token) return false;
 
   try {
+    // Throws in production when the secret is missing/short → treated as no session.
+    const secret = getSecret('JWT_REFRESH_SECRET');
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
     return payload.type === 'refresh' && typeof payload.sub === 'string';
   } catch {
