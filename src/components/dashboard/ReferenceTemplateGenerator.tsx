@@ -220,7 +220,6 @@ export default function ReferenceTemplateGenerator({ provider, model, apiKey, ha
       formData.append('image', referenceFile);
       formData.append('provider', provider);
       formData.append('model', model);
-      if (apiKey) formData.append('apiKey', apiKey);
 
       const response = await fetch('/api/reference-template/analyze', { method: 'POST', body: formData });
       const data = await response.json();

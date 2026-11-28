@@ -34,7 +34,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
     try {
       localStorage.clear();
       sessionStorage.clear();
-    } catch (e) {}
+    } catch {
+      // storage may be unavailable
+    }
     window.location.reload();
   };
 

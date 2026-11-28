@@ -1,4 +1,5 @@
 import { ExtractedIcon, EPSDocument, BoundingBox } from '../types';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 
 export interface RawPathSegment {
   type: 'M' | 'L' | 'C' | 'Z' | 'A' | 'R';
@@ -1589,7 +1590,8 @@ export async function processEPSFile(
   // Full SVG of entire sheet (preserve authentic SVG markup if source was SVG)
   let fullSvg = '';
   if (isSvg) {
-    fullSvg = rawText;
+    // Uploaded SVG is rendered later with innerHTML — strip scripts / event handlers first.
+    fullSvg = sanitizeSvg(rawText);
   } else {
     const fullSvgPaths = vectorPathsToSvgData(paths);
     fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">\n${fullSvgPaths}</svg>`;

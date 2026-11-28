@@ -51,7 +51,7 @@ export function createDevUser(name: string, email: string, password?: string, ro
     name: name.trim(),
     email: normalizedEmail,
     password,
-    role: normalizedEmail.includes('admin') ? 'super_admin' : role,
+    role,
     status: 'active',
     credits: { monthly: 2000, bonus: 500, used: 0 },
     createdAt: new Date().toISOString(),
@@ -63,13 +63,7 @@ export function createDevUser(name: string, email: string, password?: string, ro
 
 export function findDevUser(email: string): DevUser | null {
   const normalized = email.toLowerCase().trim();
-  const found = store.users.get(normalized);
-  if (found) return found;
-
-  if (normalized.includes('admin')) {
-    return DEFAULT_DEV_ADMIN;
-  }
-  return null;
+  return store.users.get(normalized) ?? null;
 }
 
 export function findDevUserById(id: string): DevUser | null {
@@ -77,21 +71,8 @@ export function findDevUserById(id: string): DevUser | null {
     if (user.id === id || user._id === id) return user;
   }
   if (id === 'dev-admin-id') return DEFAULT_DEV_ADMIN;
-
-  // Provide a valid authenticated user object fallback and store it persistently in memory
-  const fallback: DevUser = {
-    id,
-    _id: id,
-    name: 'MCU Creator',
-    email: 'creator@mcustock.com',
-    role: 'super_admin',
-    status: 'active',
-    credits: { monthly: 7500, bonus: 2500, used: 0 },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  store.users.set(id, fallback);
-  return fallback;
+  // Unknown ids are not users.
+  return null;
 }
 
 export function listDevUsers(): DevUser[] {

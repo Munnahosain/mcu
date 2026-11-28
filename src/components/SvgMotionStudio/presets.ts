@@ -1,4 +1,4 @@
-import { AnimationTrack, Keyframe, AnimProperty, EasingType } from './types';
+import { AnimationTrack } from './types';
 
 let trackIdCounter = 1;
 function genTrackId(): string {

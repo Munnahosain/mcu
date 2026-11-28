@@ -155,8 +155,6 @@ export const Timeline: React.FC<TimelineProps> = ({
   onRewind,
   onSeek,
   onRegisterPlaybackRenderer,
-  onUpdateDuration,
-  onUpdateFps,
   onToggleLoop,
   onSelectKeyframe,
   onSelectKeyframes,

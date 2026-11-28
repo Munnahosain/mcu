@@ -1,4 +1,4 @@
-import type { ChartTemplate, ChartType } from "./types";
+import type { ChartTemplate } from "./types";
 
 export const chartCategories = [
   "All",

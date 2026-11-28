@@ -7,11 +7,8 @@ import {
   Maximize2,
   Grid,
   Download,
-  Layers,
   Sparkles,
   Waves,
-  Play,
-  Pause,
 } from 'lucide-react';
 import { exportTiledFabric } from '../utils/exportUtils';
 

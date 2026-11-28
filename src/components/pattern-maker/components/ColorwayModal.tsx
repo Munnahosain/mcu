@@ -18,7 +18,6 @@ export const ColorwayModal: React.FC<ColorwayModalProps> = ({
   onClose,
   elements,
   setElements,
-  settings,
   setSettings,
   onPushHistory,
 }) => {

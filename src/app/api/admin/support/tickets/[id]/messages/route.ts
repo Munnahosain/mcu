@@ -10,7 +10,7 @@ import { sanitizeSupportText } from '@/server/services/support-service';
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin(req);
-    const limited = enforceRateLimit(req, String(admin._id), { limit: 30, windowMs: 15 * 60 * 1000, keyPrefix: 'admin-support-message' });
+    const limited = await enforceRateLimit(req, String(admin._id), { limit: 30, windowMs: 15 * 60 * 1000, keyPrefix: 'admin-support-message' });
     if (limited) return limited;
     const { id } = await params;
     const body = await req.json().catch(() => ({}));

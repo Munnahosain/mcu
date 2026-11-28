@@ -238,7 +238,6 @@ export default function EventCalendarPage() {
 
       try {
          const providerKeys = await syncProviderKeys();
-         const activeKeyObj = providerKeys.find((k) => k.provider === activeProvider);
          const activeModel = getProviderModels()[activeProvider] || '';
 
          const response = await fetch('/api/generate-event-ideas', {
@@ -249,7 +248,6 @@ export default function EventCalendarPage() {
                 eventTitle: event.title,
                 eventCategory: event.category,
                 eventDate: event.date,
-                ...(activeKeyObj?.key ? { apiKey: activeKeyObj.key } : {}),
                 provider: activeProvider,
                 model: activeModel
             })

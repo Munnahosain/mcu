@@ -35,6 +35,9 @@ export interface InMemoryProviderKey {
   provider: string;
   model: string;
   lastFour: string;
+  /** Encrypted with ENCRYPTION_KEY, same format as the Mongo ProviderKey. */
+  encryptedKey?: string;
+  fingerprint?: string;
   createdAt: string;
 }
 

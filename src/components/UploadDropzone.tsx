@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileCode, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { Upload, FileCode, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import { SAMPLE_EPS_SETS, SampleSet } from '../services/sampleEpsSets';
 
 interface UploadDropzoneProps {
@@ -21,7 +21,6 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
   processingPercent,
   error,
   onClearError,
-  onOpenManualSplit,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

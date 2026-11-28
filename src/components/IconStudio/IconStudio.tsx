@@ -16,7 +16,6 @@ import {
   Check,
   Download,
   FileArchive,
-  FileCode,
   FileImage,
   Home,
   Image as ImageIcon,
@@ -24,8 +23,6 @@ import {
   Maximize2,
   Palette,
   Play,
-  Pause,
-  RotateCcw,
   Sparkles,
   Sun,
   Trash2,
@@ -35,20 +32,15 @@ import {
   Copy,
   CheckCheck,
   Video,
-  Layers,
-  Compass,
   Move,
-  Rotate3d,
   Gauge,
   Crosshair,
-  Timer,
 } from "lucide-react";
 import * as THREE from "three";
 import { useRouter } from "next/navigation";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
@@ -137,7 +129,6 @@ type PreviewHandle = {
 const MAX_FILES = 500;
 const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const STUDIO_CONTROLS_KEY = "mcustock_3d_studio_controls";
-const VIDEO_EXPORT_FPS = 30;
 const VIDEO_EXPORT_VISIBILITY_ERROR = "Keep the 3D Icon Studio tab visible during video export, then try again.";
 
 function yieldToBrowser(): Promise<void> {
@@ -885,6 +876,8 @@ const IconPreview = forwardRef<
   );
 
   useEffect(() => {
+    // Scene is built once; later control changes are applied by the dedicated effects below.
+    const initialControls = controlsRefCurrent.current;
     if (!mountRef.current) return;
     if (!window.WebGLRenderingContext) {
       onError("WebGL is not available in this browser.");
@@ -902,10 +895,10 @@ const IconPreview = forwardRef<
       preserveDrawingBuffer: true,
       powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, controls.fastPreview ? 2 : 2.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, initialControls.fastPreview ? 2 : 2.5));
     renderer.setClearColor(
-      controls.alpha ? 0x000000 : new THREE.Color(controls.bgColor).getHex(),
-      controls.alpha ? 0 : 1
+      initialControls.alpha ? 0x000000 : new THREE.Color(initialControls.bgColor).getHex(),
+      initialControls.alpha ? 0 : 1
     );
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -922,7 +915,7 @@ const IconPreview = forwardRef<
     const lightsGroup = new THREE.Group();
     scene.add(lightsGroup);
     lightsGroupRef.current = lightsGroup;
-    applyLightingPreset(controls.lighting, lightsGroup);
+    applyLightingPreset(initialControls.lighting, lightsGroup);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     scene.add(new THREE.HemisphereLight(0xffffff, 0x091a16, 1.1));
@@ -945,7 +938,7 @@ const IconPreview = forwardRef<
     const shadowMat = new THREE.MeshBasicMaterial({
       map: shadowTexture,
       transparent: true,
-      opacity: controls.showShadow ? 0.6 : 0,
+      opacity: initialControls.showShadow ? 0.6 : 0,
       depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: 1,
@@ -1103,8 +1096,9 @@ const IconPreview = forwardRef<
     iconRef.current.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (mesh.isMesh) {
-        const pathColor = mesh.userData?.pathColor || controls.color;
-        const newMat = makeMaterial(controls, pathColor);
+        const current = controlsRefCurrent.current;
+        const pathColor = mesh.userData?.pathColor || current.color;
+        const newMat = makeMaterial(current, pathColor);
         if (mesh.material) {
           if (Array.isArray(mesh.material)) mesh.material.forEach((m) => m.dispose());
           else mesh.material.dispose();
@@ -1122,8 +1116,15 @@ const IconPreview = forwardRef<
     }
   }, [controls.alpha, controls.bgColor]);
 
+  // Latest asset for the rebuild effect below, which should only re-run when the asset id changes.
+  const assetRef = useRef(asset);
+  useEffect(() => {
+    assetRef.current = asset;
+  }, [asset]);
+
   // Debounced Geometry rebuild when Depth, Bevel, Artboard, or FastPreview changes
   useEffect(() => {
+    const asset = assetRef.current;
     if (!asset) {
       clearIcon();
       return;
@@ -1883,7 +1884,7 @@ export default function IconStudio() {
     });
   };
 
-  const removeSelectedAssets = () => {
+  const removeSelectedAssets = useCallback(() => {
     if (!selectedIds.length) return;
 
     setAssets((current) => {
@@ -1893,10 +1894,18 @@ export default function IconStudio() {
       setSelectedIds(nextSelectedId ? [nextSelectedId] : []);
       return remaining;
     });
-  };
+  }, [selectedIds]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Typing in a field (rename, color hex, search…) must not delete or select assets.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)
+      ) {
+        return;
+      }
       const isModifierPressed = event.metaKey || event.ctrlKey;
       if ((event.key === "a" || event.key === "A") && isModifierPressed) {
         event.preventDefault();
@@ -1915,7 +1924,7 @@ export default function IconStudio() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [assets, selectedIds]);
+  }, [assets, selectedIds, removeSelectedAssets]);
 
   const clearAssets = () => {
     cancelBatch.current = true;

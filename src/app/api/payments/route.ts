@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { NextResponse } from 'next/server';
 import { requireAuthenticatedUser, authorizationErrorResponse } from '@/server/auth/authorization';
 import { connectToDatabase } from '@/server/db/mongodb';
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
-    const limited = enforceRateLimit(req, String(user._id || user.id), {
+    const limited = await enforceRateLimit(req, String(user._id || user.id), {
       limit: 10,
       windowMs: 15 * 60 * 1000,
       keyPrefix: 'payment-submit',
@@ -103,6 +104,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: `${providerName} payment is temporarily unavailable.` }, { status: 503 });
     }
 
+    if (!Types.ObjectId.isValid(planId)) {
+      return NextResponse.json({ success: false, error: 'Invalid plan.' }, { status: 400 });
+    }
     const plan = await Plan.findOne({ _id: planId, active: true, isPublic: true }).lean();
     if (!plan) return NextResponse.json({ success: false, error: 'This plan is currently unavailable.' }, { status: 404 });
 

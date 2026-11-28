@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireAuthenticatedUser(req);
-    const limited = enforceRateLimit(req, String(user._id), { limit: 5, windowMs: 60 * 60 * 1000, keyPrefix: 'support-ticket' });
+    const limited = await enforceRateLimit(req, String(user._id), { limit: 5, windowMs: 60 * 60 * 1000, keyPrefix: 'support-ticket' });
     if (limited) return limited;
     const body = await req.json().catch(() => ({}));
     const subject = sanitizeSupportText(body.subject, 150);

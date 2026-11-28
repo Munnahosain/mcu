@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { findUserById, hasMongoDbConfig, resolveUserActivePlan } from '@/server/db/database';
+import { findUserById, resolveUserActivePlan } from '@/server/db/database';
+import { isVerifiedDesignatedAdmin } from '@/server/auth/authorization';
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions, verifyRefreshToken } from '@/server/auth/jwt';
 
 export async function POST(req: Request) {
@@ -11,24 +12,6 @@ export async function POST(req: Request) {
       ?.slice(`${REFRESH_COOKIE}=`.length);
 
     if (!refreshToken) {
-      if (!hasMongoDbConfig()) {
-        const devUser = await findUserById('dev-admin-id');
-        if (devUser) {
-          const accessToken = await createAccessToken('dev-admin-id');
-          const rotatedRefreshToken = await createRefreshToken('dev-admin-id');
-          const normalizedUser = {
-            id: 'dev-admin-id',
-            name: String(devUser.name ?? 'Super Admin'),
-            email: String(devUser.email ?? 'admin@mcustock.com'),
-            role: (devUser.role as string) || 'super_admin',
-            avatarUrl: '',
-            plan: { name: 'Studio', slug: 'studio' },
-          };
-          const response = NextResponse.json({ success: true, accessToken, user: normalizedUser });
-          response.cookies.set(REFRESH_COOKIE, rotatedRefreshToken, refreshCookieOptions());
-          return response;
-        }
-      }
       return NextResponse.json({ success: false, error: 'Refresh token missing' }, { status: 401 });
     }
 
@@ -37,15 +20,13 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 401 });
     }
+    if (user.status && user.status !== 'active') {
+      return NextResponse.json({ success: false, error: 'This account is not active.' }, { status: 403 });
+    }
 
     const accessToken = await createAccessToken(userId);
     const rotatedRefreshToken = await createRefreshToken(userId);
-    const userEmail = String(user.email ?? '').toLowerCase().trim();
-    const configuredAdmin = process.env.ADMIN_EMAIL?.trim();
-    const isConfiguredAdmin = Boolean(
-      configuredAdmin &&
-      configuredAdmin.split(',').map((e) => e.trim().toLowerCase()).includes(userEmail)
-    );
+    const isConfiguredAdmin = isVerifiedDesignatedAdmin(user);
     const userRole = isConfiguredAdmin ? 'super_admin' : String(user.role ?? 'user');
     const userPlan = await resolveUserActivePlan(user);
 

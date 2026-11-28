@@ -10,7 +10,7 @@ import { canTransitionSupportStatus, sanitizeSupportText } from '@/server/servic
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireAuthenticatedUser(req);
-    const limited = enforceRateLimit(req, String(user._id), { limit: 20, windowMs: 15 * 60 * 1000, keyPrefix: 'support-message' });
+    const limited = await enforceRateLimit(req, String(user._id), { limit: 20, windowMs: 15 * 60 * 1000, keyPrefix: 'support-message' });
     if (limited) return limited;
     const { id } = await params;
     const body = await req.json().catch(() => ({}));

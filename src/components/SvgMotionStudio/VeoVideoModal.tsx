@@ -7,14 +7,12 @@ import {
   Film,
   Upload,
   Image as ImageIcon,
-  Play,
   Download,
   RotateCcw,
   Loader2,
   CheckCircle2,
   AlertCircle,
   Camera,
-  Layers,
 } from 'lucide-react';
 import { ProjectState } from './types';
 
@@ -48,7 +46,7 @@ export const VeoVideoModal: React.FC<VeoVideoModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [operationName, setOperationName] = useState<string | null>(null);
+  const [, setOperationName] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

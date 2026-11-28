@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw, SlidersHorizontal } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { DEFAULT_TRACE_OPTIONS, type TraceBackground, type TraceMode, type TraceOptions } from "@/services/imageVectorizer";
 

@@ -4,38 +4,26 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Settings,
   Sliders,
-  Move,
   RotateCw,
   Maximize2,
-  Sparkles,
-  Palette,
   Eye,
-  EyeOff,
   Link,
   Unlink,
   Trash2,
   Copy,
-  PenTool,
   Clock,
   ChevronDown,
-  Layers,
-  Plus,
-  Play,
   Activity,
-  CircleDot,
   FastForward,
   Rewind,
-  Check,
   Zap,
 } from 'lucide-react';
 import {
   ProjectState,
-  SvgElementNode,
   AnimProperty,
   EasingType,
   Keyframe,
 } from './types';
-import { EASING_OPTIONS } from './constants';
 import { computeElementStylesAtTime } from './animationEngine';
 import { ANIMATION_PRESETS } from './presets';
 import { findElementById } from './svgParser';

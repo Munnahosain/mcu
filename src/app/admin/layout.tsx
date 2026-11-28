@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, BarChart3, Coins, CreditCard, Flag, Gauge, LayoutDashboard, LifeBuoy, Lock, LogIn, Receipt, Settings, ShieldAlert, ShieldCheck, Users } from 'lucide-react';
+import { Activity, BarChart3, Coins, CreditCard, Flag, Gauge, LayoutDashboard, LifeBuoy, LogIn, Receipt, Settings, ShieldAlert, ShieldCheck, Users } from 'lucide-react';
 import Image from 'next/image';
 import ThemeToggle from '@/components/ThemeToggle';
 import { ensureAccessToken, getAuthUser } from '@/lib/auth';

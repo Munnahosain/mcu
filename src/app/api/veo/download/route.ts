@@ -1,7 +1,7 @@
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/server/auth/request-auth';
-import { resolveUserApiKey } from '@/server/services/vision-service';
+import { getOwnedVeoOperation, markVeoSucceeded, resolveVeoApiKey, settleVeoFailure } from '@/server/services/veo-operations';
 
 export const maxDuration = 120;
 
@@ -12,24 +12,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }
 
-    const storedGeminiKey = await resolveUserApiKey(userId, 'Google Gemini');
-    const apiKey = storedGeminiKey?.apiKey || process.env.GEMINI_API_KEY?.trim();
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GEMINI_API_KEY is not configured on the server.' },
-        { status: 500 }
-      );
+    const body = await req.json().catch(() => ({}));
+    const operationName = typeof body.operationName === 'string' ? body.operationName : '';
+    if (!operationName) {
+      return NextResponse.json({ error: 'operationName is required.' }, { status: 400 });
     }
 
-    const body = await req.json();
-    const { operationName } = body;
+    // Only the user who started the operation may poll or download it.
+    const record = await getOwnedVeoOperation(operationName, userId);
+    if (!record) {
+      return NextResponse.json({ error: 'Video not found.' }, { status: 404 });
+    }
 
-    if (!operationName) {
-      return NextResponse.json(
-        { error: 'operationName is required for downloading.' },
-        { status: 400 }
-      );
+    const apiKey = await resolveVeoApiKey(userId, record.usesOwnApiKey);
+    if (!apiKey) {
+      return NextResponse.json({ error: 'Video generation is not configured.' }, { status: 503 });
     }
 
     const ai = new GoogleGenAI({
@@ -53,6 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (updated.error) {
+      await settleVeoFailure(operationName);
       return NextResponse.json(
         { error: updated.error.message || 'Video generation reported an error.' },
         { status: 500 }
@@ -61,14 +59,15 @@ export async function POST(req: NextRequest) {
 
     const uri = updated.response?.generatedVideos?.[0]?.video?.uri;
     if (!uri) {
+      await settleVeoFailure(operationName);
       return NextResponse.json(
         { error: 'Generated video download URI was not returned by model.' },
         { status: 404 }
       );
     }
 
-    const downloadUrl = uri.includes('key=') ? uri : `${uri}${uri.includes('?') ? '&' : '?'}key=${apiKey}`;
-    const videoRes = await fetch(downloadUrl, {
+    // Key goes in the header only, never in the URL (URLs end up in logs).
+    const videoRes = await fetch(uri, {
       headers: { 'x-goog-api-key': apiKey },
     });
 
@@ -80,17 +79,17 @@ export async function POST(req: NextRequest) {
     }
 
     const videoBlob = await videoRes.blob();
+    await markVeoSucceeded(operationName);
     return new NextResponse(videoBlob, {
       status: 200,
       headers: {
         'Content-Type': 'video/mp4',
         'Content-Disposition': 'inline; filename="veo-animation.mp4"',
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'private, no-store',
       },
     });
   } catch (err: unknown) {
     console.error('Veo download error:', err);
-    const message = err instanceof Error ? err.message : String(err || 'Failed to download video.');
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to download video. Please try again.' }, { status: 500 });
   }
 }

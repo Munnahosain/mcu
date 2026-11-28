@@ -5,7 +5,7 @@ import { Box, Check, Download, RotateCcw, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ImageTracePanel } from "@/components/ImageTracePanel";
-import { IconSlicePanel, SliceOptionsStrip, type SliceOptions } from "@/components/IconSlicePanel";
+import { IconSlicePanel, type SliceOptions } from "@/components/IconSlicePanel";
 import { IconPreviewModal, type PreviewItem } from "@/components/IconPreviewModal";
 import { VectorizeProgress, type VectorizeProgressState } from "@/components/VectorizeProgress";
 import { DEFAULT_STROKE, StrokeControls, type StrokeSettings } from "@/components/presentation/StrokeControls";
@@ -65,7 +65,7 @@ function SplitterWorkspace() {
   const [traceOptions, setTraceOptions] = useState<TraceOptions>(DEFAULT_TRACE_OPTIONS);
   const [traceHydrated, setTraceHydrated] = useState(false);
   const [sourceImage, setSourceImage] = useState<File | null>(null);
-  const [traceInfo, setTraceInfo] = useState<TraceResult["info"] | null>(null);
+  const [, setTraceInfo] = useState<TraceResult["info"] | null>(null);
   const [traceStatus, setTraceStatus] = useState<{ message: string; percent: number } | null>(null);
   const [session, setSession] = useState<TraceSession | null>(null);
   const [thumbs, setThumbs] = useState<string[]>([]);

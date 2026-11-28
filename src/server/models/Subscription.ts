@@ -21,6 +21,9 @@ const SubscriptionSchema = new Schema(
     provider: { type: String, default: 'manual' },
     providerPaymentId: { type: String, default: '' },
     autoRenew: { type: Boolean, default: true },
+    /** Yearly plans: monthly credits refilled every 30 days from this date. */
+    monthlyCredits: { type: Number, default: 0 },
+    lastCreditRefillAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

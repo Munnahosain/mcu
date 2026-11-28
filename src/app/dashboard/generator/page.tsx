@@ -20,14 +20,13 @@ import {
   Plus,
   Check,
   FileJson,
-  ExternalLink,
   ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken, getAuthUser, AuthUser } from "@/lib/auth";
 import { AI_DEFAULT_MODELS, AI_PROVIDERS, AI_PROVIDER_NAMES } from "@/lib/ai-models";
 import PremiumSlider from "@/components/PremiumSlider";
-import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, saveRemoteProviderKey, deleteRemoteProviderKey } from "@/lib/ai-settings";
+import { StoredProviderKey, getActiveProvider, getProviderKeys, getProviderModels, syncProviderKeys, saveActiveProvider, saveProviderKeys, saveProviderModel, deleteRemoteProviderKey } from "@/lib/ai-settings";
 import { useGeneratorState, GeneratorImageFile } from "../GeneratorStateContext";
 import { createVideoContactSheet, isVectorFile, isVideoFile, prepareImageForUpload } from "@/lib/client-image";
 import { downloadText, downloadJson } from "@/lib/downloadHelper";
@@ -107,12 +106,11 @@ export default function GeneratorPage() {
   const [isApiKeyModalOpen, setApiKeyModalOpen] = useState(false);
   const [activeProvider, setActiveProvider] = useState("Groq");
   const [apiKeys, setApiKeys] = useState<StoredProviderKey[]>([]);
-  const [apiKeyInput, setApiKeyInput] = useState("");
   const [batchMode, setBatchMode] = useState(false);
-  const keyCursorRef = useRef(0);
   const keysSyncRef = useRef<Promise<StoredProviderKey[]> | null>(null);
   const [keysLoaded, setKeysLoaded] = useState(false);
   const [limitNotice, setLimitNotice] = useState<string | null>(null);
+  const [providerNotice, setProviderNotice] = useState<string | null>(null);
   const resumeTimerRef = useRef<number | null>(null);
 
   const platforms = ["General", "Adobe Stock", "Shutterstock", "FreePik", "Vecteezy", "Pond5"];
@@ -190,28 +188,6 @@ export default function GeneratorPage() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settingsHydrated, activeTab, promptMode, platform, titleLength, descriptionLength, keywordsCount, additionalKeywords, negativeTitleWords, negativeKeywords, autoCsvDownload, whiteBg, cameraParams, promptLength, usePrefix, prefixText, useSuffix, suffixText, useNegativePrompt, negativePromptText, batchMode, exportExtension]);
 
-  const saveKey = async () => {
-    const trimmed = apiKeyInput.trim();
-    if (!trimmed || apiKeys.some(k => k.key === trimmed && k.provider === activeProvider)) return;
-    const newKeyObj: StoredProviderKey = {
-      id: crypto.randomUUID(),
-      key: trimmed,
-      provider: activeProvider,
-      lastFour: trimmed.slice(-4),
-    };
-    const newKeys = [...apiKeys, newKeyObj];
-    setApiKeys(newKeys);
-    saveProviderKeys(newKeys);
-    setApiKeyInput('');
-
-    const res = await saveRemoteProviderKey(newKeyObj);
-    if ('key' in res && res.key?.id) {
-      const updatedKeys = newKeys.map(k => k.id === newKeyObj.id ? { ...k, id: res.key.id } : k);
-      setApiKeys(updatedKeys);
-      saveProviderKeys(updatedKeys);
-    }
-  };
-
   const removeKey = (id: string) => {
     const target = apiKeys.find(k => k.id === id);
     const newKeys = apiKeys.filter(k => k.id !== id);
@@ -223,6 +199,8 @@ export default function GeneratorPage() {
   };
 
   const activeProviderKeyObj = apiKeys.find(k => k.provider === activeProvider);
+  // Any saved key works: the server falls back to another provider when the selected one has none.
+  const hasAnyKey = apiKeys.length > 0;
 
   const updateMetadata = (id: string, update: Partial<NonNullable<ImageFile['metadata']>>) => {
     setImages(prev => prev.map(image => image.id === id && image.metadata
@@ -298,12 +276,8 @@ export default function GeneratorPage() {
   type GenerateOutcome = { status: 'done' | 'error' } | { status: 'exhausted'; retryAt: number | null };
 
   const generateSingle = async (img: ImageFile, ownRateLimitRetried = false): Promise<GenerateOutcome> => {
-    // The browser round-robins its own keys; the server tries every other saved key
-    // (and other providers) automatically when this one is rate limited or invalid.
-    const providerKeys = apiKeys.filter(key => key.provider === activeProvider && key.key);
-    const keyObject = providerKeys.length ? providerKeys[keyCursorRef.current++ % providerKeys.length] : undefined;
-    const keyToUse = keyObject?.key || '';
-
+    // Keys never leave the server: it picks the saved keys itself and switches to the next one
+    // (or another provider) when a key is rate limited or invalid.
     setImages(prev => prev.map(i => i.id === img.id ? { ...i, status: 'generating', error: undefined } : i));
 
     try {
@@ -313,9 +287,6 @@ export default function GeneratorPage() {
         : await prepareImageForUpload(img.file);
       fd.append('image', uploadImage);
       if (img.isVideo) fd.append('contentType', 'video');
-      if (keyToUse) {
-        fd.append('apiKey', keyToUse);
-      }
       fd.append('provider', activeProvider);
       fd.append('model', activeModel);
 
@@ -388,6 +359,10 @@ export default function GeneratorPage() {
         throw new Error(errorMsg);
       }
 
+      if (data.usedFallbackProvider && data.provider) {
+        setProviderNotice(`No usable ${activeProvider} key, so ${data.provider} was used.`);
+      }
+
       if (activeTab === 'Metadata' && data.metadata) {
         setImages(prev => prev.map(i => i.id === img.id ? {
           ...i,
@@ -448,6 +423,7 @@ export default function GeneratorPage() {
       resumeTimerRef.current = null;
     }
     setLimitNotice(null);
+    setProviderNotice(null);
 
     // Wait for keys saved on the server before deciding there are none.
     let knownKeys = apiKeys;
@@ -632,6 +608,9 @@ export default function GeneratorPage() {
           {limitNotice && (
             <p className="text-xs text-amber-700 dark:text-amber-300">{limitNotice}</p>
           )}
+          {providerNotice && (
+            <p className="text-xs text-primary/70">{providerNotice}</p>
+          )}
         </div>
       </section>
 
@@ -706,7 +685,7 @@ export default function GeneratorPage() {
                 options={(AI_PROVIDERS[activeProvider] || []).map((model) => ({ value: model.id, label: `${model.label}${model.badge ? ` - ${model.badge}` : ''}` }))}
               />
             </div>
-            {activeProviderKeyObj ? (
+            {hasAnyKey ? (
                 <p className="text-[10px] font-bold text-primary flex items-center gap-1.5 pt-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
                 API Key Connected
@@ -870,8 +849,7 @@ export default function GeneratorPage() {
         <ReferenceTemplateGenerator
           provider={activeProvider}
           model={activeModel}
-          apiKey={activeProviderKeyObj?.key}
-          hasStoredKey={apiKeys.some((key) => key.provider === activeProvider)}
+          hasStoredKey={hasAnyKey}
           storageScope={user?.id || user?.email || 'guest'}
         />
       ) : (
@@ -1098,33 +1076,21 @@ export default function GeneratorPage() {
                     options={AI_PROVIDER_NAMES.map((provider) => ({ value: provider, label: provider }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <label className="block text-[10px] font-bold text-primary/60 uppercase tracking-wider">Configure API Key</label>
-                    <a
-                      href={PROVIDER_KEY_URLS[activeProvider]}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex shrink-0 items-center gap-1 text-[10px] font-bold text-primary hover:underline"
-                    >
-                      Get API Key <ExternalLink className="h-3 w-3" />
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/10 bg-primary/5 p-3">
+                  <span className="text-[11px] text-primary/80">API keys are added and removed in Settings.</span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <a href={PROVIDER_KEY_URLS[activeProvider]} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-primary hover:underline">
+                      Get key
                     </a>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={apiKeyInput}
-                      onChange={e => setApiKeyInput(e.target.value)}
-                      placeholder={`Enter ${activeProvider} key...`}
-                      className="flex-1 text-xs bg-background border border-primary/20 rounded-xl px-3.5 py-2 text-primary placeholder-primary/35 outline-none"
-                    />
-                    <button onClick={saveKey} className="px-4 py-2 bg-primary text-background rounded-xl font-bold hover:bg-primary-hover transition-colors">Save</button>
+                    <a href="/dashboard/settings" className="text-[10px] font-bold text-primary hover:underline">
+                      Open Settings
+                    </a>
                   </div>
                 </div>
                 <div className="rounded-xl border border-primary/10 bg-primary/5 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-primary/60">Active model</span>
-                    <span className="text-[10px] font-bold text-primary">{activeProviderKeyObj ? 'Ready' : 'Needs API key'}</span>
+                    <span className="text-[10px] font-bold text-primary">{activeProviderKeyObj ? 'Ready' : hasAnyKey ? 'Uses another provider' : 'Needs API key'}</span>
                   </div>
                   <ThemedSelect
                     value={activeModel}
@@ -1146,7 +1112,7 @@ export default function GeneratorPage() {
                         <span className="font-bold text-primary">
                           {k.provider} key {index + 1}
                           {k.disabled && <span className="ml-1.5 font-normal text-red-600 dark:text-red-300">invalid, replace it</span>}
-                          {!k.disabled && k.cooldownUntil && new Date(k.cooldownUntil).getTime() > Date.now() && (
+                          {!k.disabled && k.cooldownUntil && (
                             <span className="ml-1.5 font-normal text-amber-700 dark:text-amber-300">limit reached</span>
                           )}
                         </span>

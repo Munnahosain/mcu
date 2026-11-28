@@ -7,6 +7,7 @@ import { hashPassword } from "@/server/auth/hash";
 import { createAccessToken, createRefreshToken, REFRESH_COOKIE, refreshCookieOptions } from "@/server/auth/jwt";
 import { hasMongoDbConfig } from "@/server/db/database-config";
 import { findDevUser, createDevUser } from "@/server/auth/dev-auth";
+import { isDevAuthAllowed } from "@/server/auth/secrets";
 
 type GoogleToken = { aud?: string; email?: string; email_verified?: string | boolean; name?: string; picture?: string };
 
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
     );
 
     if (!hasMongoDbConfig()) {
+      if (!isDevAuthAllowed()) {
+        return NextResponse.json({ success: false, error: "Database not configured." }, { status: 503 });
+      }
       let devUser = findDevUser(userEmail);
       if (!devUser) {
         devUser = createDevUser(
@@ -113,6 +117,14 @@ export async function POST(req: Request) {
           credits: { monthly: initialCredits, bonus: 0, used: 0 },
         });
       } else {
+        if (user.status && user.status !== 'active') {
+          return NextResponse.json({ success: false, error: "This account is not active." }, { status: 403 });
+        }
+        if (user.emailVerified !== true) {
+          // The owner just proved this email via Google. A password set by an earlier unverified
+          // signup with this address may belong to someone else, so it is replaced.
+          user.password = hashPassword(crypto.randomUUID());
+        }
         if (isConfiguredAdmin && user.role !== 'super_admin') {
           user.role = 'super_admin';
         }

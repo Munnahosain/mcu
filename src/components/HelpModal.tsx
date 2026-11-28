@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Sparkles, MousePointer, Scissors, ArrowRightLeft, Layers } from 'lucide-react';
+import { X, Sparkles, MousePointer, Scissors, ArrowRightLeft } from 'lucide-react';
 
 interface HelpModalProps {
   isOpen: boolean;

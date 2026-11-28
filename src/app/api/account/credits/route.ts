@@ -4,7 +4,7 @@ import { connectToDatabase } from '@/server/db/mongodb';
 import { Subscription } from '@/server/models/Subscription';
 import { Plan } from '@/server/models/Plan';
 import { User } from '@/server/models/User';
-import { consumeCredits, InsufficientCreditsError } from '@/server/services/credit-service';
+import { consumeCredits, ensureMonthlyRefill, InsufficientCreditsError } from '@/server/services/credit-service';
 import { hasMongoDbConfig } from '@/server/db/database-config';
 import { getFeatureFlagDenial } from '@/server/services/feature-flag-service';
 
@@ -36,6 +36,10 @@ export async function GET(req: Request) {
     }
 
     await connectToDatabase();
+    // Yearly plans: top up this month's credits before showing the balance.
+    await ensureMonthlyRefill(String(user._id));
+    const fresh = await User.findById(user._id).select('credits').lean() as { credits?: typeof user.credits } | null;
+    if (fresh?.credits) user.credits = fresh.credits;
 
     const subscription = await Subscription.findOne({
       userId: user._id,

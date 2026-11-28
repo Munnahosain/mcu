@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Check,
   Download,
@@ -9,6 +9,7 @@ import {
   Box,
 } from 'lucide-react';
 import { ExtractedIcon } from '../types';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 
 interface IconCardProps {
   icon: ExtractedIcon;
@@ -29,6 +30,7 @@ export const IconCard: React.FC<IconCardProps> = ({
   onRemove,
   onOpenIn3D,
 }) => {
+  const safeSvg = useMemo(() => sanitizeSvg(icon.svgContent), [icon.svgContent]);
   const [isEditing, setIsEditing] = useState(false);
   const [nameValue, setNameValue] = useState(icon.name);
   const [showMenu, setShowMenu] = useState(false);
@@ -138,7 +140,7 @@ export const IconCard: React.FC<IconCardProps> = ({
       >
         <div
           className="w-full h-full flex items-center justify-center text-slate-800 dark:text-slate-100 transition-transform duration-200 group-hover/preview:scale-110 drop-shadow-xs"
-          dangerouslySetInnerHTML={{ __html: icon.svgContent }}
+          dangerouslySetInnerHTML={{ __html: safeSvg }}
         />
 
         {/* Hover overlay hint */}

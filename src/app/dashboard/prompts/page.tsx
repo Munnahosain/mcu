@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { UploadCloud, FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon, Plus, X, ExternalLink, Wand2, Copy } from "lucide-react";
+import { useState } from "react";
+import { FileImage, Settings2, Play, DownloadCloud, Trash2, ImageIcon, Plus, Wand2, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ensureAccessToken } from "@/lib/auth";
-import { getProviderKeys, getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
+import { getProviderModels, syncProviderKeys } from "@/lib/ai-settings";
 import { prepareImageForUpload } from "@/lib/client-image";
 import { downloadText } from "@/lib/downloadHelper";
 import { usePersistentState } from "@/lib/usePersistentState";
@@ -78,10 +78,6 @@ export default function PromptsPage() {
       try {
         const formData = new FormData();
         formData.append("image", await prepareImageForUpload(img.file));
-        const keyVal = providerKeys[keyIdx]?.key;
-        if (keyVal) {
-          formData.append("apiKey", keyVal);
-        }
         formData.append("provider", provider);
         formData.append("promptLength", charLength.toString());
         formData.append("model", model);

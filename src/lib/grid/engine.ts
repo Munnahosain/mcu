@@ -215,7 +215,6 @@ export function buildGridSvg(
 
   // 2. Row Guidelines & Row Gutters
   if (config.showRows && config.rows > 0) {
-    const totalRowGutters = (config.rows - 1) * (config.gutter * 0.75);
     const rowHeight = Math.max((contentHeight - totalRowRowGutters(config.rows, config.gutter)) / config.rows, 1);
 
     for (let r = 0; r < config.rows; r++) {

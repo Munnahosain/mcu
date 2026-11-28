@@ -278,12 +278,12 @@ export const SvgMotionStudio: React.FC = () => {
   // Undo / Redo History Stack (stores snapshot of project state)
   const historyRef = useRef<ProjectState[]>([]);
   const historyIndexRef = useRef<number>(-1);
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
+  const [, setCanUndo] = useState(false);
+  const [, setCanRedo] = useState(false);
 
   // Viewport display controls
   const [showGrid, setShowGrid] = useState(true);
-  const [showRulers, setShowRulers] = useState(true);
+  const [showRulers] = useState(true);
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [canvasBg, setCanvasBg] = useState<'checkerboard' | string>('checkerboard');
 
@@ -301,7 +301,7 @@ export const SvgMotionStudio: React.FC = () => {
     duration: 10,
     backgroundColor: 'transparent',
   });
-  const [shortcutSearch, setShortcutSearch] = useState('');
+  const [, setShortcutSearch] = useState('');
   const [presetSearch, setPresetSearch] = useState('');
   const [alignTo, setAlignTo] = useState<'selection' | 'composition'>('selection');
   const [renderJobs, setRenderJobs] = useState<Array<{
@@ -317,7 +317,7 @@ export const SvgMotionStudio: React.FC = () => {
   const [dockMenuId, setDockMenuId] = useState<string | null>(null);
   const [maximizedDockPanel, setMaximizedDockPanel] = useState<string | null>(null);
   const [elapsedTick, setElapsedTick] = useState(Date.now());
-  const studioStartedAt = useRef(Date.now());
+  const [studioStartedAt] = useState(() => Date.now());
   const pointerReadoutRef = useRef<HTMLSpanElement>(null);
   const [viewerLocked, setViewerLocked] = useState(false);
   const [viewerMenuOpen, setViewerMenuOpen] = useState(false);
@@ -2609,14 +2609,6 @@ export const SvgMotionStudio: React.FC = () => {
     handleNudgeSelectedKeyframes,
   ]);
 
-  const selectedLayer = project.selectedElementId
-    ? findElementById(project.elements, project.selectedElementId)
-    : null;
-  const canCutSelectedImage = Boolean(
-    selectedLayer
-    && rasterSourceRef.current.some((source) => source.elementOriginalId === selectedLayer.originalId)
-  );
-
   const handleCreateProjectFolder = (parentId?: string) => {
     const name = window.prompt('Folder name');
     if (!name?.trim()) return;
@@ -2767,7 +2759,7 @@ export const SvgMotionStudio: React.FC = () => {
           : action;
       let elements = previous.elements;
       let svgRaw = previous.svgRaw;
-      let tracks = [...previous.tracks];
+      const tracks = [...previous.tracks];
       const updateValue = (node: SvgElementNode, property: 'x' | 'y', value: number) => {
         const trackIndex = tracks.findIndex((track) => track.elementId === node.id && track.property === property && track.keyframes.length > 0);
         if (trackIndex >= 0) {
@@ -3479,7 +3471,7 @@ export const SvgMotionStudio: React.FC = () => {
         <span className="min-w-0 flex-1 truncate">Message: {toasts.at(-1)?.title ?? 'Ready'}</span>
         {browserMemory && <span>RAM: {Math.round(browserMemory.usedJSHeapSize / 1024 / 1024)} MB</span>}
         <span>Renders Started: {renderJobs.length}</span>
-        <span>Total Time Elapsed: {Math.floor((elapsedTick - studioStartedAt.current) / 1000)}s</span>
+        <span>Total Time Elapsed: {Math.floor((elapsedTick - studioStartedAt) / 1000)}s</span>
       </div>
 
       {/* Modals */}

@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { ToolMode, PatternSettings, DesignElement } from '../types';
+import { ToolMode, PatternSettings } from '../types';
 import {
   MousePointer,
   Hand,

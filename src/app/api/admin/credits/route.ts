@@ -68,12 +68,12 @@ export async function POST(req: Request) {
 
     if (!hasMongoDbConfig()) {
       if (body.action === 'adjust_user') {
-        const { userId, amount, reason } = body;
+        const { userId, amount } = body;
         const numAmount = Number(amount);
         if (!userId || !Number.isFinite(numAmount) || numAmount === 0) {
           return NextResponse.json({ success: false, error: 'Valid userId and non-zero amount are required.' }, { status: 400 });
         }
-        const updated = updateDevUserCredits(userId, numAmount > 0 ? numAmount : 0, 0, numAmount < 0 ? Math.abs(numAmount) : 0);
+        updateDevUserCredits(userId, numAmount > 0 ? numAmount : 0, 0, numAmount < 0 ? Math.abs(numAmount) : 0);
         const target = findDevUserById(userId);
         return NextResponse.json({
           success: true,
